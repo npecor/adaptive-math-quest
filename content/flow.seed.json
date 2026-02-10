@@ -1,0 +1,38 @@
+[
+  {
+    "id": "flow_0001",
+    "type": "flow",
+    "difficulty": 980,
+    "tags": ["fractions", "number_sense"],
+    "format": "multiple_choice",
+    "prompt": "Which is bigger: 3/8 or 5/12?",
+    "choices": ["3/8", "5/12", "same"],
+    "answer": "5/12",
+    "hints": [
+      "Try rewriting both fractions with the same denominator.",
+      "A common denominator could be 24.",
+      "3/8 = 9/24 and 5/12 = 10/24."
+    ],
+    "solution_steps": [
+      "Compare using a common denominator: 3/8 = 9/24 and 5/12 = 10/24.",
+      "10/24 is bigger than 9/24, so 5/12 is bigger."
+    ]
+  },
+  {
+    "id": "flow_0002",
+    "type": "flow",
+    "difficulty": 920,
+    "tags": ["percents", "number_sense"],
+    "format": "numeric_input",
+    "prompt": "What is 25% of 60?",
+    "answer": "15",
+    "hints": [
+      "25% is the same as 1/4.",
+      "Try dividing 60 by 4."
+    ],
+    "solution_steps": [
+      "25% = 1/4.",
+      "60 ÷ 4 = 15."
+    ]
+  }
+]
