@@ -1,0 +1,11 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #122; background: #eaf4ff; }
+body { margin: 0; }
+#root { display: flex; justify-content: center; padding: 24px; }
+.card { background: white; width: min(700px, 92vw); border-radius: 14px; padding: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); display: grid; gap: 12px; }
+button { border: none; border-radius: 10px; padding: 10px 14px; background: #2359cc; color: white; cursor: pointer; margin-right: 8px; }
+button:disabled { background: #9aa8c8; cursor: not-allowed; }
+input { border: 1px solid #ccd6ea; border-radius: 8px; padding: 10px; font-size: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint { background: #f7fbde; border-radius: 8px; padding: 10px; }
+.row { display: flex; gap: 8px; }
+.artifact { padding: 8px; border: 1px solid #e4ebf7; border-radius: 8px; }

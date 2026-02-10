@@ -1,38 +1,32 @@
 [
-  {
-    "id": "flow_0001",
-    "type": "flow",
-    "difficulty": 980,
-    "tags": ["fractions", "number_sense"],
-    "format": "multiple_choice",
-    "prompt": "Which is bigger: 3/8 or 5/12?",
-    "choices": ["3/8", "5/12", "same"],
-    "answer": "5/12",
-    "hints": [
-      "Try rewriting both fractions with the same denominator.",
-      "A common denominator could be 24.",
-      "3/8 = 9/24 and 5/12 = 10/24."
-    ],
-    "solution_steps": [
-      "Compare using a common denominator: 3/8 = 9/24 and 5/12 = 10/24.",
-      "10/24 is bigger than 9/24, so 5/12 is bigger."
-    ]
-  },
-  {
-    "id": "flow_0002",
-    "type": "flow",
-    "difficulty": 920,
-    "tags": ["percents", "number_sense"],
-    "format": "numeric_input",
-    "prompt": "What is 25% of 60?",
-    "answer": "15",
-    "hints": [
-      "25% is the same as 1/4.",
-      "Try dividing 60 by 4."
-    ],
-    "solution_steps": [
-      "25% = 1/4.",
-      "60 ÷ 4 = 15."
-    ]
-  }
+  {"id":"flow_0001","type":"flow","difficulty":820,"tags":["add_sub","word_problem"],"format":"numeric_input","prompt":"Lina has 27 stickers and gives away 9. How many left?","answer":"18","hints":["Subtract what she gave away.","Compute 27 - 9."],"solution_steps":["Start with 27 stickers.","27 - 9 = 18."]},
+  {"id":"flow_0002","type":"flow","difficulty":860,"tags":["mult_div"],"format":"numeric_input","prompt":"6 × 7 = ?","answer":"42","hints":["Think of 6 groups of 7.","Use a multiplication fact."],"solution_steps":["6 × 7 equals 42.","So the answer is 42."]},
+  {"id":"flow_0003","type":"flow","difficulty":900,"tags":["fractions"],"format":"multiple_choice","prompt":"Which is larger?","choices":["1/3","1/4","same"],"answer":"1/3","hints":["Compare unit fractions.","Smaller denominator means bigger piece."],"solution_steps":["For unit fractions, smaller denominator is larger.","So 1/3 > 1/4."]},
+  {"id":"flow_0004","type":"flow","difficulty":930,"tags":["percents","word_problem"],"format":"numeric_input","prompt":"What is 10% of 250?","answer":"25","hints":["10% means one tenth.","Divide 250 by 10."],"solution_steps":["10% = 1/10.","250 ÷ 10 = 25."]},
+  {"id":"flow_0005","type":"flow","difficulty":960,"tags":["factors_multiples"],"format":"multiple_choice","prompt":"Which number is a multiple of 9?","choices":["45","46","47","48"],"answer":"45","hints":["Try 9×5.","Multiples are exact products."],"solution_steps":["9×5 = 45.","So 45 is the multiple."]},
+  {"id":"flow_0006","type":"flow","difficulty":980,"tags":["fractions"],"format":"multiple_choice","prompt":"Which is bigger: 3/8 or 5/12?","choices":["3/8","5/12","same"],"answer":"5/12","hints":["Use a common denominator.","Try denominator 24.","3/8=9/24, 5/12=10/24."],"solution_steps":["Rewrite both with denominator 24.","10/24 > 9/24 so 5/12 is bigger."]},
+  {"id":"flow_0007","type":"flow","difficulty":1000,"tags":["ratios_rates"],"format":"numeric_input","prompt":"A recipe uses 2 cups flour for 3 batches. How many cups for 6 batches?","answer":"4","hints":["6 batches is double 3.","Double the flour too."],"solution_steps":["Scale by factor 2.","2×2=4 cups."]},
+  {"id":"flow_0008","type":"flow","difficulty":1020,"tags":["prealgebra","equations"],"format":"numeric_input","prompt":"Solve: x + 17 = 41","answer":"24","hints":["Undo +17.","Subtract 17 from both sides."],"solution_steps":["x=41-17.","x=24."]},
+  {"id":"flow_0009","type":"flow","difficulty":1040,"tags":["geometry_area"],"format":"numeric_input","prompt":"Area of rectangle 9 cm by 4 cm?","answer":"36","unit":"cm^2","hints":["Area is length × width.","Compute 9×4."],"solution_steps":["A=9×4.","A=36 cm^2."]},
+  {"id":"flow_0010","type":"flow","difficulty":1060,"tags":["decimals","add_sub"],"format":"numeric_input","prompt":"2.5 + 0.75 = ?","answer":"3.25","hints":["Line up decimal points.","Add tenths and hundredths carefully."],"solution_steps":["2.50 + 0.75 = 3.25.","Answer is 3.25."]},
+  {"id":"flow_0011","type":"flow","difficulty":1080,"tags":["negative_numbers"],"format":"multiple_choice","prompt":"What is -3 + 8?","choices":["-11","-5","5","11"],"answer":"5","hints":["Moving right 8 from -3.","Or subtract 3 from 8."],"solution_steps":["-3+8 = 8-3.","Result is 5."]},
+  {"id":"flow_0012","type":"flow","difficulty":1100,"tags":["word_problem","ratios_rates"],"format":"numeric_input","prompt":"A car goes 120 miles in 2 hours. What is the speed in miles/hour?","answer":"60","hints":["Rate = distance ÷ time.","Compute 120 ÷ 2."],"solution_steps":["120/2=60.","Speed is 60 mph."]},
+  {"id":"flow_0013","type":"flow","difficulty":1130,"tags":["equations","prealgebra"],"format":"numeric_input","prompt":"Solve: 3x = 27","answer":"9","hints":["Divide both sides by 3.","27 ÷ 3 = ?"],"solution_steps":["x=27/3.","x=9."]},
+  {"id":"flow_0014","type":"flow","difficulty":1160,"tags":["geometry_angles"],"format":"numeric_input","prompt":"Two angles on a straight line are supplementary. If one is 65°, the other is?","answer":"115","unit":"degrees","hints":["Supplementary angles total 180°.","Do 180-65."],"solution_steps":["180-65=115.","Other angle is 115°."]},
+  {"id":"flow_0015","type":"flow","difficulty":1180,"tags":["factors_multiples","probability"],"format":"multiple_choice","prompt":"A fair die is rolled. Probability of an even number?","choices":["1/6","1/3","1/2","2/3"],"answer":"1/2","hints":["Even outcomes: 2,4,6.","3 favorable out of 6 total."],"solution_steps":["P=3/6.","Simplify to 1/2."]},
+  {"id":"flow_0016","type":"flow","difficulty":1210,"tags":["percents","decimals"],"format":"numeric_input","prompt":"Increase 80 by 15%.","answer":"92","hints":["Find 15% of 80 first.","Then add to 80."],"solution_steps":["0.15×80=12.","80+12=92."]},
+  {"id":"flow_0017","type":"flow","difficulty":1240,"tags":["geometry_coordinates"],"format":"numeric_input","prompt":"Distance horizontally between (2,5) and (11,5)?","answer":"9","hints":["Same y-value means horizontal distance.","Subtract x-values."],"solution_steps":["11-2=9.","Distance is 9."]},
+  {"id":"flow_0018","type":"flow","difficulty":1270,"tags":["equations","word_problem"],"format":"numeric_input","prompt":"If 4 pens cost $12, what is cost of 7 pens at same rate?","answer":"21","hints":["Find unit rate first.","$12 ÷ 4 = $3 each."],"solution_steps":["Each pen costs $3.","7×3 = $21."]},
+  {"id":"flow_0019","type":"flow","difficulty":1300,"tags":["fractions","prealgebra"],"format":"numeric_input","prompt":"Solve: x/5 = 3/2","answer":"7.5","accept_answers":["15/2"],"hints":["Multiply both sides by 5.","Compute 5×3/2."],"solution_steps":["x=5×3/2=15/2.","15/2 = 7.5."]},
+  {"id":"flow_0020","type":"flow","difficulty":1330,"tags":["geometry_area","word_problem"],"format":"numeric_input","prompt":"A square has perimeter 36 cm. What is its area?","answer":"81","unit":"cm^2","hints":["Each side is perimeter/4.","Area = side²."],"solution_steps":["Side=36/4=9.","Area=9²=81."]},
+  {"id":"flow_0021","type":"flow","difficulty":1360,"tags":["ratios_rates","word_problem"],"format":"numeric_input","prompt":"Map scale 1 cm : 5 km. If two towns are 7 cm apart on map, real distance?","answer":"35","unit":"km","hints":["Multiply 7 by 5.","Use the scale directly."],"solution_steps":["7×5=35.","Real distance is 35 km."]},
+  {"id":"flow_0022","type":"flow","difficulty":1380,"tags":["equations","prealgebra"],"format":"numeric_input","prompt":"Solve: 2(x-3)=18","answer":"12","hints":["Divide both sides by 2 first.","Then add 3."],"solution_steps":["x-3=9.","x=12."]},
+  {"id":"flow_0023","type":"flow","difficulty":1410,"tags":["probability","counting"],"format":"multiple_choice","prompt":"Two fair coins are flipped. Probability of exactly one head?","choices":["1/4","1/2","3/4","1"],"answer":"1/2","hints":["List outcomes HH, HT, TH, TT.","Favorable: HT and TH."],"solution_steps":["2 favorable of 4 equally likely outcomes.","Probability = 2/4 = 1/2."]},
+  {"id":"flow_0024","type":"flow","difficulty":1440,"tags":["measurement","word_problem"],"format":"numeric_input","prompt":"Convert 2.5 meters to centimeters.","answer":"250","hints":["1 meter = 100 cm.","Multiply by 100."],"solution_steps":["2.5×100 = 250.","So 250 cm."]},
+  {"id":"flow_0025","type":"flow","difficulty":1470,"tags":["geometry_angles","prealgebra"],"format":"numeric_input","prompt":"Angles of a triangle are x, x, and 40. Find x.","answer":"70","hints":["Triangle angles sum to 180.","2x+40=180."],"solution_steps":["2x=140.","x=70."]},
+  {"id":"flow_0026","type":"flow","difficulty":1500,"tags":["percents","word_problem"],"format":"numeric_input","prompt":"A $50 item is discounted 20% then taxed 10% on discounted price. Final price?","answer":"44","hints":["After 20% off: multiply by 0.8.","Then apply 10% tax: multiply by 1.1."],"solution_steps":["50×0.8=40.","40×1.1=44."]},
+  {"id":"flow_0027","type":"flow","difficulty":1530,"tags":["equations","negative_numbers"],"format":"numeric_input","prompt":"Solve: 5 - 2x = -9","answer":"7","hints":["Subtract 5 from both sides.","Then divide by -2."],"solution_steps":["-2x=-14.","x=7."]},
+  {"id":"flow_0028","type":"flow","difficulty":1560,"tags":["factors_multiples","reasoning"],"format":"multiple_choice","prompt":"Least common multiple of 12 and 18?","choices":["24","30","36","54"],"answer":"36","hints":["Prime factors: 12=2²·3, 18=2·3².","Take highest powers."],"solution_steps":["LCM=2²×3².","LCM=36."]},
+  {"id":"flow_0029","type":"flow","difficulty":1600,"tags":["geometry_coordinates","geometry_area"],"format":"numeric_input","prompt":"Area of triangle with base 10 and height 7?","answer":"35","hints":["Triangle area is 1/2×base×height.","Compute 1/2×10×7."],"solution_steps":["(1/2)×10×7 = 35.","Area is 35."]},
+  {"id":"flow_0030","type":"flow","difficulty":1650,"tags":["proof_lite","prealgebra"],"format":"multiple_choice","prompt":"For integer n, n(n+1) is always...","choices":["odd","even","prime","multiple of 3"],"answer":"even","hints":["n and n+1 are consecutive.","One of consecutive integers is even."],"solution_steps":["Among n and n+1, one is even.","Product has factor 2, so always even."]}
 ]
