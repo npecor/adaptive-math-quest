@@ -1540,6 +1540,14 @@ p {
   gap: 16px;
 }
 
+.home-stats-card {
+  gap: 0;
+}
+
+.stats-grid-embedded {
+  margin: 0;
+}
+
 .stat-card {
   background: rgba(15, 23, 42, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);

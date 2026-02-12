@@ -1895,28 +1895,31 @@ export default function App() {
         </div>
       </section>
 
-      {hasCadetSnapshot && (
-        <>
-          <section className="section-header player-title">
-            <h3 className="text-title">Cadet Snapshot</h3>
-          </section>
+      <section className="section-header">
+        <h3 className="text-title">Cosmic Snapshot</h3>
+        <span className="tag">Your mission stats</span>
+      </section>
 
-          <section className="stats-grid snapshot-grid">
-            <div className="stat-card">
-              <span className="stat-value accent">{state.streaks.dailyStreak}</span>
-              <span className="stat-label">🔥 Day Streak</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">{state.totals.bestRunStars}</span>
-              <span className="stat-label">⭐ Best Run</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">{state.streaks.puzzleStreak}</span>
-              <span className="stat-label">🧠 Puzzle Streak</span>
-            </div>
-          </section>
-        </>
-      )}
+      <section className="card home-stats-card">
+        <div className="stats-grid stats-grid-embedded">
+          <div className="stat-card">
+            <span className="stat-value">{state.highs.bestTotal}</span>
+            <span className="stat-label">⭐ Best Score</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value accent">{state.streaks.dailyStreak}</span>
+            <span className="stat-label">🔥 Day Streak</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{puzzleSolveRate}%</span>
+            <span className="stat-label">🧠 Puzzle Solve</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{state.museum.length}</span>
+            <span className="stat-label">🏆 Trophies</span>
+          </div>
+        </div>
+      </section>
     </>
   );
 
