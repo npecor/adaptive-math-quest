@@ -750,6 +750,13 @@ export default function App() {
     setHomeNavRevealed(false);
   }, [screen]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    const container = appContainerRef.current;
+    if (container) container.scrollTop = 0;
+  }, [screen]);
+
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
 
