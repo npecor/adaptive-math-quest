@@ -639,6 +639,7 @@ export default function App() {
   );
   const [homeNavRevealed, setHomeNavRevealed] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollYRef = useRef(0);
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
     const saved = loadState().user?.avatarId;
@@ -716,11 +717,24 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
+    const getScrollY = () => Math.max(window.scrollY, appContainerRef.current?.scrollTop ?? 0);
     const handleScroll = () => {
-      const y = Math.max(window.scrollY, appContainerRef.current?.scrollTop ?? 0);
-      setHomeNavRevealed(y > 36);
+      const y = getScrollY();
+      const delta = y - lastScrollYRef.current;
+      const minDelta = 6;
+
+      if (y <= 8) {
+        setHomeNavRevealed(false);
+      } else if (delta > minDelta) {
+        setHomeNavRevealed(true);
+      } else if (delta < -minDelta) {
+        setHomeNavRevealed(false);
+      }
+
+      lastScrollYRef.current = y;
     };
-    handleScroll();
+    lastScrollYRef.current = getScrollY();
+    setHomeNavRevealed(false);
     window.addEventListener('scroll', handleScroll, { passive: true });
     const container = appContainerRef.current;
     container?.addEventListener('scroll', handleScroll, { passive: true });
@@ -732,7 +746,8 @@ export default function App() {
 
   useEffect(() => {
     const y = Math.max(typeof window !== 'undefined' ? window.scrollY : 0, appContainerRef.current?.scrollTop ?? 0);
-    setHomeNavRevealed(y > 36);
+    lastScrollYRef.current = y;
+    setHomeNavRevealed(false);
   }, [screen]);
 
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
@@ -1079,6 +1094,13 @@ export default function App() {
 
     return board.sort((a, b) => b.score - a.score).map((item, index) => ({ ...item, rank: index + 1 }));
   }, [state.highs.bestTotal, state.user, totalScore]);
+  const podiumLeaders = useMemo(
+    () =>
+      [2, 1, 3]
+        .map((rank) => leaderboard.find((entry) => entry.rank === rank))
+        .filter((entry): entry is (typeof leaderboard)[number] => entry !== undefined),
+    [leaderboard]
+  );
 
   const runInProgress = screen === 'run' || run.flowDone > 0 || run.puzzleDone > 0 || run.phase !== 'flow' || Boolean(run.currentFlow);
   const hideBottomNav = isMobileViewport && (screen === 'home' || screen === 'run') && !homeNavRevealed;
@@ -1212,11 +1234,17 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className={`btn-row home-mode-actions ${hideBottomNav ? 'nav-hidden' : ''}`}>
-          <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
-            {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
-          </button>
-        </div>
+        {!isMobileViewport && (
+          <div className="btn-row">
+            <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
+              {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="section-header player-title">
+        <h3 className="text-title">Player Pulse</h3>
       </section>
 
       <section className="stats-grid">
@@ -1600,7 +1628,7 @@ export default function App() {
       </section>
 
       <section className="card podium-wrap">
-        {leaderboard.slice(0, 3).map((entry) => (
+        {podiumLeaders.map((entry) => (
           <div key={entry.name} className={`podium-item rank-${entry.rank}`}>
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
@@ -1712,7 +1740,10 @@ export default function App() {
         </div>
       )}
 
-      <div className="app-container" ref={appContainerRef}>
+      <div
+        className={`app-container ${screen === 'home' && isMobileViewport ? 'home-mobile-with-cta' : ''}`}
+        ref={appContainerRef}
+      >
         <header className="top-bar">
           <button className="user-pill user-pill-button" onClick={() => setScreen('onboarding')}>
             <CharacterAvatar characterId={state.user.avatarId} size="xs" />
@@ -1738,6 +1769,14 @@ export default function App() {
             <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
           </div>
         </section>
+      )}
+
+      {screen === 'home' && isMobileViewport && (
+        <div className={`btn-row home-mode-actions ${hideBottomNav ? 'nav-hidden' : ''}`}>
+          <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
+            {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
+          </button>
+        </div>
       )}
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>

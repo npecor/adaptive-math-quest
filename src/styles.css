@@ -1397,7 +1397,7 @@ p {
 
 .rank-row {
   display: grid;
-  grid-template-columns: 24px 34px 1fr auto;
+  grid-template-columns: 28px 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
 }
@@ -1410,6 +1410,8 @@ p {
 .rank-number {
   color: var(--color-ink-muted);
   font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .row-avatar {
@@ -1423,11 +1425,19 @@ p {
 
 .row-name {
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-score {
   font-family: var(--font-display);
   color: var(--color-accent-pink);
+  min-width: 72px;
+  text-align: right;
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
 }
 
 .profile-hero {
@@ -1868,12 +1878,18 @@ p {
 }
 
 @media (max-width: 700px) {
+  .app-container.home-mobile-with-cta {
+    padding-bottom: 228px;
+  }
+
   .home-mode-actions {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    right: 12px;
     bottom: calc(env(safe-area-inset-bottom) + 92px);
     width: min(380px, calc(100vw - 24px));
+    margin-left: auto;
+    margin-right: auto;
     z-index: 80;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1883,12 +1899,11 @@ p {
     display: grid;
     gap: 8px;
     box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
-    transition: bottom 220ms ease;
-    margin: 0;
+    transition: none;
   }
 
   .home-mode-actions.nav-hidden {
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
   }
 
   .auth-shell {
