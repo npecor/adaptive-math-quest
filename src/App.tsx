@@ -1120,7 +1120,7 @@ export default function App() {
         </div>
 
         <div className="character-section">
-          <p className="text-label onboarding-step-label">Step 2: Choose your Astronaut</p>
+          <p className="text-label onboarding-step-label">Step 2: Choose your astronaut</p>
           <div className="character-grid">
             {playerCharacters
               .filter((character) => character.kind === 'astronaut')
