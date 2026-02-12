@@ -376,15 +376,55 @@ p {
 .character-avatar.animal-octo .character-avatar-body {
   width: 66%;
   border-radius: 45% 45% 32% 32%;
+  position: relative;
+  overflow: visible;
+}
+
+.character-avatar.animal-octo .character-avatar-body::before,
+.character-avatar.animal-octo .character-avatar-body::after {
+  content: '';
+  position: absolute;
+  bottom: 28%;
+  width: 14px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: linear-gradient(155deg, var(--char-accent), var(--char-base));
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.15);
+}
+
+.character-avatar.animal-octo .character-avatar-body::before {
+  left: -10px;
+  border-radius: 70% 30% 80% 20%;
+  transform: rotate(-34deg);
+}
+
+.character-avatar.animal-octo .character-avatar-body::after {
+  right: -10px;
+  border-radius: 30% 70% 20% 80%;
+  transform: rotate(34deg);
 }
 
 .character-avatar.animal-octo .character-avatar-feet {
-  width: 80%;
+  position: relative;
+  width: 74%;
+  height: 10px;
+  margin-top: -2%;
+  display: block;
 }
 
 .character-avatar.animal-octo .character-avatar-foot {
-  width: 16%;
-  height: 6px;
+  display: none;
+}
+
+.character-avatar.animal-octo .character-avatar-feet::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.66) 0 62%, transparent 66%) 0 0 / 16.66% 100% repeat-x;
 }
 
 .character-avatar.animal-panda .character-avatar-head {
@@ -531,6 +571,23 @@ p {
   background: linear-gradient(90deg, #fb923c, #ffedd5);
 }
 
+.character-avatar.animal-fox .character-avatar-feet {
+  position: relative;
+}
+
+.character-avatar.animal-fox .character-avatar-feet::after {
+  content: '';
+  position: absolute;
+  right: -18%;
+  top: -92%;
+  width: 36%;
+  height: 10px;
+  border-radius: 999px;
+  transform: rotate(-30deg);
+  background: linear-gradient(90deg, #fb923c, #ffedd5);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+
 .character-avatar.animal-cat .feature-a,
 .character-avatar.animal-cat .feature-b {
   opacity: 0;
@@ -584,7 +641,7 @@ p {
 }
 
 .text-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: none;
@@ -607,9 +664,9 @@ p {
 }
 
 .text-title {
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
 .tag {
@@ -649,8 +706,8 @@ p {
 
 .muted {
   color: var(--color-ink-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .flow-meter-wrap {
@@ -861,17 +918,17 @@ p {
 
 .mode-card-title {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.02em;
 }
 
 .mode-card-subtitle {
-  font-size: 12px;
+  font-size: 13px;
   color: #cbd5e1;
 }
 
 .mode-card-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-ink-muted);
 }
 
@@ -1120,14 +1177,14 @@ p {
 
 .stat-value {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
 }
 
 .stat-label {
   text-transform: none;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0.04em;
   color: var(--color-ink-muted);
 }
 
@@ -1444,6 +1501,13 @@ p {
   display: flex;
   justify-content: space-around;
   z-index: 60;
+  transition: opacity 220ms ease, transform 240ms ease;
+}
+
+.bottom-nav.is-hidden {
+  opacity: 0;
+  transform: translate(-50%, 20px);
+  pointer-events: none;
 }
 
 .nav-item {
@@ -1495,6 +1559,23 @@ p {
   width: min(460px, 100%);
 }
 
+.onboarding-title {
+  font-size: clamp(24px, 5.5vw, 32px);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+.onboarding-intro {
+  margin-top: -6px;
+  margin-bottom: 2px;
+}
+
+.onboarding-step-label {
+  color: #bae6fd;
+  letter-spacing: 0.04em;
+  margin: 4px 0 10px;
+}
+
 .eyebrow {
   text-transform: none;
   letter-spacing: 0.03em;
@@ -1520,7 +1601,7 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
-  padding: 10px;
+  padding: 9px;
   color: var(--color-ink);
   cursor: pointer;
 }
@@ -1530,8 +1611,58 @@ p {
   background: rgba(14, 165, 233, 0.2);
 }
 
+.character-card.selected .character-card-head {
+  perspective: 500px;
+}
+
+.character-card.selected .character-avatar {
+  animation: character-bob 2.1s ease-in-out infinite;
+  transform-origin: center 70%;
+  filter: drop-shadow(0 8px 10px rgba(2, 6, 23, 0.32));
+}
+
+.character-card.selected .character-avatar::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 46%;
+  height: 6px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.34);
+  filter: blur(1px);
+  animation: character-shadow 2.1s ease-in-out infinite;
+}
+
 .character-card-head {
-  margin-bottom: 3px;
+  margin-bottom: 1px;
+}
+
+@keyframes character-bob {
+  0%, 100% {
+    transform: translateY(0) rotateX(0deg) rotateZ(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-2px) rotateX(4deg) rotateZ(-1.2deg) scale(1.02);
+  }
+  50% {
+    transform: translateY(-4px) rotateX(6deg) rotateZ(1.2deg) scale(1.03);
+  }
+  75% {
+    transform: translateY(-2px) rotateX(3deg) rotateZ(-0.8deg) scale(1.015);
+  }
+}
+
+@keyframes character-shadow {
+  0%, 100% {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateX(-50%) scaleX(0.84);
+    opacity: 0.2;
+  }
 }
 
 .character-name {
@@ -1570,6 +1701,25 @@ p {
   gap: 12px;
 }
 
+.home-hero-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.home-hero-title {
+  font-size: clamp(20px, 4.8vw, 24px);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.home-hero-subtitle {
+  margin: 0;
+  color: #dbeafe;
+  font-size: 14px;
+  line-height: 1.42;
+}
+
 .player-title {
   display: flex;
   align-items: center;
@@ -1599,12 +1749,45 @@ p {
 
 @media (max-width: 440px) {
   .text-title {
-    font-size: 17px;
+    font-size: 18px;
   }
 
   .card {
     margin: 0 12px;
     padding: 16px;
+  }
+
+  .home-hero {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .home-hero-title {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .home-hero-subtitle {
+    font-size: 12px;
+    line-height: 1.34;
+  }
+
+  .home-hero .character-avatar.size-lg {
+    width: 42px;
+    height: 50px;
+  }
+
+  .mode-card-option {
+    padding: 10px 12px;
+    gap: 2px;
+  }
+
+  .mode-card-subtitle {
+    font-size: 12px;
+  }
+
+  .mode-card-meta {
+    display: none;
   }
 
   .section-header,

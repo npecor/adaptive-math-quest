@@ -43,7 +43,7 @@ const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
 const MAX_HINTS_PER_QUESTION = 2;
 
-const handles = ['CuriousComet42', 'PixelPanda77', 'OrbitOwl12', 'NovaNoodle55', 'LogicLynx31'];
+const handles = ['CuriousComet', 'PixelPanda', 'OrbitOwl', 'NovaNoodle', 'LogicLynx'];
 const playerCharacters: PlayerCharacter[] = [
   { id: 'astro-starlight', emoji: '👩‍🚀', name: 'Starlight', vibe: 'Sparkly (feminine)', kind: 'astronaut' },
   { id: 'astro-comet', emoji: '👨‍🚀', name: 'Comet Ace', vibe: 'Classic (boyish)', kind: 'astronaut' },
@@ -635,6 +635,11 @@ export default function App() {
   const [showTutor, setShowTutor] = useState(false);
   const [showClarifyDialog, setShowClarifyDialog] = useState(false);
   const [tutorStep, setTutorStep] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false
+  );
+  const [homeNavRevealed, setHomeNavRevealed] = useState(false);
+  const appContainerRef = useRef<HTMLDivElement | null>(null);
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
     const saved = loadState().user?.avatarId;
@@ -698,6 +703,31 @@ export default function App() {
   useEffect(() => {
     return () => {
       if (resultFlashTimeoutRef.current) clearTimeout(resultFlashTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia('(max-width: 700px)');
+    const onChange = () => setIsMobileViewport(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleScroll = () => {
+      const y = Math.max(window.scrollY, appContainerRef.current?.scrollTop ?? 0);
+      setHomeNavRevealed(y > 36);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    const container = appContainerRef.current;
+    container?.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      container?.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
@@ -1047,6 +1077,7 @@ export default function App() {
   }, [state.highs.bestTotal, state.user, totalScore]);
 
   const runInProgress = screen === 'run' || run.flowDone > 0 || run.puzzleDone > 0 || run.phase !== 'flow' || Boolean(run.currentFlow);
+  const hideBottomNav = screen === 'home' && isMobileViewport && !homeNavRevealed;
   const showGamePhasesPanel = false;
   const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
@@ -1064,9 +1095,19 @@ export default function App() {
   const onboarding = (
     <div className="auth-shell">
       <div className="card onboarding-card">
-        <h1>{state.user ? 'Edit Your Player' : 'Choose Your Player'}</h1>
-        <p className="muted">Pick your name and your space buddy.</p>
+        {state.user ? (
+          <>
+            <h1 className="onboarding-title">Welcome to Galaxy Genius!</h1>
+            <p className="muted onboarding-intro">Update your player name or switch your character.</p>
+          </>
+        ) : (
+          <>
+            <h1 className="onboarding-title">Welcome to Galaxy Genius</h1>
+            <p className="muted onboarding-intro">Create your player name and choose your first character to begin.</p>
+          </>
+        )}
 
+        <p className="text-label onboarding-step-label">Step 1: Pick a player name</p>
         <input
           className="math-input"
           placeholder="Player name"
@@ -1086,7 +1127,7 @@ export default function App() {
         </div>
 
         <div className="character-section">
-          <p className="text-label">Astronaut Crew</p>
+          <p className="text-label onboarding-step-label">Step 2: Choose your Astronaut</p>
           <div className="character-grid">
             {playerCharacters
               .filter((character) => character.kind === 'astronaut')
@@ -1097,16 +1138,12 @@ export default function App() {
                   onClick={() => setSelectedCharacterId(character.id)}
                 >
                   <div className="character-card-head">
-                    <CharacterAvatar characterId={character.id} size="lg" />
+                    <CharacterAvatar characterId={character.id} size="md" />
                   </div>
                   <span className="character-name">{character.name}</span>
                 </button>
               ))}
           </div>
-        </div>
-
-        <div className="character-section">
-          <p className="text-label">Zany Animal Crew</p>
           <div className="character-grid">
             {playerCharacters
               .filter((character) => character.kind === 'animal')
@@ -1117,7 +1154,7 @@ export default function App() {
                   onClick={() => setSelectedCharacterId(character.id)}
                 >
                   <div className="character-card-head">
-                    <CharacterAvatar characterId={character.id} size="lg" />
+                    <CharacterAvatar characterId={character.id} size="md" />
                   </div>
                   <span className="character-name">{character.name}</span>
                 </button>
@@ -1153,9 +1190,9 @@ export default function App() {
       <section className="card home-hero">
         <div className="home-hero-head">
           <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
-          <div>
-            <p className="text-label">Ready for launch, {state.user?.username}?</p>
-            <p className="muted">Choose a mode and start your next space mission.</p>
+          <div className="home-hero-copy">
+            <h3 className="home-hero-title">Ready for launch, {state.user?.username}?</h3>
+            <p className="home-hero-subtitle">Choose a mode and start your next space mission.</p>
           </div>
         </div>
       </section>
@@ -1692,7 +1729,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="app-container">
+      <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
           <button className="user-pill user-pill-button" onClick={() => setScreen('onboarding')}>
             <CharacterAvatar characterId={state.user.avatarId} size="xs" />
@@ -1708,7 +1745,7 @@ export default function App() {
         {screen === 'museum' && museum}
       </div>
 
-      <nav className="bottom-nav">
+      <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
         <button className={`nav-item ${screen === 'home' ? 'active' : ''}`} onClick={() => setScreen('home')} aria-label="Home">
           <span className="nav-icon">🏠</span>
           <span className="nav-label">Home</span>
