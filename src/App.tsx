@@ -1219,22 +1219,29 @@ export default function App() {
         </div>
       </section>
 
-      <section className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-value">{state.highs.bestTotal}</span>
-          <span className="stat-label">⭐ Best Score</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value accent">{state.streaks.dailyStreak}</span>
-          <span className="stat-label">🔥 Day Streak</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{puzzleSolveRate}%</span>
-          <span className="stat-label">🧠 Puzzle Solve</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{state.museum.length}</span>
-          <span className="stat-label">🏆 Trophies</span>
+      <section className="section-header">
+        <h3 className="text-title">Cosmic Snapshot</h3>
+        <span className="tag">Your mission stats</span>
+      </section>
+
+      <section className="card home-stats-card">
+        <div className="stats-grid stats-grid-embedded">
+          <div className="stat-card">
+            <span className="stat-value">{state.highs.bestTotal}</span>
+            <span className="stat-label">⭐ Best Score</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value accent">{state.streaks.dailyStreak}</span>
+            <span className="stat-label">🔥 Day Streak</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{puzzleSolveRate}%</span>
+            <span className="stat-label">🧠 Puzzle Solve</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{state.museum.length}</span>
+            <span className="stat-label">🏆 Trophies</span>
+          </div>
         </div>
       </section>
     </>
