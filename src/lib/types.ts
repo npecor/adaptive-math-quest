@@ -27,8 +27,10 @@ export interface PuzzleItem {
   difficulty: number;
   tags: string[];
   title: string;
+  answer_type?: 'choice' | 'short_text' | 'long_text';
   core_prompt: string;
   core_answer: string;
+  accept_answers?: string[];
   extensions: PuzzleExtension[];
   hint_ladder: string[];
   solution_steps: string[];
@@ -61,6 +63,7 @@ export interface HighScores {
 
 export interface MuseumEntry {
   puzzleId: string;
+  title?: string;
   solved: boolean;
   extensionsCompleted: number;
   methodsFound: string[];

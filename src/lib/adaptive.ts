@@ -42,5 +42,7 @@ export function selectNextFlowItem(
   });
 
   withPenalty.sort((a, b) => a.score - b.score);
-  return withPenalty[0]?.item ?? items[0];
+  const candidatePool = withPenalty.slice(0, Math.min(4, withPenalty.length));
+  const pick = candidatePool[Math.floor(Math.random() * candidatePool.length)];
+  return pick?.item ?? items[0];
 }

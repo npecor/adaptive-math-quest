@@ -5,14 +5,14 @@
     "difficulty": 950,
     "tags": ["patterns", "reasoning"],
     "title": "Matchstick Pattern",
-    "core_prompt": "A pattern uses 3 sticks for the first triangle, then adds 2 sticks each new triangle in a row. How many sticks for 8 triangles?",
+    "core_prompt": "Sticks follow 3, 5, 7, ... for 1, 2, 3 triangles. How many sticks for 8 triangles?",
     "core_answer": "17",
     "extensions": [
-      {"label":"Extension 1","prompt":"Write a rule for n triangles.","answer":"2n+1"},
-      {"label":"Extension 2","prompt":"How many triangles can you build with 101 sticks?","answer":"50"}
+      {"label": "Extension 1", "prompt": "Write a rule for n triangles.", "answer": "2n+1"},
+      {"label": "Extension 2", "prompt": "How many triangles with 101 sticks?", "answer": "50"}
     ],
-    "hint_ladder": ["Start with a small table.","Look at how much changes each step.","This is an arithmetic pattern.","Reveal: total = 3 + 2(n-1)."],
-    "solution_steps": ["First term 3, difference 2.","For n=8: 3+2*7=17."]
+    "hint_ladder": ["List the first few totals.", "The pattern adds 2 each step.", "Use first term + (n-1)*difference.", "Reveal: total = 3 + 2(n-1)."],
+    "solution_steps": ["First term is 3 and difference is 2.", "For n=8: 3 + 2*7 = 17."]
   },
   {
     "id": "puz_0002",
@@ -20,11 +20,14 @@
     "difficulty": 1000,
     "tags": ["counting", "logic"],
     "title": "Handshakes Lite",
-    "core_prompt": "In a club of 6 students, each pair shakes hands once. How many handshakes total?",
+    "core_prompt": "How many unique pairs can be made from 6 students?",
     "core_answer": "15",
-    "extensions": [{"label":"Extension 1","prompt":"What if there are 10 students?","answer":"45"},{"label":"Extension 2","prompt":"Give a formula for n students.","answer":"n(n-1)/2"}],
-    "hint_ladder": ["Try with 3 and 4 students first.","Count pairs, not people.","Use combinations.","Reveal: C(6,2)=15."],
-    "solution_steps": ["Count pairs among 6 people.","C(6,2)=15."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "What about 10 students?", "answer": "45"},
+      {"label": "Extension 2", "prompt": "Rule for n students?", "answer": "n(n-1)/2"}
+    ],
+    "hint_ladder": ["List pairs with 4 students first.", "Now do the same pattern for 6 students.", "You are counting pairs, not people.", "Reveal: C(6,2)=15."],
+    "solution_steps": ["Count all 2-person pairs from 6 people.", "C(6,2) = 15."]
   },
   {
     "id": "puz_0003",
@@ -32,11 +35,16 @@
     "difficulty": 1040,
     "tags": ["logic", "reasoning"],
     "title": "Truth Tokens",
-    "core_prompt": "Three boxes are labeled Apples, Oranges, Mixed. All labels are wrong. You may pick one fruit from one box. How do you relabel all boxes?",
+    "answer_type": "long_text",
+    "core_prompt": "Boxes are labeled Apples, Oranges, Mixed. Every label is wrong. One draw allowed. What do you draw from first?",
     "core_answer": "Pick from Mixed-labeled box first",
-    "extensions": [{"label":"Extension 1","prompt":"Explain why one draw is enough.","answer":"Because every label is wrong and one true identity locks others."},{"label":"Extension 2","prompt":"Generalize to 4 boxes with all-wrong labels.","answer":"depends"}],
-    "hint_ladder": ["Use the all-labels-wrong condition.","Choose the box giving most information.","The Mixed label cannot be mixed.","Reveal: sample from Mixed-labeled box."],
-    "solution_steps": ["Mixed-labeled box must contain only one fruit type.","After identifying it, remaining two labels are forced."]
+    "accept_answers": ["mixed-labeled box", "draw from mixed", "pick mixed first"],
+    "extensions": [
+      {"label": "Extension 1", "prompt": "Why is one draw enough?", "answer": "Because every label is wrong and one true identity locks others."},
+      {"label": "Extension 2", "prompt": "How might this change with 4 boxes?", "answer": "depends"}
+    ],
+    "hint_ladder": ["Use the rule: all labels are wrong.", "Pick the box with most info.", "The Mixed label cannot be mixed.", "Reveal: draw from the Mixed-labeled box."],
+    "solution_steps": ["The Mixed-labeled box must be pure apples or pure oranges.", "That one draw fixes that box and forces the other two labels."]
   },
   {
     "id": "puz_0004",
@@ -44,11 +52,14 @@
     "difficulty": 1080,
     "tags": ["spatial", "geometry_area"],
     "title": "Rectangle Cut",
-    "core_prompt": "Can a 6×6 square be cut into two pieces and rearranged into a 9×4 rectangle without stretching?",
+    "core_prompt": "Can a 6x6 square be cut and rearranged into a 9x4 rectangle (no stretching)?",
     "core_answer": "Yes",
-    "extensions": [{"label":"Extension 1","prompt":"What must stay the same under rearrangement?","answer":"Area"},{"label":"Extension 2","prompt":"Give another pair of dimensions with same area 36.","answer":"12x3"}],
-    "hint_ladder": ["Think about invariants.","Area is preserved.","Compare areas of both shapes.","Reveal: both have area 36 so possible in principle."],
-    "solution_steps": ["6×6 area is 36.","9×4 area is 36, so area allows rearrangement."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "What must stay the same when rearranging?", "answer": "Area"},
+      {"label": "Extension 2", "prompt": "Give another rectangle with area 36.", "answer": "12x3"}
+    ],
+    "hint_ladder": ["Think invariants.", "Area does not change.", "Compare both areas.", "Reveal: both shapes have area 36."],
+    "solution_steps": ["6*6 = 36.", "9*4 = 36, so area allows it."]
   },
   {
     "id": "puz_0005",
@@ -56,11 +67,14 @@
     "difficulty": 1120,
     "tags": ["strategy", "logic"],
     "title": "Take 1 or 2",
-    "core_prompt": "There are 15 stones. Players alternate taking 1 or 2 stones. Taking last stone wins. Should first player go first to win?",
-    "core_answer": "Yes, take 1 first",
-    "extensions": [{"label":"Extension 1","prompt":"What starting counts are losing positions?","answer":"multiples of 3"},{"label":"Extension 2","prompt":"What if players can take 1,2,or 3?","answer":"multiples of 4"}],
-    "hint_ladder": ["Work backward from the end.","Mark winning and losing positions.","Look for a repeating pattern.","Reveal: multiples of 3 are losing when moves are 1 or 2."],
-    "solution_steps": ["Losing positions: 3,6,9,12,15 if your turn starts there.","From 15, first player takes 1 to give 14 and can force win by making total taken each pair =3."]
+    "core_prompt": "15 stones. You can take 1 or 2 each turn. Last stone wins. Best first move?",
+    "core_answer": "Take 1",
+    "extensions": [
+      {"label": "Extension 1", "prompt": "Which starting counts are losing?", "answer": "multiples of 3"},
+      {"label": "Extension 2", "prompt": "If moves are 1,2,3 instead?", "answer": "multiples of 4"}
+    ],
+    "hint_ladder": ["Work backward from the end.", "Mark win/lose positions.", "Find the repeating pattern.", "Reveal: multiples of 3 are losing positions."],
+    "solution_steps": ["15 is a losing multiple-of-3 position.", "Take 1 first and then mirror to keep each pair of moves totaling 3."]
   },
   {
     "id": "puz_0006",
@@ -68,11 +82,14 @@
     "difficulty": 1160,
     "tags": ["counting", "probability"],
     "title": "Grid Paths",
-    "core_prompt": "How many shortest paths from A to B on a 3×3 grid moving only right/up?",
+    "core_prompt": "How many shortest paths on a 3x3 grid if you only move right or up?",
     "core_answer": "20",
-    "extensions": [{"label":"Extension 1","prompt":"What about a 4×4 grid?","answer":"70"},{"label":"Extension 2","prompt":"Rule for N×N?","answer":"C(2N,N)"}],
-    "hint_ladder": ["Try 1×1 and 2×2 first.","Use a table of ways.","This matches Pascal patterns.","Reveal: choose rights among total moves."],
-    "solution_steps": ["Need 3 rights and 3 ups, total 6 moves.","Count sequences: C(6,3)=20."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "What about a 4x4 grid?", "answer": "70"},
+      {"label": "Extension 2", "prompt": "Rule for N x N?", "answer": "C(2N,N)"}
+    ],
+    "hint_ladder": ["Try small grids first.", "Count rights and ups.", "Choose where right moves go.", "Reveal: C(6,3) = 20."],
+    "solution_steps": ["You need 3 rights and 3 ups (6 total moves).", "Number of sequences is C(6,3) = 20."]
   },
   {
     "id": "puz_0007",
@@ -80,11 +97,14 @@
     "difficulty": 1200,
     "tags": ["proof_lite", "reasoning"],
     "title": "Always/Sometimes/Never",
-    "core_prompt": "Is n^2 - n always even for integer n?",
+    "core_prompt": "For integer n, is n^2 - n always even?",
     "core_answer": "Always",
-    "extensions": [{"label":"Extension 1","prompt":"Classify n^2+n similarly.","answer":"Always even"},{"label":"Extension 2","prompt":"Classify n^2+1 parity.","answer":"Sometimes"}],
-    "hint_ladder": ["Factor the expression.","Think about consecutive integers.","One of them is even.","Reveal: n(n-1) has an even factor."],
-    "solution_steps": ["n^2-n=n(n-1).", "Consecutive numbers include an even one, so product is even."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "Classify n^2+n.", "answer": "Always even"},
+      {"label": "Extension 2", "prompt": "Classify n^2+1.", "answer": "Sometimes"}
+    ],
+    "hint_ladder": ["Factor the expression.", "n^2 - n = n(n-1).", "Consecutive integers include an even number.", "Reveal: product has a factor of 2."],
+    "solution_steps": ["n^2 - n = n(n-1).", "One of n and n-1 is even, so the product is even."]
   },
   {
     "id": "puz_0008",
@@ -92,11 +112,14 @@
     "difficulty": 1240,
     "tags": ["balance_scales", "prealgebra", "reasoning"],
     "title": "Mystery Weights",
-    "core_prompt": "Two stars and one moon weigh 19. One star and two moons weigh 17. What is star - moon?",
+    "core_prompt": "2s + m = 19 and s + 2m = 17. Find s - m.",
     "core_answer": "2",
-    "extensions": [{"label":"Extension 1","prompt":"Find each weight.","answer":"star=7, moon=5"},{"label":"Extension 2","prompt":"If totals become 31 and 29, what changes?","answer":"difference still 2"}],
-    "hint_ladder": ["Name star = s and moon = m.","Write equations 2s+m=19 and s+2m=17.","Subtract equations.","Reveal: s-m=2."],
-    "solution_steps": ["Subtract second equation from first: s-m=2.","So difference is 2."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "Find s and m.", "answer": "star=7, moon=5"},
+      {"label": "Extension 2", "prompt": "If totals are 31 and 29, what changes?", "answer": "difference still 2"}
+    ],
+    "hint_ladder": ["Subtract one equation from the other.", "(2s+m) - (s+2m) = s-m.", "Do the same on the right side.", "Reveal: s-m = 2."],
+    "solution_steps": ["Subtract equations: s - m = 19 - 17.", "So s - m = 2."]
   },
   {
     "id": "puz_0009",
@@ -104,11 +127,14 @@
     "difficulty": 1280,
     "tags": ["spatial", "strategy"],
     "title": "Folded Corners",
-    "core_prompt": "A square paper has side 8. Fold one corner to the center. What is the crease length from side to side?",
+    "core_prompt": "Square side 8. Fold one corner to the center. Find crease length.",
     "core_answer": "4*sqrt(2)",
-    "extensions": [{"label":"Extension 1","prompt":"Approximate numerically.","answer":"5.66"},{"label":"Extension 2","prompt":"Generalize for side s.","answer":"s/sqrt(2)"}],
-    "hint_ladder": ["Draw coordinates.","Center is (4,4) if corner is (0,0).", "Crease is perpendicular bisector.","Reveal: find intercept distance using geometry."],
-    "solution_steps": ["Segment from corner to center has midpoint (2,2).", "Perpendicular bisector intersects sides to create length 4√2."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "Approximate value.", "answer": "5.66"},
+      {"label": "Extension 2", "prompt": "Generalize for side s.", "answer": "s/sqrt(2)"}
+    ],
+    "hint_ladder": ["Use coordinates.", "Find midpoint from corner to center.", "Crease is a perpendicular bisector.", "Reveal: compute side intercept distance."],
+    "solution_steps": ["Set corner (0,0) and center (4,4).", "Using the perpendicular bisector gives crease length 4*sqrt(2)."]
   },
   {
     "id": "puz_0010",
@@ -116,11 +142,14 @@
     "difficulty": 1320,
     "tags": ["counting", "reasoning"],
     "title": "Digit Sums",
-    "core_prompt": "How many 2-digit numbers have digits summing to 10?",
+    "core_prompt": "How many 2-digit numbers have digits that sum to 10?",
     "core_answer": "9",
-    "extensions": [{"label":"Extension 1","prompt":"How many 3-digit numbers sum to 10?","answer":"54"},{"label":"Extension 2","prompt":"General stars-and-bars approach?","answer":"with bounds"}],
-    "hint_ladder": ["List possible tens digit.","Ones digit is forced.","Tens digit can be 1..9.","Reveal: pairs (1,9)...(9,1)."],
-    "solution_steps": ["Tens digit from 1 to 9 gives nine options.","Each determines ones digit to total 10."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "How many 3-digit numbers sum to 10?", "answer": "54"},
+      {"label": "Extension 2", "prompt": "General counting method?", "answer": "with bounds"}
+    ],
+    "hint_ladder": ["Pick a tens digit.", "Ones digit is then fixed.", "Tens can be 1 through 9.", "Reveal: (1,9) to (9,1)."],
+    "solution_steps": ["Tens digit has 9 choices (1..9).", "Each gives one valid ones digit, so 9 total."]
   },
   {
     "id": "puz_0011",
@@ -128,11 +157,16 @@
     "difficulty": 1360,
     "tags": ["logic", "strategy"],
     "title": "Switch Lamps",
-    "core_prompt": "Three switches downstairs control three lamps upstairs. You can go upstairs once. How find which switch controls which lamp?",
+    "answer_type": "long_text",
+    "core_prompt": "3 switches control 3 lamps upstairs. You can go upstairs once. How do you match them?",
     "core_answer": "Use heat method",
-    "extensions": [{"label":"Extension 1","prompt":"What if bulbs are LED and cool quickly?","answer":"need timing tweak"},{"label":"Extension 2","prompt":"Generalize strategy for 4 lamps with one trip.","answer":"hard/extra signal"}],
-    "hint_ladder": ["Use more than on/off state.","Heat gives extra information.","Turn one on long, one on short, one off.","Reveal: identify by light + warmth."],
-    "solution_steps": ["Turn A on for a while then off, turn B on, leave C off.","Upstairs: lit=B, warm= A, cold dark= C."]
+    "accept_answers": ["use heat", "one switch long", "warm bulb"],
+    "extensions": [
+      {"label": "Extension 1", "prompt": "What if lamps cool quickly?", "answer": "need timing tweak"},
+      {"label": "Extension 2", "prompt": "How could you encode info for 4 lamps?", "answer": "hard/extra signal"}
+    ],
+    "hint_ladder": ["Use more than light on/off.", "Heat gives an extra signal.", "Use one switch long, one short, one off.", "Reveal: identify by light + warmth."],
+    "solution_steps": ["Turn A on for a while then off, turn B on, leave C off.", "Upstairs: lit = B, warm dark = A, cold dark = C."]
   },
   {
     "id": "puz_0012",
@@ -140,10 +174,13 @@
     "difficulty": 1420,
     "tags": ["proof_lite", "patterns", "reasoning"],
     "title": "Consecutive Cubes",
-    "core_prompt": "Show that (n+1)^3 - n^3 is always odd when n is even.",
+    "core_prompt": "If n is even, is (n+1)^3 - n^3 always odd?",
     "core_answer": "Always odd",
-    "extensions": [{"label":"Extension 1","prompt":"What parity when n is odd?","answer":"odd"},{"label":"Extension 2","prompt":"Generalize parity of consecutive cube differences.","answer":"always odd"}],
-    "hint_ladder": ["Expand (n+1)^3.","Subtract n^3.","Expression becomes 3n^2+3n+1.","Reveal: 3n(n+1) is even, +1 makes odd."],
-    "solution_steps": ["(n+1)^3 - n^3 = 3n^2+3n+1 = 3n(n+1)+1.","n(n+1) is even, so 3n(n+1) even; even+1 is odd."]
+    "extensions": [
+      {"label": "Extension 1", "prompt": "What if n is odd?", "answer": "odd"},
+      {"label": "Extension 2", "prompt": "Parity of consecutive cube differences in general?", "answer": "always odd"}
+    ],
+    "hint_ladder": ["Expand (n+1)^3.", "Subtract n^3.", "You get 3n^2 + 3n + 1.", "Reveal: 3n(n+1) is even, then +1 is odd."],
+    "solution_steps": ["(n+1)^3 - n^3 = 3n^2 + 3n + 1 = 3n(n+1)+1.", "n(n+1) is even, so even + 1 is odd."]
   }
 ]
