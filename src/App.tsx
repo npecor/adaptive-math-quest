@@ -730,6 +730,11 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const y = Math.max(typeof window !== 'undefined' ? window.scrollY : 0, appContainerRef.current?.scrollTop ?? 0);
+    setHomeNavRevealed(y > 36);
+  }, [screen]);
+
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
 
@@ -1076,7 +1081,7 @@ export default function App() {
   }, [state.highs.bestTotal, state.user, totalScore]);
 
   const runInProgress = screen === 'run' || run.flowDone > 0 || run.puzzleDone > 0 || run.phase !== 'flow' || Boolean(run.currentFlow);
-  const hideBottomNav = screen === 'home' && isMobileViewport && !homeNavRevealed;
+  const hideBottomNav = isMobileViewport && (screen === 'home' || screen === 'run') && !homeNavRevealed;
   const showGamePhasesPanel = false;
   const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
@@ -1242,15 +1247,6 @@ export default function App() {
 
   const runView = (
     <>
-      <section className="section-header">
-        <h2 className="text-title">Game Time</h2>
-        <span className="tag">{phaseLabel(run.phase)}</span>
-      </section>
-
-      <div className="flow-meter-wrap">
-        <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
-      </div>
-
       <section className={`card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
         {run.phase === 'flow' && run.currentFlow && (
           <>
@@ -1529,7 +1525,6 @@ export default function App() {
         )}
 
       </section>
-
       {showGamePhasesPanel && (
         <section className="card">
           <div className="card-head-row">
@@ -1737,6 +1732,18 @@ export default function App() {
         {screen === 'scores' && scores}
         {screen === 'museum' && museum}
       </div>
+
+      {screen === 'run' && (
+        <section className={`run-progress-dock ${hideBottomNav ? 'nav-hidden' : ''}`}>
+          <div className="flow-progress-head">
+            <p className="text-label">Orbit Progress</p>
+            <span className="tag">{phaseLabel(run.phase)}</span>
+          </div>
+          <div className="flow-meter-wrap">
+            <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
+          </div>
+        </section>
+      )}
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
         <button className={`nav-item ${screen === 'home' ? 'active' : ''}`} onClick={() => setScreen('home')} aria-label="Home">

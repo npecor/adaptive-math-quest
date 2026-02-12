@@ -175,6 +175,7 @@ p {
   background: rgba(11, 17, 32, 0.82);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 10px;
 }
 
 .user-pill {
@@ -712,6 +713,39 @@ p {
 
 .flow-meter-wrap {
   margin: 0 var(--space-page);
+}
+
+.flow-progress-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.run-progress-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 92px;
+  width: min(380px, calc(100vw - 24px));
+  z-index: 55;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(11, 17, 32, 0.86);
+  backdrop-filter: blur(14px);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  transition: bottom 220ms ease, opacity 220ms ease, transform 220ms ease;
+}
+
+.run-progress-dock.nav-hidden {
+  bottom: 24px;
+}
+
+.run-progress-dock .flow-meter-wrap {
+  margin: 0;
 }
 
 .flow-meter {
