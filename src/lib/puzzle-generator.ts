@@ -20,10 +20,11 @@ const extensions = (one: string, two: string) => [
 const pairCountPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   const n = randInt(5, 11);
   const answer = (n * (n - 1)) / 2;
+  const pairTheme = pick(['Comet Crew', 'Meteor Mates', 'Nebula Buddies', 'Star Squad']);
   return {
     signature: `pairs-${n}`,
     tags: ['counting', 'logic'],
-    title: 'Star Team Pairs',
+    title: `${pairTheme} High-Fives (${n})`,
     answer_type: 'short_text',
     core_prompt: `${n} space cadets each high-five every other cadet once. How many high-fives total?`,
     core_answer: String(answer),
@@ -44,10 +45,11 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
   const b = (side * side) / a;
   const integerB = Number.isInteger(b);
   const displayB = integerB ? String(b) : (Math.round(b * 10) / 10).toString();
+  const missionTheme = pick(['Shape Shift Mission', 'Galaxy Shape Swap', 'Cosmic Cut Check', 'Orbit Area Match']);
   return {
     signature: `area-yn-${side}-${a}-${displayB}`,
     tags: ['spatial', 'geometry_area'],
-    title: 'Shape Shift Check',
+    title: `${missionTheme} (${side}x${side})`,
     answer_type: 'choice',
     core_prompt: `Can a ${side}x${side} square be rearranged into a ${a}x${displayB} rectangle (no stretching)?`,
     core_answer: 'Yes',
@@ -64,15 +66,30 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
 
 const alwaysSometimesNeverPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   const variant = pick([
-    { prompt: 'For counting number n, n(n+1) is even.', answer: 'Always', reason: 'one of two back-to-back numbers is always even' },
-    { prompt: 'For counting number n, n² - n is even.', answer: 'Always', reason: 'n(n-1) includes one even number' },
-    { prompt: 'For counting number n, n² + 1 is odd.', answer: 'Sometimes', reason: 'it depends on whether n is odd or even' }
+    {
+      prompt: 'For counting number n, n(n+1) is even.',
+      answer: 'Always',
+      reason: 'one of two back-to-back numbers is always even',
+      title: 'Even-Odd Explorer: Twin Steps'
+    },
+    {
+      prompt: 'For counting number n, n² - n is even.',
+      answer: 'Always',
+      reason: 'n(n-1) includes one even number',
+      title: 'Even-Odd Explorer: Step Back'
+    },
+    {
+      prompt: 'For counting number n, n² + 1 is odd.',
+      answer: 'Sometimes',
+      reason: 'it depends on whether n is odd or even',
+      title: 'Even-Odd Explorer: Plus One'
+    }
   ]);
 
   return {
     signature: `asn-${variant.prompt}`,
     tags: ['proof_lite', 'reasoning'],
-    title: 'Always / Sometimes / Never',
+    title: variant.title,
     answer_type: 'choice',
     core_prompt: variant.prompt,
     core_answer: variant.answer,
@@ -88,10 +105,12 @@ const alwaysSometimesNeverPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 't
 };
 
 const switchPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
+  const missionCode = randInt(100, 999);
+  const missionName = pick(['Light Lab', 'Lamp Link', 'Switch Secret', 'Glow Guide']);
   return {
-    signature: `switch-${randInt(1, 9999)}`,
+    signature: `switch-${missionCode}`,
     tags: ['logic', 'strategy'],
-    title: 'Switch & Lamps',
+    title: `${missionName} #${missionCode}`,
     answer_type: 'long_text',
     core_prompt: '3 switches control 3 lamps in another room. One trip allowed. What is your plan?',
     core_answer: 'use heat',
