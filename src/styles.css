@@ -27,7 +27,6 @@
 }
 
 body {
-  margin: 0;
   background: var(--bg-canvas);
   color: var(--color-ink);
   font-family: var(--font-body);
@@ -1225,6 +1224,14 @@ p {
   gap: 14px;
 }
 
+.home-stats-card {
+  gap: 0;
+}
+
+.stats-grid-embedded {
+  margin: 0;
+}
+
 .stat-card {
   background: rgba(15, 23, 42, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1870,10 +1877,13 @@ p {
 @media (max-width: 700px) {
   .home-mode-actions {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    right: 12px;
+    transform: none;
     bottom: calc(env(safe-area-inset-bottom) + 92px);
-    width: min(380px, calc(100vw - 24px));
+    width: auto;
+    max-width: 380px;
+    margin: 0 auto;
     z-index: 80;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1884,7 +1894,6 @@ p {
     gap: 8px;
     box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
     transition: bottom 220ms ease;
-    margin: 0;
   }
 
   .home-mode-actions.nav-hidden {
