@@ -17,7 +17,7 @@
   --radius-sm: 12px;
   --shadow-card: 0 20px 40px -18px rgba(0, 0, 0, 0.7);
   --space-page: 18px;
-  --space-block: 20px;
+  --space-block: 24px;
   --space-inner: 16px;
 }
 
@@ -119,6 +119,80 @@ p {
   margin: 6px 0 0;
   color: #cbd5e1;
   font-size: 13px;
+}
+
+.result-flash-character {
+  display: grid;
+  place-items: center;
+  margin: 0 auto 8px;
+}
+
+.result-flash-character .character-avatar {
+  filter: drop-shadow(0 8px 14px rgba(2, 6, 23, 0.35));
+}
+
+.result-flash.success .result-flash-character .character-avatar {
+  animation: result-somersault 1.05s cubic-bezier(0.22, 0.72, 0.24, 1) both;
+  transform-origin: center 70%;
+  will-change: transform, opacity;
+}
+
+.result-flash.error .result-flash-character .character-avatar {
+  animation: result-wobble 1.05s cubic-bezier(0.2, 0.72, 0.24, 1) both;
+  will-change: transform, opacity;
+}
+
+.result-flash.error .result-flash-character .character-avatar-eye {
+  transform: scaleY(1.18);
+  border-radius: 50%;
+}
+
+.result-flash.error .result-flash-character .character-avatar-mouth {
+  width: 23%;
+  height: 12%;
+  border-bottom: 0;
+  border-top: 2px solid var(--char-mark);
+  border-radius: 10px 10px 0 0;
+}
+
+@keyframes result-somersault {
+  0% {
+    transform: translateY(10px) rotate(0deg) scale(0.9);
+    opacity: 0;
+  }
+  35% {
+    transform: translateY(-6px) rotate(150deg) scale(1.02);
+    opacity: 1;
+  }
+  68% {
+    transform: translateY(-3px) rotate(320deg) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) rotate(360deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes result-wobble {
+  0% {
+    transform: translateY(4px) rotate(0deg) scale(0.95);
+    opacity: 0;
+  }
+  28% {
+    transform: translateY(-2px) rotate(-5deg) scale(1.02);
+    opacity: 1;
+  }
+  52% {
+    transform: translateY(-1px) rotate(4.5deg) scale(1.02);
+  }
+  76% {
+    transform: translateY(-0.5px) rotate(-2.5deg) scale(1.01);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes flash-overlay {
@@ -657,8 +731,8 @@ p {
 
 .section-header {
   padding: 0 var(--space-page);
-  margin-top: 10px;
-  margin-bottom: -6px;
+  margin-top: 12px;
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -705,14 +779,14 @@ p {
 
 .card {
   margin: 0 var(--space-page);
-  padding: 24px;
+  padding: 26px;
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: var(--shadow-card);
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .card-head-row {
@@ -1222,7 +1296,7 @@ p {
   margin: 0 var(--space-page);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px;
 }
 
 .stat-card {
@@ -1384,7 +1458,7 @@ p {
 .list-container {
   margin: 0 var(--space-page);
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .rank-row,
@@ -1672,12 +1746,13 @@ p {
 
 .character-card {
   display: grid;
-  gap: 3px;
-  text-align: left;
+  gap: 5px;
+  text-align: center;
+  justify-items: center;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
-  padding: 9px;
+  padding: 11px 9px 10px;
   color: var(--color-ink);
   cursor: pointer;
 }
@@ -1692,7 +1767,7 @@ p {
 }
 
 .character-card.selected .character-avatar {
-  animation: character-bob 2.1s ease-in-out infinite;
+  animation: character-dance 1.85s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
   transform-origin: center 70%;
   filter: drop-shadow(0 8px 10px rgba(2, 6, 23, 0.32));
 }
@@ -1708,25 +1783,51 @@ p {
   border-radius: 999px;
   background: rgba(2, 6, 23, 0.34);
   filter: blur(1px);
-  animation: character-shadow 2.1s ease-in-out infinite;
+  animation: character-shadow 2.45s ease-in-out infinite;
+}
+
+.character-card.selected .character-avatar-mouth {
+  animation: character-expression 1.85s ease-in-out infinite;
+}
+
+.character-card.selected .character-avatar-eye {
+  animation: character-blink 2.2s steps(1, end) infinite;
+}
+
+.character-card.selected .character-avatar-foot {
+  animation: character-feet 0.36s ease-in-out infinite alternate;
+}
+
+.character-card.selected .character-avatar-foot:last-child {
+  animation-delay: 0.18s;
 }
 
 .character-card-head {
-  margin-bottom: 1px;
+  margin-bottom: 3px;
+  width: 100%;
+  min-height: 50px;
+  display: grid;
+  place-items: center;
 }
 
-@keyframes character-bob {
+@keyframes character-dance {
   0%, 100% {
-    transform: translateY(0) rotateX(0deg) rotateZ(0deg) scale(1);
+    transform: translate(0, 0) rotateZ(0deg) scale(1);
   }
-  25% {
-    transform: translateY(-2px) rotateX(4deg) rotateZ(-1.2deg) scale(1.02);
+  16% {
+    transform: translate(-2px, -2px) rotateZ(-2.5deg) scale(1.03);
   }
-  50% {
-    transform: translateY(-4px) rotateX(6deg) rotateZ(1.2deg) scale(1.03);
+  34% {
+    transform: translate(2px, -3px) rotateZ(3.2deg) scale(1.04);
   }
-  75% {
-    transform: translateY(-2px) rotateX(3deg) rotateZ(-0.8deg) scale(1.015);
+  52% {
+    transform: translate(-1px, -1px) rotateZ(-1.8deg) scale(1.02);
+  }
+  74% {
+    transform: translate(3px, -4px) rotateZ(2.8deg) scale(1.04);
+  }
+  88% {
+    transform: translate(-2px, -2px) rotateZ(-2deg) scale(1.02);
   }
 }
 
@@ -1738,6 +1839,46 @@ p {
   50% {
     transform: translateX(-50%) scaleX(0.84);
     opacity: 0.2;
+  }
+}
+
+@keyframes character-expression {
+  0%, 100% {
+    width: 18%;
+    border-bottom-width: 2px;
+    border-bottom-color: var(--char-mark);
+    transform: translateY(0);
+  }
+  30% {
+    width: 24%;
+    border-bottom-width: 2.4px;
+    transform: translateY(-1px);
+  }
+  60% {
+    width: 14%;
+    border-bottom-width: 1.4px;
+    border-bottom-color: rgba(15, 23, 42, 0.86);
+    transform: translateY(1px);
+  }
+}
+
+@keyframes character-blink {
+  0%, 41%, 45%, 78%, 82%, 100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  43%, 80% {
+    transform: scaleY(0.2);
+    opacity: 0.92;
+  }
+}
+
+@keyframes character-feet {
+  0% {
+    transform: translateY(0) scaleX(1);
+  }
+  100% {
+    transform: translateY(-1.5px) scaleX(0.86);
   }
 }
 
@@ -1754,9 +1895,78 @@ p {
 }
 
 .selected-player-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 8px;
+}
+
+.selected-player-label {
+  color: #cbd5e1;
+}
+
+.selected-player-name {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+}
+
+.selected-player-avatar {
+  display: inline-grid;
+  place-items: center;
+}
+
+.selected-player-avatar .character-avatar {
+  animation: selected-footer-dance 1.25s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
+  transform-origin: center 74%;
+  filter: drop-shadow(0 4px 8px rgba(2, 6, 23, 0.32));
+}
+
+.selected-player-avatar .character-avatar-mouth {
+  animation: footer-expression 1.25s ease-in-out infinite;
+}
+
+.selected-player-avatar .character-avatar-eye {
+  animation: footer-blink 1.8s steps(1, end) infinite;
+}
+
+@keyframes selected-footer-dance {
+  0%, 100% {
+    transform: translate(0, 0) rotateZ(0deg) scale(1);
+  }
+  20% {
+    transform: translate(-2px, -1px) rotateZ(-10deg) scale(1.05);
+  }
+  40% {
+    transform: translate(2px, -2px) rotateZ(10deg) scale(1.05);
+  }
+  60% {
+    transform: translate(-1px, -1px) rotateZ(-7deg) scale(1.03);
+  }
+  80% {
+    transform: translate(1px, -2px) rotateZ(7deg) scale(1.03);
+  }
+}
+
+@keyframes footer-expression {
+  0%, 100% {
+    width: 18%;
+    border-bottom-width: 2px;
+  }
+  50% {
+    width: 23%;
+    border-bottom-width: 2.4px;
+  }
+}
+
+@keyframes footer-blink {
+  0%, 38%, 42%, 70%, 74%, 100% {
+    transform: scaleY(1);
+  }
+  40%, 72% {
+    transform: scaleY(0.2);
+  }
 }
 
 .onboarding-footer {
@@ -1886,7 +2096,7 @@ p {
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    bottom: calc(env(safe-area-inset-bottom) + 14px);
     width: min(380px, calc(100vw - 24px));
     margin-left: auto;
     margin-right: auto;
@@ -1900,10 +2110,11 @@ p {
     gap: 8px;
     box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
     transition: none;
+    transform: translateZ(0);
   }
 
   .home-mode-actions.nav-hidden {
-    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    bottom: calc(env(safe-area-inset-bottom) + 14px);
   }
 
   .auth-shell {

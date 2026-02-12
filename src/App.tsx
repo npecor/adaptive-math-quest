@@ -1183,7 +1183,13 @@ export default function App() {
         </div>
 
         <div className="onboarding-footer">
-          <p className="muted selected-player-row">Selected: <CharacterAvatar characterId={selectedCharacter.id} size="sm" /> {selectedCharacter.name}</p>
+          <p className="muted selected-player-row">
+            <span className="selected-player-label">Selected:</span>
+            <span className="selected-player-avatar">
+              <CharacterAvatar characterId={selectedCharacter.id} size="sm" />
+            </span>
+            <span className="selected-player-name">{selectedCharacter.name}</span>
+          </p>
 
           <div className="btn-row">
             <button className="btn btn-primary" disabled={!nameInput.trim()} onClick={completeOnboarding}>
@@ -1733,6 +1739,9 @@ export default function App() {
       {resultFlash && (
         <div className={`result-flash ${resultFlash.tone}`}>
           <div className="result-flash-card">
+            <div className="result-flash-character">
+              <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
+            </div>
             <p className="result-flash-icon">{resultFlash.icon}</p>
             <p className="result-flash-title">{resultFlash.title}</p>
             <p className="result-flash-detail">{resultFlash.detail}</p>
@@ -1772,7 +1781,7 @@ export default function App() {
       )}
 
       {screen === 'home' && isMobileViewport && (
-        <div className={`btn-row home-mode-actions ${hideBottomNav ? 'nav-hidden' : ''}`}>
+        <div className="btn-row home-mode-actions">
           <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
             {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
           </button>
