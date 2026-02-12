@@ -145,6 +145,12 @@ const isSmartAnswerMatch = (input: string, validAnswers: string[]): boolean => {
   });
 };
 
+const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): boolean => {
+  if (parseLooseNumber(primaryAnswer) === null) return false;
+  if (!acceptAnswers?.length) return true;
+  return acceptAnswers.every((answer) => parseLooseNumber(answer) !== null);
+};
+
 const getTier = (difficulty: number): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
   if (difficulty >= 1250) return { label: 'Supernova', icon: '🌟', flowPoints: 20, puzzlePoints: 60 };
   if (difficulty >= 1000) return { label: 'Rocket', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
@@ -279,6 +285,30 @@ const toFriendlyPuzzleTitle = (title?: string, puzzleId?: string) => {
   const match = puzzleId?.match(/(\d+)/);
   if (match) return `Star Puzzle #${Number(match[1])}`;
   return 'Puzzle Challenge';
+};
+
+const hashString = (value: string) => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+};
+
+const pickBySeed = (items: string[], seed: string) => items[hashString(seed) % items.length];
+
+const getPuzzleEmoji = (puzzle: { id?: string; title?: string; tags?: string[]; answer_type?: string }) => {
+  const seed = `${puzzle.id ?? ''}-${puzzle.title ?? ''}`;
+  const tags = puzzle.tags ?? [];
+  const title = normalize(puzzle.title ?? '');
+
+  if (tags.includes('geometry_area') || tags.includes('spatial')) return pickBySeed(['📐', '🧊', '🛰️', '🧩'], seed);
+  if (tags.includes('counting')) return pickBySeed(['⭐', '🧮', '🌠', '✨'], seed);
+  if (tags.includes('reasoning') || tags.includes('proof_lite')) return pickBySeed(['🧠', '🔍', '🌀', '💡'], seed);
+  if (tags.includes('logic') || puzzle.answer_type === 'long_text') return pickBySeed(['🔦', '🧪', '🛰️', '🛸'], seed);
+  if (title.includes('switch') || title.includes('lamp')) return pickBySeed(['💡', '🔌', '🔦'], seed);
+
+  return pickBySeed(['🛸', '🪐', '🌌', '☄️', '👾'], seed);
 };
 
 const formatCoachNumber = (value: number) => {
@@ -1095,17 +1125,19 @@ export default function App() {
           </div>
         </div>
 
-        <p className="muted selected-player-row">Selected: <CharacterAvatar characterId={selectedCharacter.id} size="sm" /> {selectedCharacter.name}</p>
+        <div className="onboarding-footer">
+          <p className="muted selected-player-row">Selected: <CharacterAvatar characterId={selectedCharacter.id} size="sm" /> {selectedCharacter.name}</p>
 
-        <div className="btn-row">
-          <button className="btn btn-primary" disabled={!nameInput.trim()} onClick={completeOnboarding}>
-            {state.user ? 'Save Player' : 'Start Playing'}
-          </button>
-          {state.user && (
-            <button className="btn btn-secondary" onClick={() => setScreen('home')}>
-              Cancel
+          <div className="btn-row">
+            <button className="btn btn-primary" disabled={!nameInput.trim()} onClick={completeOnboarding}>
+              {state.user ? 'Save Player' : 'Start Playing'}
             </button>
-          )}
+            {state.user && (
+              <button className="btn btn-secondary" onClick={() => setScreen('home')}>
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1114,8 +1146,18 @@ export default function App() {
   const home = (
     <>
       <section className="section-header">
-        <h2 className="text-title">Home Base</h2>
+        <h2 className="text-title">Mission Control</h2>
         <span className="tag">Explorer Level {explorerLevel}</span>
+      </section>
+
+      <section className="card home-hero">
+        <div className="home-hero-head">
+          <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
+          <div>
+            <p className="text-label">Ready for launch, {state.user?.username}?</p>
+            <p className="muted">Choose a mode and start your next space mission.</p>
+          </div>
+        </div>
       </section>
 
       <section className="card">
@@ -1203,6 +1245,8 @@ export default function App() {
 
             <input
               className="math-input"
+              inputMode={run.currentFlow.format === 'numeric_input' ? 'numeric' : 'text'}
+              pattern={run.currentFlow.format === 'numeric_input' ? '[0-9]*' : undefined}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Answer"
@@ -1292,7 +1336,7 @@ export default function App() {
             <div className="puzzle-grid">
               {(run.currentPuzzleChoices.length ? run.currentPuzzleChoices : getPuzzleChoices(state.skill.rating, run.usedPuzzleIds)).map((puzzle) => (
                 <button key={puzzle.id} className="puzzle-card" onClick={() => selectPuzzle(puzzle)}>
-                  <span className="emoji">🛸</span>
+                  <span className="emoji">{getPuzzleEmoji(puzzle)}</span>
                   <strong>{puzzle.title}</strong>
                   <span className="muted">{getTier(puzzle.difficulty).icon} {getTier(puzzle.difficulty).label}</span>
                 </button>
@@ -1332,6 +1376,8 @@ export default function App() {
             ) : (
               <input
                 className="math-input"
+                inputMode={expectsNumericInput(run.currentPuzzle.core_answer, run.currentPuzzle.accept_answers) ? 'numeric' : 'text'}
+                pattern={expectsNumericInput(run.currentPuzzle.core_answer, run.currentPuzzle.accept_answers) ? '[0-9]*' : undefined}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Your answer"
@@ -1608,7 +1654,7 @@ export default function App() {
         {collectionRows.map((entry) => (
           <div key={entry.puzzleId} className={`artifact-row collection-card ${entry.solved ? 'solved' : 'attempted'}`}>
             <div>
-              <strong>{entry.title}</strong>
+              <strong>{getPuzzleEmoji({ id: entry.puzzleId, title: entry.title })} {entry.title}</strong>
             </div>
             <div className="artifact-meta trophy-visual">
               <span className="trophy-icon" aria-hidden="true">{entry.solved ? '🏆' : '🛰️'}</span>

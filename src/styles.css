@@ -1552,6 +1552,24 @@ p {
   gap: 8px;
 }
 
+.onboarding-footer {
+  display: grid;
+  gap: 10px;
+}
+
+.home-hero {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(14, 165, 233, 0.25), transparent 35%),
+    radial-gradient(circle at 12% 92%, rgba(129, 140, 248, 0.2), transparent 36%),
+    var(--bg-card);
+}
+
+.home-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .player-title {
   display: flex;
   align-items: center;
@@ -1597,5 +1615,23 @@ p {
     margin-right: 12px;
     padding-left: 0;
     padding-right: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .auth-shell {
+    padding: 10px 10px 100px;
+    align-items: start;
+  }
+
+  .onboarding-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 25;
+    margin: 10px -16px -16px;
+    padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    background: linear-gradient(180deg, rgba(11, 17, 32, 0.58), rgba(11, 17, 32, 0.97) 36%);
+    backdrop-filter: blur(12px);
   }
 }

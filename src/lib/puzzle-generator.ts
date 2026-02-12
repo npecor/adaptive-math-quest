@@ -41,8 +41,16 @@ const pairCountPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
 
 const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   const side = pick([4, 5, 6, 7, 8]);
-  const a = randInt(2, side * 2);
-  const b = (side * side) / a;
+  let a = randInt(2, side * 2);
+  let b = (side * side) / a;
+
+  // Avoid trivial same-shape prompts like 4x4 square -> 4x4 rectangle.
+  if (a === side && b === side) {
+    const alternatives = Array.from({ length: side * 2 - 1 }, (_, idx) => idx + 2).filter((candidate) => candidate !== side);
+    a = pick(alternatives);
+    b = (side * side) / a;
+  }
+
   const integerB = Number.isInteger(b);
   const displayB = integerB ? String(b) : (Math.round(b * 10) / 10).toString();
   const missionTheme = pick(['Shape Shift Mission', 'Galaxy Shape Swap', 'Cosmic Cut Check', 'Orbit Area Match']);
