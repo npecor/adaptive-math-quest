@@ -1212,15 +1212,10 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className="btn-row">
+        <div className={`btn-row home-mode-actions ${hideBottomNav ? 'nav-hidden' : ''}`}>
           <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
             {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
           </button>
-          {runInProgress && (
-            <button className="btn btn-secondary" onClick={() => setScreen('run')}>
-              Keep Playing
-            </button>
-          )}
         </div>
       </section>
 
@@ -1251,7 +1246,7 @@ export default function App() {
         {run.phase === 'flow' && run.currentFlow && (
           <>
             <div className="tier-row">
-              <span className="tag">{getTier(run.currentFlow.difficulty).icon} {getTier(run.currentFlow.difficulty).label}</span>
+              <span className="tag difficulty-tag">{getTier(run.currentFlow.difficulty).icon} {getTier(run.currentFlow.difficulty).label}</span>
             </div>
             <h3 className="math-display"><InlineMathText text={run.currentFlow.prompt} /></h3>
 
@@ -1364,7 +1359,7 @@ export default function App() {
                 <button key={puzzle.id} className="puzzle-card" onClick={() => selectPuzzle(puzzle)}>
                   <span className="emoji">{getPuzzleEmoji(puzzle)}</span>
                   <strong>{puzzle.title}</strong>
-                  <span className="muted">{getTier(puzzle.difficulty).icon} {getTier(puzzle.difficulty).label}</span>
+                  <span className="difficulty-tag difficulty-tag-small">{getTier(puzzle.difficulty).icon} {getTier(puzzle.difficulty).label}</span>
                 </button>
               ))}
             </div>
@@ -1375,7 +1370,7 @@ export default function App() {
         {run.phase === 'puzzle' && run.currentPuzzle && (
           <>
             <div className="tier-row">
-              <span className="tag">{getTier(run.currentPuzzle.difficulty).icon} {getTier(run.currentPuzzle.difficulty).label}</span>
+              <span className="tag difficulty-tag">{getTier(run.currentPuzzle.difficulty).icon} {getTier(run.currentPuzzle.difficulty).label}</span>
             </div>
             <h3 className="puzzle-question-title">{run.currentPuzzle.title}</h3>
             <p className="puzzle-question-prompt"><InlineMathText text={run.currentPuzzle.core_prompt} /></p>

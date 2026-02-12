@@ -681,6 +681,28 @@ p {
   text-transform: none;
 }
 
+.difficulty-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(14, 165, 233, 0.2);
+  color: #dbeafe;
+  border-color: rgba(14, 165, 233, 0.5);
+  font-weight: 800;
+}
+
+.difficulty-tag-small {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(14, 165, 233, 0.42);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #bae6fd;
+  background: rgba(14, 165, 233, 0.14);
+  width: fit-content;
+}
+
 .card {
   margin: 0 var(--space-page);
   padding: 24px;
@@ -746,6 +768,10 @@ p {
 
 .run-progress-dock .flow-meter-wrap {
   margin: 0;
+}
+
+.home-mode-actions .btn {
+  width: 100%;
 }
 
 .flow-meter {
@@ -1842,6 +1868,29 @@ p {
 }
 
 @media (max-width: 700px) {
+  .home-mode-actions {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    width: min(380px, calc(100vw - 24px));
+    z-index: 80;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(11, 17, 32, 0.9);
+    backdrop-filter: blur(14px);
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+    box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
+    transition: bottom 220ms ease;
+    margin: 0;
+  }
+
+  .home-mode-actions.nav-hidden {
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+  }
+
   .auth-shell {
     padding: 10px 10px 100px;
     align-items: start;
