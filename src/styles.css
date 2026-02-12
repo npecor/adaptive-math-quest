@@ -1576,6 +1576,12 @@ p {
   margin: 4px 0 10px;
 }
 
+.onboarding-name-block {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .eyebrow {
   text-transform: none;
   letter-spacing: 0.03em;

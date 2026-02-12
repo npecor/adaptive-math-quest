@@ -43,7 +43,6 @@ const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
 const MAX_HINTS_PER_QUESTION = 2;
 
-const handles = ['CuriousComet', 'PixelPanda', 'OrbitOwl', 'NovaNoodle', 'LogicLynx'];
 const playerCharacters: PlayerCharacter[] = [
   { id: 'astro-starlight', emoji: '👩‍🚀', name: 'Starlight', vibe: 'Sparkly (feminine)', kind: 'astronaut' },
   { id: 'astro-comet', emoji: '👨‍🚀', name: 'Comet Ace', vibe: 'Classic (boyish)', kind: 'astronaut' },
@@ -1107,23 +1106,17 @@ export default function App() {
           </>
         )}
 
-        <p className="text-label onboarding-step-label">Step 1: Pick a player name</p>
-        <input
-          className="math-input"
-          placeholder="Player name"
-          value={nameInput}
-          onChange={(event) => setNameInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') completeOnboarding();
-          }}
-        />
-
-        <div className="chips">
-          {handles.map((handle) => (
-            <button key={handle} className="btn btn-secondary chip-btn" onClick={() => setNameInput(handle)}>
-              {handle}
-            </button>
-          ))}
+        <div className="onboarding-name-block">
+          <p className="text-label onboarding-step-label">Step 1: Pick a player name</p>
+          <input
+            className="math-input"
+            placeholder="Player name"
+            value={nameInput}
+            onChange={(event) => setNameInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') completeOnboarding();
+            }}
+          />
         </div>
 
         <div className="character-section">
