@@ -9,6 +9,8 @@
     "dev:full": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev -- --host\"",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "verify:flow": "tsx scripts/verify-flow.ts",
+    "verify:puzzles": "tsx scripts/verify-puzzles.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -22,6 +24,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.2.1",
     "jsdom": "^24.1.1",
+    "tsx": "^4.16.0",
     "typescript": "^5.5.4",
     "vite": "^5.3.4",
     "vitest": "^2.0.4"

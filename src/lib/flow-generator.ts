@@ -5,15 +5,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = <T,>(items: T[]): T => items[randInt(0, items.length - 1)];
 const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
-const formatNumber = (value: number) => {
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-};
 const gcd = (x: number, y: number): number => (y === 0 ? Math.abs(x) : gcd(y, x % y));
 const hasDecimalToken = (text: string) => /\d+\.\d+/.test(text);
 const isIntegerString = (value: string) => /^-?\d+$/.test(value.trim());
-
-const isEasyDifficulty = (difficulty: number) => difficulty < 900;
 
 type BuiltFlow = Omit<FlowItem, 'id' | 'difficulty' | 'type'> & { signature: string };
 
@@ -222,14 +216,14 @@ const createOneStepEquation = (difficulty: number): BuiltFlow => {
     shapeSignature: 'eq_x_over_c',
     tags: ['equations', 'prealgebra'],
     format: 'numeric_input',
-    prompt: `x/${c} = ${formatNumber(rhs)}`,
-    answer: formatNumber(x),
+    prompt: `x/${c} = ${rhs}`,
+    answer: String(x),
     hints: [
       `Undo ÷${c}.`,
-      `${formatNumber(rhs)} × ${c}`,
+      `${rhs} × ${c}`,
       'That product is x.'
     ],
-    solution_steps: [`x = ${formatNumber(rhs)} × ${c}.`, `x = ${formatNumber(x)}.`]
+    solution_steps: [`x = ${rhs} × ${c}.`, `x = ${x}.`]
   };
 };
 
@@ -255,13 +249,13 @@ const createPercent = (difficulty: number): BuiltFlow => {
     tags: ['percents'],
     format: 'numeric_input',
     prompt: `${percent}% of ${base} = ?`,
-    answer: formatNumber(result),
+    answer: String(result),
     hints: [
       'Percent means out of 100.',
       `(${percent} ÷ 100) × ${base}`,
       'Multiply to get the part.'
     ],
-    solution_steps: [`${percent}% of ${base} = (${percent} ÷ 100) × ${base}.`, `Answer: ${formatNumber(result)}.`]
+    solution_steps: [`${percent}% of ${base} = (${percent} ÷ 100) × ${base}.`, `Answer: ${result}.`]
   };
 };
 
@@ -348,13 +342,13 @@ const createGeometry = (difficulty: number): BuiltFlow => {
     tags: ['geometry_area'],
     format: 'numeric_input',
     prompt: `Triangle: base ${base}, height ${height}. Area = ?`,
-    answer: formatNumber(area),
+    answer: String(area),
     hints: [
       'Triangle area is half of a rectangle.',
       `${base}×${height} = ?`,
       'Half of that is the area.'
     ],
-    solution_steps: [`${base}×${height} = ${product}.`, `${product} ÷ 2 = ${formatNumber(area)}.`]
+    solution_steps: [`${base}×${height} = ${product}.`, `${product} ÷ 2 = ${area}.`]
   };
 };
 
@@ -429,10 +423,12 @@ const createLCM = (): BuiltFlow => {
     hints: [
       `List multiples of ${a}: ${a}, ${a * 2}, ${a * 3}, ...`,
       `List multiples of ${b}: ${b}, ${b * 2}, ${b * 3}, ...`,
-      'Find the first number that appears on BOTH lists.',
-      'That first match is the smallest shared multiple.'
+      'The first shared match is the smallest shared multiple.'
     ],
-    solution_steps: [`The first shared multiple is ${smallestCommonMultiple}.`, `Answer: ${smallestCommonMultiple}.`]
+    solution_steps: [
+      `First shared match: ${smallestCommonMultiple}.`,
+      'This is also called the least common multiple.'
+    ]
   };
 };
 
@@ -498,9 +494,49 @@ const passesConstraints = (item: FlowItem, rating: number): boolean => {
 };
 
 const assertIntegerSafe = (candidate: FlowItem) => {
-  if (hasDecimalToken(candidate.prompt)) return false;
+  const textFields: string[] = [
+    candidate.prompt,
+    candidate.answer,
+    ...(candidate.choices ?? []),
+    ...(candidate.hints ?? []),
+    ...(candidate.solution_steps ?? [])
+  ];
+  if (textFields.some((field) => hasDecimalToken(field))) return false;
   if (candidate.format === 'numeric_input' && !isIntegerString(candidate.answer)) return false;
   return true;
+};
+
+const isTrivialForHardPlus = (item: FlowItem): boolean => {
+  const prompt = item.prompt;
+  const multMatch = prompt.match(/^(\d+)\s*[×x]\s*(\d+)\s*=\s*\?$/);
+  if (multMatch) {
+    const left = Number(multMatch[1]);
+    const right = Number(multMatch[2]);
+    return left <= 9 && right <= 9;
+  }
+
+  const divMatch = prompt.match(/^(\d+)\s*÷\s*(\d+)\s*=\s*\?$/);
+  if (divMatch) {
+    const dividend = Number(divMatch[1]);
+    const divisor = Number(divMatch[2]);
+    return dividend <= 100 && divisor <= 12;
+  }
+
+  const eqAddMatch = prompt.match(/^x\s*\+\s*(\d+)\s*=\s*(\d+)$/);
+  if (eqAddMatch) {
+    const add = Number(eqAddMatch[1]);
+    const rhs = Number(eqAddMatch[2]);
+    return add <= 12 && rhs <= 30;
+  }
+
+  const eqMulMatch = prompt.match(/^(\d+)x\s*=\s*(\d+)$/);
+  if (eqMulMatch) {
+    const factor = Number(eqMulMatch[1]);
+    const rhs = Number(eqMulMatch[2]);
+    return factor <= 4 && rhs <= 40;
+  }
+
+  return false;
 };
 
 const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
@@ -514,7 +550,10 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       difficulty,
       ...built
     };
-    if (passesConstraints(candidate, rating) && assertIntegerSafe(candidate)) return candidate;
+    if (passesConstraints(candidate, rating) && assertIntegerSafe(candidate)) {
+      if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
+      return candidate;
+    }
   }
 
   const fallbackDifficulty = clamp(Math.round(targetDifficulty), 800, 1700);
@@ -527,7 +566,10 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       difficulty: fallbackDifficulty,
       ...fallback
     };
-    if (assertIntegerSafe(candidate)) return candidate;
+    if (assertIntegerSafe(candidate)) {
+      if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
+      return candidate;
+    }
   }
 
   // Guaranteed integer-safe emergency fallback.

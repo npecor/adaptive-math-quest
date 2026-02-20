@@ -198,7 +198,7 @@ const starsStrategyPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> &
   const winningMove = n % 4 === 0 ? null : n % 4;
 
   return {
-    signature: `stars-${v.slug}`,
+    signature: `${n}-${v.slug}`,
     tags: ['strategy', 'pattern', 'logic'],
     title: v.title,
     answer_type: 'choice',
