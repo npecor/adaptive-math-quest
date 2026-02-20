@@ -30,6 +30,15 @@ interface UpsertScoreRequest {
   score: number;
 }
 
+const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+const API_BASE_URL = env?.VITE_LEADERBOARD_BASE_URL?.replace(/\/+$/, '') ?? '';
+
+const withBaseUrl = (path: string) => {
+  if (!API_BASE_URL) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE_URL}${path}`;
+};
+
 const jsonRequest = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(url, {
     headers: {
@@ -48,19 +57,24 @@ const jsonRequest = async <T>(url: string, init?: RequestInit): Promise<T> => {
 };
 
 export const registerPlayer = async (payload: RegisterPlayerRequest): Promise<RegisterPlayerResponse> =>
-  jsonRequest<RegisterPlayerResponse>('/api/players/register', {
+  jsonRequest<RegisterPlayerResponse>(withBaseUrl('/api/players/register'), {
     method: 'POST',
     body: JSON.stringify(payload)
   });
 
 export const upsertScore = async (payload: UpsertScoreRequest): Promise<void> => {
-  await jsonRequest<{ ok: boolean }>('/api/scores/upsert', {
+  await jsonRequest<{ ok: boolean }>(withBaseUrl('/api/scores/upsert'), {
     method: 'POST',
     body: JSON.stringify(payload)
   });
 };
 
 export const fetchLeaderboard = async (limit = 50): Promise<LeaderboardRow[]> => {
-  const data = await jsonRequest<{ rows: LeaderboardRow[] }>(`/api/leaderboard?limit=${limit}`);
+  const data = await jsonRequest<{ rows: LeaderboardRow[] }>(withBaseUrl(`/api/leaderboard?limit=${limit}`));
   return data.rows;
+};
+
+export const fetchLeaderboardHealth = async (): Promise<boolean> => {
+  const data = await jsonRequest<{ ok: boolean }>(withBaseUrl('/api/health'));
+  return Boolean(data.ok);
 };

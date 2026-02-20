@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'leaderboard-data.json');
 const PORT = Number(process.env.LEADERBOARD_PORT || 8787);
+const CORS_ORIGIN = process.env.LEADERBOARD_CORS_ORIGIN || '*';
 
 const DEFAULT_BOTS = [
   { username: 'Astro', avatarId: 'astro-comet', highScore: 14200 },
@@ -121,6 +122,16 @@ const toLeaderboardRows = (players, limit = 50) =>
 
 const app = express();
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });

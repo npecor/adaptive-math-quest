@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
-import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardRow } from './lib/leaderboard-api';
+import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
@@ -843,6 +843,7 @@ export default function App() {
     return '';
   });
   const [remoteLeaderboardRows, setRemoteLeaderboardRows] = useState<LeaderboardRow[]>([]);
+  const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
@@ -970,9 +971,12 @@ export default function App() {
     let active = true;
     const loadLeaderboardRows = async () => {
       try {
+        const health = await fetchLeaderboardHealth();
+        if (active) setLeaderboardStatus(health ? 'online' : 'offline');
         const rows = await fetchLeaderboard(50);
         if (active) setRemoteLeaderboardRows(rows);
       } catch {
+        if (active) setLeaderboardStatus('offline');
         // Keep app usable with fallback rows when backend is unavailable.
       }
     };
@@ -987,9 +991,12 @@ export default function App() {
     let active = true;
     const refreshLeaderboardRows = async () => {
       try {
+        const health = await fetchLeaderboardHealth();
+        if (active) setLeaderboardStatus(health ? 'online' : 'offline');
         const rows = await fetchLeaderboard(50);
         if (active) setRemoteLeaderboardRows(rows);
       } catch {
+        if (active) setLeaderboardStatus('offline');
         // Ignore transient backend failures; fallback rows still render.
       }
     };
@@ -1018,10 +1025,12 @@ export default function App() {
           score: bestTotal
         });
         if (cancelled) return;
+        setLeaderboardStatus('online');
         lastSubmittedScoreRef.current = bestTotal;
         const rows = await fetchLeaderboard(50);
         if (!cancelled) setRemoteLeaderboardRows(rows);
       } catch {
+        if (!cancelled) setLeaderboardStatus('offline');
         // Best-effort sync; app still works offline.
       }
     };
@@ -1459,6 +1468,7 @@ export default function App() {
       };
       save(nextState);
       setNameInput(registered.username);
+      setLeaderboardStatus('online');
       try {
         const rows = await fetchLeaderboard(50);
         setRemoteLeaderboardRows(rows);
@@ -1468,15 +1478,21 @@ export default function App() {
       setScreen('home');
     } catch {
       // Fallback to local save if backend is unavailable.
+      const localId =
+        state.user?.userId ??
+        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `local-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
       save({
         ...state,
         user: {
-          userId: state.user?.userId,
+          userId: localId,
           username,
           avatarId: chosenAvatarId,
           createdAt: state.user?.createdAt ?? new Date().toISOString()
         }
       });
+      setLeaderboardStatus('offline');
       setScreen('home');
     } finally {
       setIsRegisteringPlayer(false);
@@ -2130,6 +2146,9 @@ export default function App() {
         <h2 className="text-title">Star Leaderboard</h2>
         <span className="tag">This Week</span>
       </section>
+      <p className="muted">
+        {leaderboardStatus === 'online' ? '🌐 Online leaderboard' : '📴 Offline (local only)'}
+      </p>
 
       <section className="card podium-wrap">
         {podiumLeaders.map((entry) => (
