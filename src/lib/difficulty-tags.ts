@@ -1,8 +1,8 @@
 import type { FlowItem } from './types';
 
-export type DifficultyTier = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
+export type DifficultyLabel = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
 
-type DifficultyBreakdown = Record<string, number>;
+type Breakdown = Record<string, number>;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const unique = (tags: string[]) => [...new Set(tags)];
@@ -12,15 +12,15 @@ const addTag = (tags: string[], tag: string) => {
   if (!tags.includes(tag)) tags.push(tag);
 };
 
-const addScore = (breakdown: DifficultyBreakdown, key: string, amount: number) => {
+const addScore = (breakdown: Breakdown, key: string, amount: number) => {
   breakdown[key] = (breakdown[key] ?? 0) + amount;
 };
 
-export const tierFromDifficulty = (difficulty: number): DifficultyTier => {
-  if (difficulty >= 1350) return 'Master';
-  if (difficulty >= 1200) return 'Expert';
-  if (difficulty >= 1050) return 'Hard';
-  if (difficulty >= 900) return 'Medium';
+export const difficultyLabelFromScore = (difficultyScore: number): DifficultyLabel => {
+  if (difficultyScore >= 1350) return 'Master';
+  if (difficultyScore >= 1200) return 'Expert';
+  if (difficultyScore >= 1050) return 'Hard';
+  if (difficultyScore >= 900) return 'Medium';
   return 'Easy';
 };
 
@@ -43,31 +43,42 @@ const parseOneStep = (prompt: string) => {
   return null;
 };
 
-export const annotateFlowItem = (
-  item: FlowItem
-): { difficulty: number; tier: DifficultyTier; tags: string[]; breakdown: DifficultyBreakdown } => {
-  const tags = [...(item.tags ?? [])];
-  const breakdown: DifficultyBreakdown = {};
-  let score = 900;
-
-  const applyBase = (value: number) => {
-    score = value;
-    addScore(breakdown, 'base', value);
+const parseOrderOpsPrompt = (prompt: string) => {
+  const trimmed = prompt.trim();
+  if (!trimmed.endsWith('= ?')) return null;
+  const expr = trimmed.slice(0, -3).trim();
+  if (!/^[\d+\-×() ]+$/.test(expr)) return null;
+  if (!expr.includes('×')) return null;
+  if (!expr.includes('+') && !expr.includes('-')) return null;
+  return {
+    expr,
+    hasParens: expr.includes('(') || expr.includes(')'),
+    terms: [...expr.matchAll(/\d+/g)].map((m) => Number(m[0]))
   };
+};
+
+export const analyzeFlowItem = (
+  item: FlowItem
+): { tags: string[]; difficultyScore: number; difficultyLabel: DifficultyLabel; breakdown: Breakdown } => {
+  const tags = [...(item.tags ?? [])];
+  const breakdown: Breakdown = {};
+
+  const applyBase = (value: number) => addScore(breakdown, 'base', value);
 
   switch (item.template) {
     case 'add_sub': {
       applyBase(840);
       const add = parseBinaryPrompt(item.prompt, '+');
       const sub = parseBinaryPrompt(item.prompt, '-');
+      addTag(tags, 'form:add_sub');
+
       if (add) {
         const result = add.left + add.right;
         const carry = (add.left % 10) + (add.right % 10) >= 10;
-        addTag(tags, 'form:add_sub');
-        addScore(breakdown, 'digits', Math.max(countDigits(add.left), countDigits(add.right), countDigits(result)) * 50);
+        addScore(breakdown, 'digits', Math.max(countDigits(add.left), countDigits(add.right), countDigits(result)) * 55);
         if (carry) {
           addTag(tags, 'requires:carry');
-          addScore(breakdown, 'carry', 130);
+          addScore(breakdown, 'carry', 120);
         } else {
           addScore(breakdown, 'no_carry', 30);
         }
@@ -75,78 +86,84 @@ export const annotateFlowItem = (
           addTag(tags, 'pattern:+10');
           addScore(breakdown, 'easy:+10', -170);
         }
-        if (add.left <= 2 || add.right <= 2) {
-          addTag(tags, 'pattern:+1/+2');
-          addScore(breakdown, 'easy:+small', -90);
-        }
       } else if (sub) {
         const result = sub.left - sub.right;
         const borrow = (sub.left % 10) < (sub.right % 10);
-        addTag(tags, 'form:add_sub');
-        addScore(breakdown, 'digits', Math.max(countDigits(sub.left), countDigits(sub.right), countDigits(result)) * 55);
+        addScore(breakdown, 'digits', Math.max(countDigits(sub.left), countDigits(sub.right), countDigits(result)) * 60);
         if (borrow) {
           addTag(tags, 'requires:borrow');
-          addScore(breakdown, 'borrow', 145);
+          addScore(breakdown, 'borrow', 130);
         } else {
           addScore(breakdown, 'no_borrow', 35);
         }
         if ([1, 2, 10].includes(sub.right)) {
           addTag(tags, `pattern:-${sub.right}`);
-          addScore(breakdown, 'easy:-small', -180);
+          addTag(tags, 'pattern:-1/-2/-10');
+          addScore(breakdown, 'easy:-small', -170);
         }
-        if (Math.abs(result) <= 3) addScore(breakdown, 'easy:tiny_gap', -70);
-        if (result < 0) addScore(breakdown, 'negative_result', 70);
+        if (result < 0) {
+          addTag(tags, 'sub:negative');
+          addScore(breakdown, 'negative_result', 95);
+        }
       }
       break;
     }
     case 'mult_div': {
-      applyBase(900);
+      applyBase(890);
       const mult = parseBinaryPrompt(item.prompt, '×');
       const div = parseBinaryPrompt(item.prompt, '÷');
       if (mult) {
         const { left, right } = mult;
         addTag(tags, 'form:multiply');
         addScore(breakdown, 'digits', (countDigits(left) + countDigits(right)) * 55);
-        if ((left <= 9 && right <= 9) || ((left === 10 || right === 10) && Math.min(left, right) <= 9)) {
+        const isTimesTable = left >= 3 && left <= 12 && right >= 3 && right <= 12;
+        const isTenVariant = (left === 10 && right >= 3 && right <= 12) || (right === 10 && left >= 3 && left <= 12);
+        if (isTimesTable || isTenVariant) {
           addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:times-table', -220);
+          addScore(breakdown, 'easy:times-table', -240);
         }
         if (left === 10 || right === 10) {
           addTag(tags, 'pattern:×10');
-          addScore(breakdown, 'easy:×10', -220);
+          addScore(breakdown, 'easy:×10', -170);
         }
         if (left % 10 === 0 || right % 10 === 0) {
           addTag(tags, 'pattern:trailing-zero');
-          addScore(breakdown, 'easy:trailing-zero', -60);
+          addScore(breakdown, 'easy:trailing-zero', -70);
         }
         if ((left % 10) * (right % 10) >= 10) {
           addTag(tags, 'requires:carry');
-          addScore(breakdown, 'carry', 60);
+          addScore(breakdown, 'carry', 70);
         }
-        if (left >= 12 && right >= 12) addScore(breakdown, 'two_digit_mult', 170);
       } else if (div) {
         const { left: dividend, right: divisor } = div;
         const quotient = divisor === 0 ? 0 : dividend / divisor;
         addTag(tags, 'form:divide');
         addScore(breakdown, 'digits', (countDigits(dividend) + countDigits(divisor)) * 45);
+
+        const isTimesTableInverse =
+          divisor >= 3 &&
+          divisor <= 12 &&
+          Number.isInteger(quotient) &&
+          quotient >= 1 &&
+          quotient <= 12 &&
+          dividend === divisor * quotient;
+        if (isTimesTableInverse) {
+          addTag(tags, 'div:times-table');
+          addTag(tags, 'pattern:times-table');
+          addScore(breakdown, 'easy:table-div', -240);
+        }
         if (divisor === 10) {
           addTag(tags, 'pattern:÷10');
-          addScore(breakdown, 'easy:÷10', -220);
+          addScore(breakdown, 'easy:÷10', -170);
         }
         if (divisor === 2 || divisor === 5) {
-          addTag(tags, `pattern:÷${divisor}`);
-          addScore(breakdown, 'easy:÷2/÷5', -130);
-        }
-        if (dividend <= 120 && divisor <= 12 && quotient <= 12) {
-          addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:table-div', -180);
+          addTag(tags, 'pattern:÷2/÷5');
+          addScore(breakdown, 'easy:÷2/÷5', -120);
         }
         if (dividend % 10 === 0 && (divisor % 10 === 0 || divisor === 2 || divisor === 5)) {
           addTag(tags, 'pattern:trailing-zero');
-          addScore(breakdown, 'easy:trailing-zero', -70);
+          addScore(breakdown, 'easy:trailing-zero', -60);
         }
-        if (dividend >= 200) addScore(breakdown, 'larger_dividend', 80);
-        if (divisor >= 13) addScore(breakdown, 'larger_divisor', 70);
       }
       break;
     }
@@ -161,40 +178,45 @@ export const annotateFlowItem = (
         const d2 = Number(match[4]);
         const v1 = n1 / d1;
         const v2 = n2 / d2;
+
         addScore(breakdown, 'denominator_size', Math.round(((d1 + d2) / 2) * 7));
         if (Math.abs(v1 - v2) < 0.1) addScore(breakdown, 'close_values', 90);
-        if (d1 <= 6 && d2 <= 6) addScore(breakdown, 'easy_small_denominators', -70);
+        if (d1 === d2) {
+          addTag(tags, 'frac:same-denominator');
+          addScore(breakdown, 'easy:same-denominator', -170);
+        }
+        if (n1 === n2) {
+          addTag(tags, 'frac:same-numerator');
+          addScore(breakdown, 'easy:same-numerator', -170);
+        }
       }
       break;
     }
     case 'equation_1': {
-      applyBase(980);
+      applyBase(990);
       const one = parseOneStep(item.prompt);
       if (one) {
         addTag(tags, `form:${one.form}`);
         if (one.form === 'eq_one_step_add') {
           addScore(breakdown, 'one_step_add', 70);
-          if (one.a <= 10 && one.b <= 30) addScore(breakdown, 'easy_tiny_add_eq', -150);
-          if (one.a >= 18 || one.b >= 70) addScore(breakdown, 'larger_constants', 70);
+          if (one.a <= 12 && one.b <= 35) addScore(breakdown, 'easy_tiny_add_eq', -140);
         } else {
-          addScore(breakdown, 'one_step_mul', 110);
-          if (one.a <= 5 && one.b <= 12) addScore(breakdown, 'easy_tiny_mul_eq', -150);
-          if (one.a >= 9 || one.b >= 16) addScore(breakdown, 'larger_constants', 95);
+          addScore(breakdown, 'one_step_mul', 105);
+          if (one.a <= 5 && one.b <= 12) addScore(breakdown, 'easy_tiny_mul_eq', -140);
         }
       }
       break;
     }
     case 'equation_2': {
-      applyBase(1210);
+      applyBase(1220);
       if (item.shapeSignature === 'eq_a_paren_x_minus_c') {
         addTag(tags, 'form:eq_parens');
-        addScore(breakdown, 'paren_form', 130);
+        addTag(tags, 'form:eq_two_step');
+        addScore(breakdown, 'paren_form', 150);
       } else {
         addTag(tags, 'form:eq_two_step');
-        addScore(breakdown, 'two_step_form', 120);
+        addScore(breakdown, 'two_step_form', 125);
       }
-      const numbers = [...item.prompt.matchAll(/\d+/g)].map((m) => Number(m[0]));
-      if (numbers.length) addScore(breakdown, 'number_scale', Math.round(numbers.reduce((sum, n) => sum + n, 0) / numbers.length) * 2);
       break;
     }
     case 'percent': {
@@ -206,14 +228,14 @@ export const annotateFlowItem = (
         addTag(tags, 'form:percent');
         if ([10, 20, 25, 50].includes(percent)) {
           addTag(tags, `pattern:${percent}%`);
-          addScore(breakdown, 'easy_percent', -130);
+          addScore(breakdown, 'easy_percent', -150);
         } else if ([15, 30].includes(percent)) {
-          addScore(breakdown, 'medium_percent', -35);
+          addScore(breakdown, 'medium_percent', -40);
         } else {
           addTag(tags, 'pattern:awkward-percent');
-          addScore(breakdown, 'awkward_percent', 110);
+          addScore(breakdown, 'awkward_percent', 120);
         }
-        if (base >= 400) addScore(breakdown, 'larger_base', 45);
+        if (base >= 400) addScore(breakdown, 'larger_base', 50);
       }
       break;
     }
@@ -227,19 +249,18 @@ export const annotateFlowItem = (
         const right = Number(match[3]);
         const scale = right / Math.max(1, b);
         if (Number.isInteger(scale)) addScore(breakdown, 'scale', Math.round(scale) * 18);
-        if (a <= 6 && b <= 6 && scale <= 3) addScore(breakdown, 'easy_small_ratio', -80);
-        if (right >= 80) addScore(breakdown, 'larger_target', 70);
+        if (a <= 6 && b <= 6 && scale <= 3) addScore(breakdown, 'easy_small_ratio', -90);
       }
       break;
     }
     case 'geometry': {
-      applyBase(980);
+      applyBase(990);
       if (item.shapeSignature === 'geom_rect_perim') {
         addTag(tags, 'form:geometry_perimeter');
-        addScore(breakdown, 'perimeter', 110);
+        addScore(breakdown, 'perimeter', 115);
       } else if (item.shapeSignature === 'geom_tri_area') {
         addTag(tags, 'form:geometry_triangle_area');
-        addScore(breakdown, 'triangle_area', 140);
+        addScore(breakdown, 'triangle_area', 145);
       } else {
         addTag(tags, 'form:geometry_rect_area');
         addScore(breakdown, 'rect_area', 130);
@@ -248,20 +269,30 @@ export const annotateFlowItem = (
       if (numbers.length) {
         const average = numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
         addScore(breakdown, 'dimension_scale', Math.round(average * 6));
-        const maxNum = Math.max(...numbers);
-        if (maxNum >= 14) addScore(breakdown, 'larger_dimensions', 80);
-        if (maxNum <= 8) addScore(breakdown, 'easy_small_dimensions', -60);
       }
       break;
     }
     case 'lcm': {
       applyBase(1250);
       addTag(tags, 'form:common_multiple');
-      const nums = [...item.prompt.matchAll(/\d+/g)].map((m) => Number(m[0]));
-      if (nums.length >= 2) {
-        const [a, b] = nums;
-        if (Math.max(a, b) <= 10) addScore(breakdown, 'easy_small_pair', -80);
-        if (Math.min(a, b) >= 12) addScore(breakdown, 'larger_pair', 80);
+      break;
+    }
+    case 'order_ops': {
+      applyBase(980);
+      const parsed = parseOrderOpsPrompt(item.prompt);
+      addTag(tags, 'expr:order-of-ops');
+      if (parsed) {
+        addScore(breakdown, 'term_count', parsed.terms.length * 32);
+        if (parsed.hasParens) {
+          addTag(tags, 'expr:has-parens');
+          addScore(breakdown, 'parens_bonus', 140);
+        } else {
+          addScore(breakdown, 'no_parens', 20);
+        }
+        const maxTerm = parsed.terms.length ? Math.max(...parsed.terms) : 0;
+        addScore(breakdown, 'operand_scale', Math.round(maxTerm * 3));
+      } else {
+        addScore(breakdown, 'order_ops_default', 120);
       }
       break;
     }
@@ -269,12 +300,12 @@ export const annotateFlowItem = (
       applyBase(item.difficulty || 900);
   }
 
-  const difficulty = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
-  const tier = tierFromDifficulty(difficulty);
+  const difficultyScore = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
+  const difficultyLabel = difficultyLabelFromScore(difficultyScore);
   return {
-    difficulty,
-    tier,
     tags: unique(tags),
+    difficultyScore,
+    difficultyLabel,
     breakdown
   };
 };

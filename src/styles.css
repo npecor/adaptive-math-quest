@@ -2391,29 +2391,109 @@ p {
     var(--bg-card);
 }
 
+.home-tip-toast {
+  margin: 0 var(--space-page);
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: linear-gradient(110deg, rgba(14, 116, 144, 0.26), rgba(14, 165, 233, 0.16));
+  color: #cffafe;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  animation: home-tip-fade 0.35s ease both;
+}
+
+.home-hero-button {
+  width: calc(100% - (var(--space-page) * 2));
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.home-hero-button:hover {
+  border-color: rgba(125, 211, 252, 0.4);
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.14) inset, var(--shadow-card);
+}
+
+.home-hero-button:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.7);
+  outline-offset: 2px;
+}
+
+.home-hero-button:active {
+  transform: translateY(1px);
+}
+
 .home-hero-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.home-hero-main {
+  display: flex;
+  align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+.home-hero-edit-affordance {
+  font-size: 22px;
+  line-height: 1;
+  color: rgba(186, 230, 253, 0.55);
+  transform: translateY(-1px);
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.home-hero-button:hover .home-hero-edit-affordance,
+.home-hero-button:focus-visible .home-hero-edit-affordance {
+  color: rgba(186, 230, 253, 0.9);
+  transform: translateX(2px) translateY(-1px);
+}
+
+@keyframes home-tip-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .home-hero-avatar {
   position: relative;
   width: 66px;
   height: 66px;
+  flex-shrink: 0;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: radial-gradient(circle at 35% 30%, rgba(186, 230, 253, 0.25), rgba(15, 23, 42, 0.12));
   border: 1px solid rgba(186, 230, 253, 0.36);
   box-shadow: 0 10px 20px rgba(8, 47, 73, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  overflow: hidden;
+  overflow: visible;
   animation: home-avatar-float 7.8s ease-in-out infinite;
 }
 
 .home-hero-avatar .character-avatar {
   animation: home-avatar-drift 9.6s ease-in-out infinite;
   will-change: transform;
+}
+
+/* Suppress the per-character SVG idle so it doesn't fight the container drift */
+.home-hero-avatar .character-avatar .character-avatar-svg {
+  animation: none;
+}
+
+/* Slow the mouth expression — inherits 1.25s from selected-player-avatar which is too fast here */
+.home-hero-avatar .character-avatar-mouth {
+  animation: footer-expression 3.5s ease-in-out infinite;
 }
 
 .home-hero-avatar::after {
@@ -2462,17 +2542,11 @@ p {
   0%, 100% {
     transform: translate(0px, 0px) rotate(0deg);
   }
-  20% {
-    transform: translate(2px, -1px) rotate(1deg);
+  40% {
+    transform: translate(1px, -3px) rotate(0.8deg);
   }
-  45% {
-    transform: translate(-2px, -3px) rotate(-1deg);
-  }
-  70% {
-    transform: translate(1px, 2px) rotate(0.7deg);
-  }
-  85% {
-    transform: translate(-1px, 1px) rotate(-0.6deg);
+  72% {
+    transform: translate(-1px, -1px) rotate(-0.6deg);
   }
 }
 

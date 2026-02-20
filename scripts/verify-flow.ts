@@ -4,6 +4,7 @@ type AnyFlow = {
   id: string;
   template?: string;
   shapeSignature?: string;
+  tier?: string;
   difficulty: number;
   prompt: string;
   answer: string;
@@ -71,6 +72,16 @@ function inferTemplate(item: AnyFlow): string {
   return id.split('-')[0] || 'unknown';
 }
 
+function inferLabel(item: AnyFlow): string {
+  if (item.tier) return item.tier;
+  const d = item.difficulty;
+  if (d >= 1350) return 'Master';
+  if (d >= 1200) return 'Expert';
+  if (d >= 1050) return 'Hard';
+  if (d >= 900) return 'Medium';
+  return 'Easy';
+}
+
 function inferGeomShape(item: AnyFlow): string | null {
   const p = String(item.prompt ?? '').toLowerCase();
   if (!p.includes('rectangle') && !p.includes('triangle')) return null;
@@ -83,6 +94,8 @@ function inferGeomShape(item: AnyFlow): string | null {
 async function runTier(name: string, rating: number) {
   const N = 20000;
   const counts: Record<string, number> = {};
+  const labelCounts: Record<string, number> = {};
+  const templateLabelCounts: Record<string, number> = {};
   const decimals: string[] = [];
   let negativeSub = 0;
   let subCount = 0;
@@ -100,7 +113,10 @@ async function runTier(name: string, rating: number) {
   for (let i = 0; i < N; i += 1) {
     const q: AnyFlow = generateAdaptiveFlowItem(rating, used, prevDifficulty, recentTemplates, recentShapes) as AnyFlow;
     const t = inferTemplate(q);
+    const label = inferLabel(q);
     counts[t] = (counts[t] ?? 0) + 1;
+    labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+    templateLabelCounts[`${t}|${label}`] = (templateLabelCounts[`${t}|${label}`] ?? 0) + 1;
 
     const dec = scanForDecimals(q);
     if (dec.length) decimals.push(`${q.id}: ${dec.join(' | ')}`);
@@ -142,6 +158,14 @@ async function runTier(name: string, rating: number) {
     .sort((a, b) => b[1] - a[1])
     .map(([k, v]) => `${k} ${(v / N * 100).toFixed(2)}%`);
   console.log('Template frequency:', freq.join(', '));
+  const labelFreq = Object.entries(labelCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k} ${(v / N * 100).toFixed(2)}%`);
+  console.log('Label frequency:', labelFreq.join(', '));
+  const comboFreq = Object.entries(templateLabelCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k} ${(v / N * 100).toFixed(2)}%`);
+  console.log('Template+Label frequency:', comboFreq.slice(0, 18).join(', '));
   console.log(`Negative subtraction rate: ${(subCount ? (negativeSub / subCount) * 100 : 0).toFixed(2)}% (${negativeSub}/${subCount})`);
 
   if (hardCount) {
@@ -183,8 +207,9 @@ async function printSamples() {
     for (let i = 0; i < 30; i += 1) {
       const q: AnyFlow = generateAdaptiveFlowItem(tier.rating, used, prevDifficulty, recentTemplates, recentShapes) as AnyFlow;
       const t = inferTemplate(q);
+      const label = inferLabel(q);
       const shape = q.shapeSignature ?? inferGeomShape(q) ?? '';
-      console.log(`${String(i + 1).padStart(2, '0')}. [${t}${shape ? ` / ${shape}` : ''} | d=${q.difficulty}] ${q.prompt}`);
+      console.log(`${String(i + 1).padStart(2, '0')}. [${label} | ${t}${shape ? ` / ${shape}` : ''} | d=${q.difficulty}] ${q.prompt}`);
       used.add(String(q.id));
       prevDifficulty = q.difficulty;
       recentTemplates = [...recentTemplates, t].slice(-6);

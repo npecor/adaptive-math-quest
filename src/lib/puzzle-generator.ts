@@ -113,46 +113,6 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
   };
 };
 
-const alwaysSometimesNeverPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
-  const variant = pick([
-    {
-      prompt: 'Odd + odd is even.',
-      answer: 'Always',
-      reason: 'Adding two odd numbers always makes an even number.',
-      title: 'Even-Odd Explorer: Odd Team-Up'
-    },
-    {
-      prompt: 'Odd × odd is even.',
-      answer: 'Never',
-      reason: 'Odd times odd stays odd, not even.',
-      title: 'Even-Odd Explorer: Multiply Check'
-    },
-    {
-      prompt: 'A number times itself is even.',
-      answer: 'Sometimes',
-      reason: 'Even numbers squared are even, but odd numbers squared are odd.',
-      title: 'Even-Odd Explorer: Square Check'
-    }
-  ]);
-
-  return {
-    signature: `asn-${variant.prompt}`,
-    tags: ['proof_lite', 'reasoning'],
-    title: variant.title,
-    answer_type: 'choice',
-    core_prompt: variant.prompt,
-    core_answer: variant.answer,
-    hint_ladder: [
-      'Try a few quick examples.',
-      'Look for an odd/even pattern.',
-      'Test both odd and even numbers.',
-      `Reveal: ${variant.reason}.`
-    ],
-    solution_steps: [variant.reason, `So the best label is ${variant.answer}.`],
-    extensions: extensions('Test 1 through 6 and list outcomes.', 'How would you prove it quickly?')
-  };
-};
-
 const switchPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   const missionCode = randInt(100, 999);
   const missionName = pick(['Light Lab', 'Lamp Link', 'Switch Secret', 'Glow Guide']);

@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
-import { tierFromDifficulty, type DifficultyTier } from './lib/difficulty';
+import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
@@ -154,6 +154,7 @@ const bonusRound = {
   answer: '3/4',
   hint: 'Try twelfths: 3/4 = 9/12 and 2/3 = 8/12.'
 };
+const CAPTAIN_EDIT_TIP_KEY = 'gg_tip_edit_captain_v1';
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
@@ -225,9 +226,9 @@ const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): b
 
 const getTier = (
   difficulty: number,
-  explicitTier?: DifficultyTier
-): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
-  const label = explicitTier ?? tierFromDifficulty(difficulty);
+  explicitTier?: DifficultyLabel
+): { label: DifficultyLabel; icon: string; flowPoints: number; puzzlePoints: number } => {
+  const label = explicitTier ?? difficultyLabelFromScore(difficulty);
   if (label === 'Master') return { label, icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
   if (label === 'Expert') return { label, icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
   if (label === 'Hard') return { label, icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
@@ -258,11 +259,6 @@ const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long
 const getPuzzlePlainLanguage = (puzzle: PuzzleItem): string => {
   const prompt = puzzle.core_prompt;
   const normalized = normalize(prompt);
-
-  if (normalized.includes('for whole number n')) {
-    const statement = prompt.replace(/for whole number n,\s*/i, '').trim();
-    return `Pick if this statement is always true, sometimes true, or never true for counting numbers: ${statement}`;
-  }
 
   if (normalized.includes('high-five every other')) {
     return 'Count how many unique pairs can be made. Each pair gives one high-five.';
@@ -915,6 +911,7 @@ export default function App() {
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
+  const [showCaptainEditTip, setShowCaptainEditTip] = useState(false);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const explorerLevel = Math.floor(state.totals.allTimeStars / 250) + 1;
   const selectedCharacter = getCharacterById(selectedCharacterId);
@@ -1055,6 +1052,28 @@ export default function App() {
       active = false;
     };
   }, [leaderboardMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (screen !== 'home' || !state.user) {
+      setShowCaptainEditTip(false);
+      return undefined;
+    }
+
+    const seen = window.localStorage.getItem(CAPTAIN_EDIT_TIP_KEY) === '1';
+    if (seen) {
+      setShowCaptainEditTip(false);
+      return undefined;
+    }
+
+    setShowCaptainEditTip(true);
+    const timeout = window.setTimeout(() => {
+      setShowCaptainEditTip(false);
+      window.localStorage.setItem(CAPTAIN_EDIT_TIP_KEY, '1');
+    }, 4400);
+
+    return () => window.clearTimeout(timeout);
+  }, [screen, state.user?.userId]);
 
   useEffect(() => {
     if (screen !== 'scores') return;
@@ -1711,6 +1730,15 @@ export default function App() {
     startRun(selectedMode);
   };
 
+  const openCaptainEditor = () => {
+    if (!state.user) return;
+    if (typeof window !== 'undefined') window.localStorage.setItem(CAPTAIN_EDIT_TIP_KEY, '1');
+    setShowCaptainEditTip(false);
+    setNameInput(state.user.username);
+    setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
+    setScreen('onboarding');
+  };
+
   const onboarding = (
     <div className="auth-shell">
       <div className="card onboarding-card">
@@ -1819,17 +1847,25 @@ export default function App() {
         </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
       </section>
+      {showCaptainEditTip && (
+        <p className="home-tip-toast" role="status" aria-live="polite">
+          Tip: Tap your captain card to edit.
+        </p>
+      )}
 
-      <section className="card home-hero">
+      <button className="card home-hero home-hero-button" onClick={openCaptainEditor} aria-label="Edit captain" type="button">
         <div className="home-hero-head">
-          <div className="selected-player-avatar home-hero-avatar">
-            <CharacterAvatar characterId={homeCharacterId} size="lg" />
+          <div className="home-hero-main">
+            <div className="selected-player-avatar home-hero-avatar">
+              <CharacterAvatar characterId={homeCharacterId} size="lg" />
+            </div>
+            <div className="home-hero-copy">
+              <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
+            </div>
           </div>
-          <div className="home-hero-copy">
-            <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
-          </div>
+          <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
         </div>
-      </section>
+      </button>
 
       <section className="card mission-launch-card">
         <p className="text-label mission-label">Choose your mission:</p>
@@ -2275,7 +2311,6 @@ export default function App() {
     <>
       <section className="section-header">
         <h2 className="text-title">Star Leaderboard</h2>
-        <span className="tag">GALAXY GENIUS</span>
       </section>
       <p className="muted">
         {leaderboardStatus === 'online' ? '🌐 Online leaderboard' : '📴 Offline (local only)'}

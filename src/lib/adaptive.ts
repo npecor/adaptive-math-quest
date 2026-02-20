@@ -12,12 +12,11 @@ export function updateRating(
   attemptsCount: number,
   correctStreak = 0
 ): number {
+  void attemptsCount;
   const p = expectedProbability(rating, difficulty);
-  const earlyK = attemptsCount < 10 ? 20 : attemptsCount < 20 ? 16 : attemptsCount < 30 ? 13 : 10;
-  const streakBoost = correct ? Math.min(6, Math.max(0, correctStreak - 2)) : 0;
-  const k = earlyK + streakBoost;
+  const k = correctStreak >= 5 ? 18 : correctStreak >= 3 ? 12 : 8;
   const rawDelta = k * ((correct ? 1 : 0) - p);
-  const delta = clamp(rawDelta, -30, 30);
+  const delta = clamp(rawDelta, -26, 26);
   return rating + delta;
 }
 
@@ -30,13 +29,13 @@ const gaussian = (mean: number, sd: number) => {
 };
 
 export function chooseTargetDifficulty(rating: number, correctStreak = 0): number {
-  const streakShift = correctStreak >= 5 ? Math.min(120, (correctStreak - 4) * 12) : 0;
-  const center = rating + streakShift;
-  const aboveProbability = correctStreak >= 5 ? 0.38 : 0.25;
-  const belowProbability = correctStreak >= 5 ? 0.07 : 0.15;
-  const nearProbability = 1 - aboveProbability - belowProbability;
+  const streaking = correctStreak >= 4;
+  const center = streaking ? rating + 40 : rating;
+  const nearProbability = streaking ? 0.45 : 0.6;
+  const aboveProbability = streaking ? 0.45 : 0.25;
+  const belowProbability = streaking ? 0.10 : 0.15;
   const roll = Math.random();
-  if (roll < nearProbability) return gaussian(center, correctStreak >= 5 ? 45 : 50);
+  if (roll < nearProbability) return gaussian(center, streaking ? 45 : 50);
   if (roll < nearProbability + aboveProbability) return randomBetween(center + 50, center + 140);
   return randomBetween(center - 120, center - 50);
 }

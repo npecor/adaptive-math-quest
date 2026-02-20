@@ -1,5 +1,5 @@
 import { chooseTargetDifficulty, getFlowDiversityPenalty } from './adaptive';
-import { annotateFlowItem } from './difficulty';
+import { analyzeFlowItem } from './difficulty-tags';
 import type { FlowItem } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -111,26 +111,23 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
     let a: number;
     let b: number;
     if (band === 'easy') {
-      a = randInt(2, 12);
-      b = Math.random() < 0.25 ? 10 : randInt(2, 12);
+      a = randInt(3, 12);
+      b = randInt(3, 12);
     } else if (band === 'medium') {
-      a = randInt(7, 18);
-      b = randInt(4, 12);
-      if (a <= 9 && b <= 9) a = randInt(10, 18);
+      a = randInt(12, 44);
+      b = randInt(3, 9);
+      if ((a % 10) * b < 10 && Math.random() < 0.5) {
+        a += randInt(2, 5);
+      }
     } else if (band === 'hard') {
-      a = randInt(12, 36);
-      b = randInt(7, 16);
-    } else if (band === 'expert') {
-      a = randInt(12, 45);
+      a = randInt(12, 48);
       b = randInt(11, 29);
-    } else {
-      a = randInt(18, 55);
+    } else if (band === 'expert') {
+      a = randInt(18, 64);
       b = randInt(12, 39);
-    }
-    if (band === 'hard' || band === 'expert' || band === 'master') {
-      if (a === 10) a += 3;
-      if (b === 10) b += 2;
-      if (a <= 9 && b <= 9) a += 10;
+    } else {
+      a = randInt(22, 76);
+      b = randInt(14, 45);
     }
     const result = a * b;
     return {
@@ -153,24 +150,20 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
   let divisor: number;
   let quotient: number;
   if (band === 'easy') {
-    divisor = randInt(2, 12);
-    quotient = randInt(3, 15);
-    if (Math.random() < 0.25) divisor = 10;
-  } else if (band === 'medium') {
     divisor = randInt(3, 12);
-    quotient = randInt(8, 22);
+    quotient = randInt(1, 12);
+  } else if (band === 'medium') {
+    divisor = randInt(4, 12);
+    quotient = randInt(12, 36);
   } else if (band === 'hard') {
-    divisor = randInt(7, 18);
-    quotient = randInt(10, 28);
+    divisor = randInt(7, 19);
+    quotient = randInt(15, 48);
   } else if (band === 'expert') {
-    divisor = randInt(8, 22);
-    quotient = randInt(14, 36);
+    divisor = randInt(8, 24);
+    quotient = randInt(18, 55);
   } else {
-    divisor = randInt(9, 24);
-    quotient = randInt(16, 42);
-  }
-  if (band === 'hard' || band === 'expert' || band === 'master') {
-    if (divisor === 10) divisor += 3;
+    divisor = randInt(10, 28);
+    quotient = randInt(22, 68);
   }
   const dividend = divisor * quotient;
   return {
@@ -190,11 +183,30 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
   };
 };
 
-const createFractionCompare = (): BuiltFlow => {
-  const d1 = randInt(3, 12);
-  const d2 = randInt(3, 12);
-  const n1 = randInt(1, d1 - 1);
-  const n2 = randInt(1, d2 - 1);
+const createFractionCompare = (difficulty: number): BuiltFlow => {
+  const band = toBand(difficulty);
+  const easyMode = band === 'easy' || (band === 'medium' && Math.random() < 0.35);
+  let d1 = randInt(3, 12);
+  let d2 = randInt(3, 12);
+  let n1 = randInt(1, d1 - 1);
+  let n2 = randInt(1, d2 - 1);
+  let shapeSignature = 'frac_compare_pair';
+  const extraTags: string[] = [];
+
+  if (easyMode && Math.random() < 0.5) {
+    d2 = d1;
+    n2 = randInt(1, d2 - 1);
+    while (n2 === n1) n2 = randInt(1, d2 - 1);
+    shapeSignature = 'frac_compare_same_denominator';
+    extraTags.push('frac:same-denominator');
+  } else if (easyMode) {
+    n2 = n1;
+    d2 = randInt(3, 12);
+    while (d2 === d1) d2 = randInt(3, 12);
+    shapeSignature = 'frac_compare_same_numerator';
+    extraTags.push('frac:same-numerator');
+  }
+
   const leftCross = n1 * d2;
   const rightCross = n2 * d1;
   const answer = leftCross === rightCross ? 'same' : leftCross > rightCross ? `${n1}/${d1}` : `${n2}/${d2}`;
@@ -202,16 +214,20 @@ const createFractionCompare = (): BuiltFlow => {
   return {
     signature: `frac-${n1}-${d1}-${n2}-${d2}`,
     template: 'fraction_compare',
-    shapeSignature: 'frac_compare_pair',
-    tags: ['fractions'],
+    shapeSignature,
+    tags: ['fractions', ...extraTags],
     format: 'multiple_choice',
     prompt: `${n1}/${d1} or ${n2}/${d2}: larger?`,
     choices: [`${n1}/${d1}`, `${n2}/${d2}`, 'same'],
     answer,
     hints: [
-      'Cross-multiply to compare.',
-      `${n1}×${d2} vs ${n2}×${d1}`,
-      'Bigger cross-product means bigger fraction.'
+      shapeSignature === 'frac_compare_same_denominator'
+        ? 'Same denominator: bigger numerator wins.'
+        : shapeSignature === 'frac_compare_same_numerator'
+          ? 'Same numerator: smaller denominator is larger.'
+          : 'Cross-multiply to compare without decimals.',
+      shapeSignature === 'frac_compare_pair' ? `${n1}×${d2} vs ${n2}×${d1}` : `Compare ${n1}/${d1} and ${n2}/${d2}.`,
+      'Pick the larger fraction (or same if equal).'
     ],
     solution_steps: [`${n1}×${d2} = ${leftCross}, ${n2}×${d1} = ${rightCross}.`, `Larger: ${answer}.`]
   };
@@ -374,6 +390,42 @@ const createRatio = (difficulty: number): BuiltFlow => {
       `Do that to ${a}: ${a} × ${scale}`
     ],
     solution_steps: [`Scale by ${scale}.`, `x = ${a} × ${scale} = ${answer}.`]
+  };
+};
+
+const evaluateOrderOps = (expression: string): number =>
+  Function(`"use strict"; return (${expression.replace(/×/g, '*')});`)() as number;
+
+const createOrderOfOps = (difficulty: number): BuiltFlow => {
+  const band = toBand(difficulty);
+  const withParens = band !== 'easy' && Math.random() < (band === 'medium' ? 0.25 : 0.55);
+  const a = band === 'easy' ? randInt(3, 9) : band === 'medium' ? randInt(4, 12) : randInt(6, 18);
+  const b = band === 'easy' ? randInt(2, 8) : band === 'medium' ? randInt(3, 11) : randInt(4, 14);
+  const c = band === 'easy' ? randInt(2, 8) : band === 'medium' ? randInt(3, 12) : randInt(5, 17);
+  const d = band === 'hard' || band === 'expert' || band === 'master' ? randInt(2, 11) : randInt(2, 8);
+  const includeTail = band !== 'easy' && Math.random() < 0.45;
+
+  const rawExpression = withParens
+    ? `(${a} + ${b}) × ${c}${includeTail ? ` - ${d}` : ''}`
+    : `${a} + ${b} × ${c}${includeTail ? ` - ${d}` : ''}`;
+  const answer = evaluateOrderOps(rawExpression);
+  return {
+    signature: `order-${rawExpression.replace(/\s+/g, '')}`,
+    template: 'order_ops',
+    shapeSignature: withParens ? 'expr_order_ops_parens' : 'expr_order_ops',
+    tags: ['order_ops', 'expr:order-of-ops', ...(withParens ? ['expr:has-parens'] : [])],
+    format: 'numeric_input',
+    prompt: `${rawExpression} = ?`,
+    answer: String(answer),
+    hints: [
+      withParens ? 'Do parentheses first.' : 'Do multiplication before add/subtract.',
+      withParens ? `Solve (${a} + ${b}) first, then multiply by ${c}.` : `Compute ${b} × ${c} first.`,
+      includeTail ? `Then finish with ${withParens ? 'the subtraction' : 'the remaining add/subtract'}.` : 'Then finish the remaining step.'
+    ],
+    solution_steps: [
+      withParens ? `(${a} + ${b}) first, then × ${c}${includeTail ? `, then - ${d}` : ''}.` : `${b} × ${c} first, then add ${a}${includeTail ? `, then - ${d}` : ''}.`,
+      `Answer: ${answer}.`
+    ]
   };
 };
 
@@ -550,13 +602,14 @@ const createLCM = (): BuiltFlow => {
 
 const templates: Template[] = [
   { key: 'add_sub', minDifficulty: 800, maxDifficulty: 980, build: (difficulty) => createAddSub(difficulty) },
-  { key: 'mult_div', minDifficulty: 860, maxDifficulty: 1080, build: (difficulty) => createMultDiv(difficulty) },
-  { key: 'fraction_compare', minDifficulty: 900, maxDifficulty: 1180, build: () => createFractionCompare() },
-  { key: 'equation_1', minDifficulty: 980, maxDifficulty: 1260, build: (difficulty) => createOneStepEquation(difficulty) },
+  { key: 'mult_div', minDifficulty: 860, maxDifficulty: 1320, build: (difficulty) => createMultDiv(difficulty) },
+  { key: 'fraction_compare', minDifficulty: 860, maxDifficulty: 1220, build: (difficulty) => createFractionCompare(difficulty) },
+  { key: 'order_ops', minDifficulty: 960, maxDifficulty: 1500, build: (difficulty) => createOrderOfOps(difficulty) },
+  { key: 'equation_1', minDifficulty: 980, maxDifficulty: 1180, build: (difficulty) => createOneStepEquation(difficulty) },
   { key: 'percent', minDifficulty: 1020, maxDifficulty: 1320, build: (difficulty) => createPercent(difficulty) },
   { key: 'ratio', minDifficulty: 1080, maxDifficulty: 1380, build: (difficulty) => createRatio(difficulty) },
   { key: 'geometry', minDifficulty: 1120, maxDifficulty: 1500, build: (difficulty) => createGeometry(difficulty) },
-  { key: 'equation_2', minDifficulty: 1260, maxDifficulty: 1650, build: (difficulty) => createTwoStep(difficulty) },
+  { key: 'equation_2', minDifficulty: 1120, maxDifficulty: 1700, build: (difficulty) => createTwoStep(difficulty) },
   { key: 'lcm', minDifficulty: 1320, maxDifficulty: 1700, build: () => createLCM() }
 ];
 
@@ -579,7 +632,7 @@ const passesConstraints = (item: FlowItem, rating: number): boolean => {
   if (item.template === 'mult_div') {
     if (rating >= 975 && hasTag('pattern:times-table') && Math.random() < 0.7) return false;
     if (rating >= 1050 && (hasTag('pattern:×10') || hasTag('pattern:÷10')) && Math.random() < 0.9) return false;
-    if (rating >= 1125 && (hasTag('pattern:times-table') || hasTag('pattern:÷2') || hasTag('pattern:÷5')) && Math.random() < 0.95) {
+    if (rating >= 1125 && (hasTag('pattern:times-table') || hasTag('pattern:÷2/÷5')) && Math.random() < 0.95) {
       return false;
     }
   }
@@ -668,11 +721,11 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       difficulty,
       ...built
     };
-    const annotated = annotateFlowItem(rawCandidate);
+    const annotated = analyzeFlowItem(rawCandidate);
     const candidate: FlowItem = {
       ...rawCandidate,
-      difficulty: annotated.difficulty,
-      tier: annotated.tier,
+      difficulty: annotated.difficultyScore,
+      tier: annotated.difficultyLabel,
       tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
       difficultyBreakdown: annotated.breakdown
     };
@@ -692,11 +745,11 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       difficulty: fallbackDifficulty,
       ...fallback
     };
-    const annotated = annotateFlowItem(rawCandidate);
+    const annotated = analyzeFlowItem(rawCandidate);
     const candidate: FlowItem = {
       ...rawCandidate,
-      difficulty: annotated.difficulty,
-      tier: annotated.tier,
+      difficulty: annotated.difficultyScore,
+      tier: annotated.difficultyLabel,
       tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
       difficultyBreakdown: annotated.breakdown
     };
@@ -714,11 +767,11 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
     difficulty: fallbackDifficulty,
     ...emergency
   };
-  const annotated = annotateFlowItem(emergencyRaw);
+  const annotated = analyzeFlowItem(emergencyRaw);
   return {
     ...emergencyRaw,
-    difficulty: annotated.difficulty,
-    tier: annotated.tier,
+    difficulty: annotated.difficultyScore,
+    tier: annotated.difficultyLabel,
     tags: [...new Set([...(emergencyRaw.tags ?? []), ...annotated.tags])],
     difficultyBreakdown: annotated.breakdown
   };
