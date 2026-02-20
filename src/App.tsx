@@ -38,12 +38,15 @@ interface RunState {
   currentHints: number;
   usedFlowIds: Set<string>;
   usedPuzzleIds: Set<string>;
+  recentTemplates: string[];
+  recentShapes: string[];
   flowStreak: number;
 }
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
-const MAX_HINTS_PER_QUESTION = 2;
+const FLOW_HINT_STEPS = 3;
+const MAX_PUZZLE_HINTS = 2;
 
 const playerCharacters: PlayerCharacter[] = [
   { id: 'astro-bot', emoji: '🤖', name: 'Astro Bot', vibe: 'Cheerful robot astronaut', kind: 'astronaut' },
@@ -107,6 +110,8 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   currentHints: 0,
   usedFlowIds: new Set<string>(),
   usedPuzzleIds: new Set<string>(),
+  recentTemplates: [],
+  recentShapes: [],
   flowStreak: 0
 });
 
@@ -1047,7 +1052,15 @@ export default function App() {
   const startRun = (mode: GameMode = selectedMode) => {
     const streaks = updateDailyStreak(state.streaks);
     const seeded = newRun(mode);
-    if (seeded.flowTarget > 0) seeded.currentFlow = generateAdaptiveFlowItem(state.skill.rating, seeded.usedFlowIds);
+    if (seeded.flowTarget > 0) {
+      seeded.currentFlow = generateAdaptiveFlowItem(
+        state.skill.rating,
+        seeded.usedFlowIds,
+        undefined,
+        seeded.recentTemplates,
+        seeded.recentShapes
+      );
+    }
     else seeded.currentPuzzleChoices = getPuzzleChoices(state.skill.rating, seeded.usedPuzzleIds);
 
     setRun(seeded);
@@ -1090,7 +1103,7 @@ export default function App() {
 
     const updatedRating = updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount);
     const tier = getTier(item.difficulty);
-    const hintPenalty = run.currentHints === 0 ? 0 : run.currentHints === 1 ? 3 : 6;
+    const hintPenalty = run.currentHints * 3;
     const nextStreak = correct ? Math.min(run.flowStreak + 1, 5) : 0;
     const gain = correct ? Math.max(tier.flowPoints - hintPenalty, 4) : 0;
 
@@ -1101,6 +1114,8 @@ export default function App() {
 
     const usedFlowIds = new Set(run.usedFlowIds);
     usedFlowIds.add(item.id);
+    const recentTemplates = [...run.recentTemplates, item.template].slice(-6);
+    const recentShapes = [...run.recentShapes, item.shapeSignature].slice(-6);
     const nextFlowDone = run.flowDone + 1;
 
     if (nextFlowDone >= run.flowTarget) {
@@ -1110,6 +1125,8 @@ export default function App() {
           flowDone: nextFlowDone,
           sprintScore: run.sprintScore + gain,
           usedFlowIds,
+          recentTemplates,
+          recentShapes,
           currentHints: 0,
           currentFlow: undefined
         };
@@ -1125,6 +1142,8 @@ export default function App() {
         phase: 'puzzle_pick',
         currentPuzzleChoices: getPuzzleChoices(updatedRating, run.usedPuzzleIds),
         currentPuzzle: undefined,
+        recentTemplates,
+        recentShapes,
         flowStreak: nextStreak,
         currentHints: 0
       });
@@ -1143,12 +1162,20 @@ export default function App() {
       return;
     }
 
-    const nextItem = generateAdaptiveFlowItem(updatedRating, usedFlowIds, item.difficulty);
+    const nextItem = generateAdaptiveFlowItem(
+      updatedRating,
+      usedFlowIds,
+      item.difficulty,
+      recentTemplates,
+      recentShapes
+    );
     setRun({
       ...run,
       flowDone: nextFlowDone,
       sprintScore: run.sprintScore + gain,
       usedFlowIds,
+      recentTemplates,
+      recentShapes,
       currentFlow: nextItem,
       flowStreak: nextStreak,
       currentHints: 0
@@ -1173,7 +1200,7 @@ export default function App() {
 
     const correct = isPuzzleAnswerCorrect(run.currentPuzzle, input);
     const tier = getTier(run.currentPuzzle.difficulty);
-    const revealUsed = run.currentHints >= MAX_HINTS_PER_QUESTION;
+    const revealUsed = run.currentHints >= MAX_PUZZLE_HINTS;
     const hintPenalty = run.currentHints === 0 ? 0 : run.currentHints === 1 ? 8 : 16;
     const gain = correct ? Math.max(tier.puzzlePoints - hintPenalty, 10) : 0;
     const updatedRating = updateRating(state.skill.rating, run.currentPuzzle.difficulty, correct, state.skill.attemptsCount);
@@ -1305,6 +1332,46 @@ export default function App() {
   };
 
   const getFlowTutorSteps = (item: FlowItem) => {
+    if (item.shapeSignature === 'geom_rect_perim') {
+      const rectMatch = item.prompt.match(/Rectangle:\s*(\d+)\s*by\s*(\d+)\.\s*Perimeter\s*=\s*\?/i);
+      if (rectMatch) {
+        const a = Number(rectMatch[1]);
+        const b = Number(rectMatch[2]);
+        return [
+          'Step 1: Perimeter is the distance around the rectangle.',
+          `Step 2: A rectangle has two ${a}s and two ${b}s.`,
+          `Step 3: Add them: ${a}+${b}+${a}+${b}.`,
+          `Step 4: That is 2×(${a}+${b}) = ${item.answer}.`
+        ];
+      }
+    }
+
+    if (item.shapeSignature === 'geom_rect_area') {
+      const rectMatch = item.prompt.match(/Rectangle:\s*(\d+)\s*by\s*(\d+)\.\s*Area\s*=\s*\?/i);
+      if (rectMatch) {
+        const a = Number(rectMatch[1]);
+        const b = Number(rectMatch[2]);
+        return [
+          'Step 1: Area = length × width.',
+          `Step 2: ${a}×${b} = ${item.answer}.`
+        ];
+      }
+    }
+
+    if (item.shapeSignature === 'geom_tri_area') {
+      const triMatch = item.prompt.match(/Triangle:\s*base\s*(\d+),\s*height\s*(\d+)\.\s*Area\s*=\s*\?/i);
+      if (triMatch) {
+        const base = Number(triMatch[1]);
+        const height = Number(triMatch[2]);
+        const product = base * height;
+        return [
+          'Step 1: Area = (base × height) ÷ 2.',
+          `Step 2: ${base}×${height} = ${product}.`,
+          `Step 3: ${product} ÷ 2 = ${item.answer}.`
+        ];
+      }
+    }
+
     if (item.tags.includes('geometry_area')) {
       return [
         `Step 1: ${getGeometryCoachLine(item.prompt)}`,
@@ -1702,7 +1769,7 @@ export default function App() {
               >
                 <span aria-hidden="true">🧑‍🏫</span> Teach me
               </button>
-              {run.currentHints < Math.min(run.currentFlow.hints.length, MAX_HINTS_PER_QUESTION) && (
+              {run.currentHints < Math.min(run.currentFlow.hints.length, FLOW_HINT_STEPS) && (
                 <button
                   className="btn btn-secondary utility-btn"
                   onClick={() =>
@@ -1710,12 +1777,12 @@ export default function App() {
                       ...run,
                       currentHints: Math.min(
                         run.currentHints + 1,
-                        Math.min(run.currentFlow?.hints.length ?? 0, MAX_HINTS_PER_QUESTION)
+                        Math.min(run.currentFlow?.hints.length ?? 0, FLOW_HINT_STEPS)
                       )
                     })
                   }
                 >
-                  <span aria-hidden="true">😉</span> Hint
+                  <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
                 </button>
               )}
             </div>
@@ -1843,10 +1910,10 @@ export default function App() {
               >
                 <span aria-hidden="true">❓</span> I have a question
               </button>
-              {run.currentHints < MAX_HINTS_PER_QUESTION && (
+              {run.currentHints < MAX_PUZZLE_HINTS && (
                 <button
                   className="btn btn-secondary utility-btn"
-                  onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_HINTS_PER_QUESTION) })}
+                  onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
                 >
                   <span aria-hidden="true">😉</span> Hint
                 </button>

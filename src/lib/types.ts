@@ -4,6 +4,8 @@ export interface FlowItem {
   id: string;
   type: 'flow';
   difficulty: number;
+  template: string;
+  shapeSignature: string;
   tags: string[];
   format: FlowFormat;
   prompt: string;

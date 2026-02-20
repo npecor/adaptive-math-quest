@@ -20,6 +20,8 @@ const mk = (id: string, difficulty: number): FlowItem => ({
   id,
   type: 'flow',
   difficulty,
+  template: 'test_template',
+  shapeSignature: 'test_shape',
   tags: ['x'],
   format: 'numeric_input',
   prompt: 'p',

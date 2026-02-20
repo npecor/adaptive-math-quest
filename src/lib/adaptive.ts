@@ -28,6 +28,20 @@ export function chooseTargetDifficulty(rating: number): number {
   return randomBetween(rating - 120, rating - 50);
 }
 
+export const trimRecentHistory = (history: string[], max = 6) => history.slice(-max);
+
+export function getFlowDiversityPenalty(item: FlowItem, recentTemplates: string[], recentShapes: string[]): number {
+  let penalty = 0;
+  const recentTemplate2 = recentTemplates.slice(-2);
+  const recentTemplate4 = recentTemplates.slice(-4);
+  const recentShape2 = recentShapes.slice(-2);
+
+  if (recentTemplate2.includes(item.template)) penalty += 40;
+  else if (recentTemplate4.includes(item.template)) penalty += 20;
+  if (recentShape2.includes(item.shapeSignature)) penalty += 30;
+  return penalty;
+}
+
 export function selectNextFlowItem(
   items: FlowItem[],
   rating: number,
