@@ -37,6 +37,7 @@ export interface PuzzleItem {
 }
 
 export interface UserProfile {
+  userId?: string;
   username: string;
   avatarId: string;
   createdAt: string;

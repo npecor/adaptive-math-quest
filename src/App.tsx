@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
+import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
@@ -75,12 +76,12 @@ const characterVariantById: Record<string, string> = {
   'animal-panda-jet': 'animal-panda'
 };
 
-const leaderboardBots: Array<{ name: string; avatarId: string; score: number }> = [
-  { name: 'Astro', avatarId: 'astro-comet', score: 14200 },
-  { name: 'Nova', avatarId: 'astro-starlight', score: 13780 },
-  { name: 'Cyber', avatarId: 'astro-cadet', score: 13040 },
-  { name: 'Comet_X', avatarId: 'animal-space-fox', score: 11900 },
-  { name: 'Sputnik', avatarId: 'animal-panda-jet', score: 10800 }
+const fallbackLeaderboardRows: LeaderboardRow[] = [
+  { rank: 1, userId: 'bot-astro', username: 'Astro', avatarId: 'astro-comet', score: 14200, updatedAt: '', isBot: true },
+  { rank: 2, userId: 'bot-nova', username: 'Nova', avatarId: 'astro-starlight', score: 13780, updatedAt: '', isBot: true },
+  { rank: 3, userId: 'bot-cyber', username: 'Cyber', avatarId: 'astro-cadet', score: 13040, updatedAt: '', isBot: true },
+  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-space-fox', score: 11900, updatedAt: '', isBot: true },
+  { rank: 5, userId: 'bot-sputnik', username: 'Sputnik', avatarId: 'animal-panda-jet', score: 10800, updatedAt: '', isBot: true }
 ];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
@@ -640,11 +641,14 @@ export default function App() {
   const [homeNavRevealed, setHomeNavRevealed] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
+  const lastSubmittedScoreRef = useRef(0);
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
     const saved = loadState().user?.avatarId;
     return getCharacterById(saved)?.id ?? defaultCharacterId;
   });
+  const [remoteLeaderboardRows, setRemoteLeaderboardRows] = useState<LeaderboardRow[]>([]);
+  const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const explorerLevel = Math.floor(state.highs.bestTotal / 250) + 1;
   const selectedCharacter = getCharacterById(selectedCharacterId) ?? playerCharacters[0];
@@ -756,6 +760,72 @@ export default function App() {
     const container = appContainerRef.current;
     if (container) container.scrollTop = 0;
   }, [screen]);
+
+  useEffect(() => {
+    let active = true;
+    const loadLeaderboardRows = async () => {
+      try {
+        const rows = await fetchLeaderboard(50);
+        if (active) setRemoteLeaderboardRows(rows);
+      } catch {
+        // Keep app usable with fallback rows when backend is unavailable.
+      }
+    };
+    loadLeaderboardRows();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (screen !== 'scores') return;
+    let active = true;
+    const refreshLeaderboardRows = async () => {
+      try {
+        const rows = await fetchLeaderboard(50);
+        if (active) setRemoteLeaderboardRows(rows);
+      } catch {
+        // Ignore transient backend failures; fallback rows still render.
+      }
+    };
+    refreshLeaderboardRows();
+    return () => {
+      active = false;
+    };
+  }, [screen]);
+
+  useEffect(() => {
+    lastSubmittedScoreRef.current = 0;
+  }, [state.user?.userId]);
+
+  useEffect(() => {
+    if (!state.user?.userId) return;
+    const bestTotal = state.highs.bestTotal;
+    if (bestTotal <= 0 || bestTotal <= lastSubmittedScoreRef.current) return;
+
+    let cancelled = false;
+    const syncScore = async () => {
+      try {
+        await upsertScore({
+          userId: state.user!.userId!,
+          username: state.user!.username,
+          avatarId: state.user!.avatarId,
+          score: bestTotal
+        });
+        if (cancelled) return;
+        lastSubmittedScoreRef.current = bestTotal;
+        const rows = await fetchLeaderboard(50);
+        if (!cancelled) setRemoteLeaderboardRows(rows);
+      } catch {
+        // Best-effort sync; app still works offline.
+      }
+    };
+
+    syncScore();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.highs.bestTotal, state.user]);
 
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
@@ -1067,20 +1137,51 @@ export default function App() {
     ];
   };
 
-  const completeOnboarding = () => {
+  const completeOnboarding = async () => {
     const username = nameInput.trim();
-    if (!username) return;
+    if (!username || isRegisteringPlayer) return;
 
-    save({
-      ...state,
-      user: {
+    setIsRegisteringPlayer(true);
+    try {
+      const registered = await registerPlayer({
+        userId: state.user?.userId,
         username,
-        avatarId: selectedCharacterId,
-        createdAt: state.user?.createdAt ?? new Date().toISOString()
-      }
-    });
+        avatarId: selectedCharacterId
+      });
 
-    setScreen('home');
+      const nextState: AppState = {
+        ...state,
+        user: {
+          userId: registered.userId,
+          username: registered.username,
+          avatarId: selectedCharacterId,
+          createdAt: registered.createdAt
+        }
+      };
+      save(nextState);
+      setNameInput(registered.username);
+      try {
+        const rows = await fetchLeaderboard(50);
+        setRemoteLeaderboardRows(rows);
+      } catch {
+        // Ignore refresh failures; retry happens when opening leaderboard.
+      }
+      setScreen('home');
+    } catch {
+      // Fallback to local save if backend is unavailable.
+      save({
+        ...state,
+        user: {
+          userId: state.user?.userId,
+          username,
+          avatarId: selectedCharacterId,
+          createdAt: state.user?.createdAt ?? new Date().toISOString()
+        }
+      });
+      setScreen('home');
+    } finally {
+      setIsRegisteringPlayer(false);
+    }
   };
 
   const museumRows = useMemo(
@@ -1092,15 +1193,28 @@ export default function App() {
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
   const leaderboard = useMemo(() => {
-    const you = state.user?.username ?? 'You';
-    const yourScore = Math.max(state.highs.bestTotal, totalScore);
-    const board = [
-      ...leaderboardBots.map((bot) => ({ name: bot.name, avatarId: bot.avatarId, score: bot.score, isYou: false })),
-      { name: `${you} (You)`, avatarId: state.user?.avatarId ?? defaultCharacterId, score: yourScore, isYou: true }
-    ];
+    const youUserId = state.user?.userId;
+    const youUsername = state.user?.username;
+    const youAvatar = state.user?.avatarId ?? defaultCharacterId;
+    const youScore = Math.max(state.highs.bestTotal, totalScore);
 
-    return board.sort((a, b) => b.score - a.score).map((item, index) => ({ ...item, rank: index + 1 }));
-  }, [state.highs.bestTotal, state.user, totalScore]);
+    const sourceRows = remoteLeaderboardRows.length
+      ? remoteLeaderboardRows
+      : [
+          ...fallbackLeaderboardRows,
+          { rank: 0, userId: youUserId ?? 'local-you', username: youUsername ?? 'You', avatarId: youAvatar, score: youScore, updatedAt: '' }
+        ];
+
+    return [...sourceRows]
+      .sort((a, b) => b.score - a.score)
+      .map((entry, index) => ({
+        rank: index + 1,
+        name: entry.username,
+        avatarId: entry.avatarId,
+        score: entry.score,
+        isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
+      }));
+  }, [remoteLeaderboardRows, state.highs.bestTotal, state.user, totalScore]);
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
@@ -1199,8 +1313,8 @@ export default function App() {
           </p>
 
           <div className="btn-row">
-            <button className="btn btn-primary" disabled={!nameInput.trim()} onClick={completeOnboarding}>
-              {state.user ? 'Save Player' : 'Start Playing'}
+            <button className="btn btn-primary" disabled={!nameInput.trim() || isRegisteringPlayer} onClick={completeOnboarding}>
+              {isRegisteringPlayer ? 'Saving...' : state.user ? 'Save Player' : 'Start Playing'}
             </button>
             {state.user && (
               <button className="btn btn-secondary" onClick={() => setScreen('home')}>

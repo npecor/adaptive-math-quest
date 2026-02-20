@@ -10,7 +10,7 @@ React + TypeScript web app built with Vite.
 - Sprint + Brain + Total scoring.
 - Daily streak and puzzle streak tracking.
 - Local high scores and Puzzle Museum.
-- Local storage only (no backend).
+- Backend leaderboard API with username dedupe + score syncing.
 
 ## Seed content
 - `content/flow.seed.json`
@@ -19,7 +19,12 @@ React + TypeScript web app built with Vite.
 ## Run locally
 ```bash
 npm install
-npm run dev
+npm run dev:full
 npm test
 npm run build
 ```
+
+## Dev scripts
+- `npm run dev:full` starts both API (`:8787`) and Vite web dev server.
+- `npm run dev:api` starts only the leaderboard API.
+- `npm run dev` starts only Vite (expects API already running for leaderboard features).
