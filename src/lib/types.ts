@@ -4,9 +4,11 @@ export interface FlowItem {
   id: string;
   type: 'flow';
   difficulty: number;
+  tier?: 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
   template: string;
   shapeSignature: string;
   tags: string[];
+  difficultyBreakdown?: Record<string, number>;
   format: FlowFormat;
   prompt: string;
   answer: string;

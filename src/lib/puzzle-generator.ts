@@ -35,7 +35,7 @@ const pairCountPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
       `Reveal: ${n}×${n - 1}/2 = ${answer}.`
     ],
     solution_steps: [`Pairs = ${n}(${n} - 1)/2.`, `Answer: ${answer}.`],
-    extensions: extensions('How many with 12 cadets?', 'Write a rule for n cadets.')
+    extensions: extensions('How many with 12 cadets?', 'Write a rule for any number of cadets.')
   };
 };
 
@@ -50,12 +50,17 @@ const factorPairs = (n: number): Array<[number, number]> => {
 const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   let side = randInt(4, 18);
   let squareArea = side * side;
-  let pairs = factorPairs(squareArea);
-
-  for (let tries = 0; tries < 10 && pairs.length === 0; tries += 1) {
+  let nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
+  // Some square areas only have one non-trivial pair (e.g. 7x7). Re-roll until we get a real rectangle.
+  for (let tries = 0; tries < 20 && nonSquarePairs.length === 0; tries += 1) {
     side = randInt(4, 18);
     squareArea = side * side;
-    pairs = factorPairs(squareArea);
+    nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
+  }
+  if (nonSquarePairs.length === 0) {
+    side = 12;
+    squareArea = side * side;
+    nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
   }
 
   const isYes = Math.random() < 0.55;
@@ -63,8 +68,7 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
   let b = side;
 
   if (isYes) {
-    const viable = pairs.filter(([x, y]) => !(x === side && y === side));
-    const pickPair = viable.length ? pick(viable) : pairs.length ? pick(pairs) : [side, side];
+    const pickPair = pick(nonSquarePairs);
     a = pickPair[0];
     b = pickPair[1];
   } else {
@@ -112,22 +116,22 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
 const alwaysSometimesNeverPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
   const variant = pick([
     {
-      prompt: 'For counting number n, n(n+1) is even.',
+      prompt: 'Odd + odd is even.',
       answer: 'Always',
-      reason: 'one of two back-to-back numbers is always even',
-      title: 'Even-Odd Explorer: Twin Steps'
+      reason: 'Adding two odd numbers always makes an even number.',
+      title: 'Even-Odd Explorer: Odd Team-Up'
     },
     {
-      prompt: 'For counting number n, n² - n is even.',
-      answer: 'Always',
-      reason: 'n(n-1) includes one even number',
-      title: 'Even-Odd Explorer: Step Back'
+      prompt: 'Odd × odd is even.',
+      answer: 'Never',
+      reason: 'Odd times odd stays odd, not even.',
+      title: 'Even-Odd Explorer: Multiply Check'
     },
     {
-      prompt: 'For counting number n, n² + 1 is odd.',
+      prompt: 'A number times itself is even.',
       answer: 'Sometimes',
-      reason: 'it depends on whether n is odd or even',
-      title: 'Even-Odd Explorer: Plus One'
+      reason: 'Even numbers squared are even, but odd numbers squared are odd.',
+      title: 'Even-Odd Explorer: Square Check'
     }
   ]);
 
@@ -139,13 +143,13 @@ const alwaysSometimesNeverPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 't
     core_prompt: variant.prompt,
     core_answer: variant.answer,
     hint_ladder: [
-      'Try a few small values for n.',
+      'Try a few quick examples.',
       'Look for an odd/even pattern.',
-      'Rewrite the expression if that helps.',
+      'Test both odd and even numbers.',
       `Reveal: ${variant.reason}.`
     ],
     solution_steps: [variant.reason, `So the best label is ${variant.answer}.`],
-    extensions: extensions('Test n=1..6 and list outcomes.', 'How would you prove it quickly?')
+    extensions: extensions('Test 1 through 6 and list outcomes.', 'How would you prove it quickly?')
   };
 };
 

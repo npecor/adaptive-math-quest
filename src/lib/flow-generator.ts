@@ -1,4 +1,5 @@
 import { chooseTargetDifficulty, getFlowDiversityPenalty } from './adaptive';
+import { annotateFlowItem } from './difficulty';
 import type { FlowItem } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -18,12 +19,39 @@ type Template = {
   build: (difficulty: number) => BuiltFlow;
 };
 
+type DifficultyBand = 'easy' | 'medium' | 'hard' | 'expert' | 'master';
+
+const toBand = (difficulty: number): DifficultyBand => {
+  if (difficulty >= 1400) return 'master';
+  if (difficulty >= 1250) return 'expert';
+  if (difficulty >= 1080) return 'hard';
+  if (difficulty >= 920) return 'medium';
+  return 'easy';
+};
+
 const createAddSub = (difficulty: number): BuiltFlow => {
-  const isAdd = Math.random() < 0.45;
-  const a = randInt(18, 95);
-  const b = randInt(6, 28);
+  const band = toBand(difficulty);
+  const isAdd = Math.random() < 0.5;
+  const allowNegative = difficulty >= 980 && Math.random() < 0.2;
+  const numberRange =
+    band === 'easy'
+      ? { aMin: 18, aMax: 95, bMin: 6, bMax: 28 }
+      : band === 'medium'
+        ? { aMin: 40, aMax: 160, bMin: 8, bMax: 70 }
+        : band === 'hard'
+          ? { aMin: 90, aMax: 360, bMin: 30, bMax: 180 }
+          : { aMin: 140, aMax: 980, bMin: 60, bMax: 420 };
+
+  let a = randInt(numberRange.aMin, numberRange.aMax);
+  let b = randInt(numberRange.bMin, numberRange.bMax);
 
   if (isAdd) {
+    if (band === 'hard' || band === 'expert' || band === 'master') {
+      // Force carry on harder tiers so addition doesn't feel trivial.
+      if ((a % 10) + (b % 10) < 10) {
+        b += 10 - ((a % 10) + (b % 10));
+      }
+    }
     const result = a + b;
     return {
       signature: `addsub-add-${a}-${b}`,
@@ -42,11 +70,19 @@ const createAddSub = (difficulty: number): BuiltFlow => {
     };
   }
 
-  const allowNegative = difficulty >= 980 && Math.random() < 0.2;
   let left = a;
   let right = b;
+  if (band === 'hard' || band === 'expert' || band === 'master') {
+    if ((left % 10) >= (right % 10)) {
+      right += (left % 10) - (right % 10) + 1;
+    }
+    if (!allowNegative && left <= right) left = right + randInt(20, 120);
+  }
   if (!allowNegative && left < right) {
     [left, right] = [right, left];
+  }
+  if ((band === 'hard' || band === 'expert' || band === 'master') && Math.abs(left - right) < 8) {
+    left += randInt(12, 40);
   }
   const result = left - right;
   const shapeSignature = result < 0 ? 'addsub_sub_neg' : 'addsub_sub_pos';
@@ -68,12 +104,34 @@ const createAddSub = (difficulty: number): BuiltFlow => {
 };
 
 const createMultDiv = (difficulty: number): BuiltFlow => {
+  const band = toBand(difficulty);
   const isMult = Math.random() < 0.55;
-  const harder = difficulty >= 1150;
 
   if (isMult) {
-    const a = harder ? randInt(6, 16) : randInt(3, 12);
-    const b = harder ? randInt(7, 16) : randInt(3, 12);
+    let a: number;
+    let b: number;
+    if (band === 'easy') {
+      a = randInt(2, 12);
+      b = Math.random() < 0.25 ? 10 : randInt(2, 12);
+    } else if (band === 'medium') {
+      a = randInt(7, 18);
+      b = randInt(4, 12);
+      if (a <= 9 && b <= 9) a = randInt(10, 18);
+    } else if (band === 'hard') {
+      a = randInt(12, 36);
+      b = randInt(7, 16);
+    } else if (band === 'expert') {
+      a = randInt(12, 45);
+      b = randInt(11, 29);
+    } else {
+      a = randInt(18, 55);
+      b = randInt(12, 39);
+    }
+    if (band === 'hard' || band === 'expert' || band === 'master') {
+      if (a === 10) a += 3;
+      if (b === 10) b += 2;
+      if (a <= 9 && b <= 9) a += 10;
+    }
     const result = a * b;
     return {
       signature: `mult-${a}-${b}`,
@@ -92,8 +150,28 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
     };
   }
 
-  const divisor = harder ? randInt(6, 16) : randInt(3, 12);
-  const quotient = harder ? randInt(8, 22) : randInt(4, 16);
+  let divisor: number;
+  let quotient: number;
+  if (band === 'easy') {
+    divisor = randInt(2, 12);
+    quotient = randInt(3, 15);
+    if (Math.random() < 0.25) divisor = 10;
+  } else if (band === 'medium') {
+    divisor = randInt(3, 12);
+    quotient = randInt(8, 22);
+  } else if (band === 'hard') {
+    divisor = randInt(7, 18);
+    quotient = randInt(10, 28);
+  } else if (band === 'expert') {
+    divisor = randInt(8, 22);
+    quotient = randInt(14, 36);
+  } else {
+    divisor = randInt(9, 24);
+    quotient = randInt(16, 42);
+  }
+  if (band === 'hard' || band === 'expert' || band === 'master') {
+    if (divisor === 10) divisor += 3;
+  }
   const dividend = divisor * quotient;
   return {
     signature: `div-${dividend}-${divisor}`,
@@ -140,13 +218,18 @@ const createFractionCompare = (): BuiltFlow => {
 };
 
 const createOneStepEquation = (difficulty: number): BuiltFlow => {
-  const styles: Array<'x_plus_c' | 'x_minus_c' | 'ax_eq_b' | 'x_over_c'> = ['x_plus_c', 'x_minus_c', 'ax_eq_b', 'x_over_c'];
+  const band = toBand(difficulty);
+  const styles: Array<'x_plus_c' | 'x_minus_c' | 'ax_eq_b' | 'x_over_c'> =
+    band === 'easy'
+      ? ['x_plus_c', 'x_minus_c', 'ax_eq_b']
+      : band === 'medium'
+        ? ['x_plus_c', 'x_minus_c', 'ax_eq_b', 'x_over_c']
+        : ['x_minus_c', 'ax_eq_b', 'x_over_c'];
   const style = pick(styles);
-  const harder = difficulty >= 1150;
 
   if (style === 'x_plus_c') {
-    const x = harder ? randInt(20, 90) : randInt(6, 45);
-    const c = harder ? randInt(12, 35) : randInt(5, 26);
+    const x = band === 'easy' ? randInt(6, 45) : band === 'medium' ? randInt(14, 95) : randInt(26, 180);
+    const c = band === 'easy' ? randInt(5, 18) : band === 'medium' ? randInt(8, 30) : randInt(16, 60);
     const rhs = x + c;
     return {
       signature: `eq-plus-${x}-${c}`,
@@ -166,8 +249,8 @@ const createOneStepEquation = (difficulty: number): BuiltFlow => {
   }
 
   if (style === 'x_minus_c') {
-    const x = harder ? randInt(24, 95) : randInt(8, 50);
-    const c = harder ? randInt(10, 28) : randInt(3, 16);
+    const x = band === 'easy' ? randInt(8, 50) : band === 'medium' ? randInt(16, 100) : randInt(35, 210);
+    const c = band === 'easy' ? randInt(3, 16) : band === 'medium' ? randInt(6, 24) : randInt(14, 70);
     const rhs = x - c;
     return {
       signature: `eq-minus-${x}-${c}`,
@@ -187,8 +270,8 @@ const createOneStepEquation = (difficulty: number): BuiltFlow => {
   }
 
   if (style === 'ax_eq_b') {
-    const x = harder ? randInt(8, 28) : randInt(3, 20);
-    const factor = harder ? randInt(5, 14) : randInt(2, 12);
+    const x = band === 'easy' ? randInt(3, 16) : band === 'medium' ? randInt(5, 24) : randInt(10, 36);
+    const factor = band === 'easy' ? randInt(2, 10) : band === 'medium' ? randInt(3, 12) : randInt(6, 18);
     const rhs = x * factor;
     return {
       signature: `eq-mult-${x}-${factor}`,
@@ -207,8 +290,8 @@ const createOneStepEquation = (difficulty: number): BuiltFlow => {
     };
   }
 
-  const c = harder ? randInt(3, 12) : randInt(2, 9);
-  const rhs = harder ? randInt(8, 30) : randInt(3, 20);
+  const c = band === 'easy' ? randInt(2, 8) : band === 'medium' ? randInt(3, 12) : randInt(7, 18);
+  const rhs = band === 'easy' ? randInt(3, 15) : band === 'medium' ? randInt(6, 24) : randInt(12, 34);
   const x = c * rhs;
   return {
     signature: `eq-div-${x}-${c}`,
@@ -228,9 +311,20 @@ const createOneStepEquation = (difficulty: number): BuiltFlow => {
 };
 
 const createPercent = (difficulty: number): BuiltFlow => {
-  const harder = difficulty >= 1150;
-  const percent = harder ? pick([12, 15, 18, 20, 24, 25, 30, 35]) : pick([10, 15, 20, 25, 30]);
-  const basePool = harder ? [120, 160, 180, 200, 240, 300, 360, 400, 480, 500, 600] : [40, 50, 60, 80, 100, 120, 160, 200, 240, 300, 400];
+  const band = toBand(difficulty);
+  const percentPool =
+    band === 'easy'
+      ? [10, 20, 25, 50]
+      : band === 'medium'
+        ? [10, 15, 20, 25, 30, 50]
+        : [12, 15, 18, 20, 24, 25, 30, 35];
+  const basePool =
+    band === 'easy'
+      ? [20, 40, 50, 60, 80, 100, 120, 160, 200]
+      : band === 'medium'
+        ? [40, 60, 80, 100, 120, 160, 200, 240, 300, 400]
+        : [120, 160, 180, 200, 240, 300, 360, 400, 480, 500, 600, 800];
+  const percent = pick(percentPool);
   let base = pick(basePool);
   let result = (percent / 100) * base;
   for (let attempts = 0; attempts < 24 && !Number.isInteger(result); attempts += 1) {
@@ -260,10 +354,10 @@ const createPercent = (difficulty: number): BuiltFlow => {
 };
 
 const createRatio = (difficulty: number): BuiltFlow => {
-  const harder = difficulty >= 1150;
-  const a = harder ? randInt(2, 12) : randInt(1, 9);
-  const b = harder ? randInt(4, 15) : randInt(2, 12);
-  const scale = harder ? randInt(3, 10) : randInt(2, 8);
+  const band = toBand(difficulty);
+  const a = band === 'easy' ? randInt(1, 8) : band === 'medium' ? randInt(2, 10) : randInt(4, 16);
+  const b = band === 'easy' ? randInt(2, 10) : band === 'medium' ? randInt(3, 13) : randInt(6, 20);
+  const scale = band === 'easy' ? randInt(2, 6) : band === 'medium' ? randInt(3, 9) : randInt(4, 12);
   const right = b * scale;
   const answer = a * scale;
   return {
@@ -284,11 +378,32 @@ const createRatio = (difficulty: number): BuiltFlow => {
 };
 
 const createGeometry = (difficulty: number): BuiltFlow => {
+  const band = toBand(difficulty);
+  const rectRange =
+    band === 'easy'
+      ? { aMin: 4, aMax: 11, bMin: 3, bMax: 10 }
+      : band === 'medium'
+        ? { aMin: 5, aMax: 14, bMin: 4, bMax: 13 }
+        : band === 'hard'
+          ? { aMin: 8, aMax: 20, bMin: 7, bMax: 18 }
+          : band === 'expert'
+            ? { aMin: 11, aMax: 24, bMin: 8, bMax: 20 }
+            : { aMin: 16, aMax: 32, bMin: 12, bMax: 26 };
+  const triRange =
+    band === 'easy'
+      ? { baseMin: 6, baseMax: 14, heightMin: 4, heightMax: 10 }
+      : band === 'medium'
+        ? { baseMin: 7, baseMax: 17, heightMin: 5, heightMax: 14 }
+        : band === 'hard'
+          ? { baseMin: 9, baseMax: 24, heightMin: 7, heightMax: 18 }
+          : band === 'expert'
+            ? { baseMin: 12, baseMax: 28, heightMin: 8, heightMax: 20 }
+            : { baseMin: 16, baseMax: 34, heightMin: 12, heightMax: 24 };
   const mode = pick(['rect_area', 'rect_perim', 'tri_area'] as const);
 
   if (mode === 'rect_area') {
-    const a = randInt(5, 16);
-    const b = randInt(4, 14);
+    const a = randInt(rectRange.aMin, rectRange.aMax);
+    const b = randInt(rectRange.bMin, rectRange.bMax);
     const area = a * b;
     return {
       signature: `geo-rect-area-${a}-${b}`,
@@ -308,8 +423,8 @@ const createGeometry = (difficulty: number): BuiltFlow => {
   }
 
   if (mode === 'rect_perim') {
-    const a = randInt(5, 16);
-    const b = randInt(4, 14);
+    const a = randInt(rectRange.aMin, rectRange.aMax);
+    const b = randInt(rectRange.bMin, rectRange.bMax);
     const perimeter = 2 * (a + b);
     return {
       signature: `geo-rect-perim-${a}-${b}`,
@@ -328,8 +443,8 @@ const createGeometry = (difficulty: number): BuiltFlow => {
     };
   }
 
-  const base = randInt(6, 18);
-  let height = randInt(4, 14);
+  const base = randInt(triRange.baseMin, triRange.baseMax);
+  let height = randInt(triRange.heightMin, triRange.heightMax);
   if ((base * height) % 2 !== 0) {
     height += 1;
   }
@@ -353,13 +468,14 @@ const createGeometry = (difficulty: number): BuiltFlow => {
 };
 
 const createTwoStep = (difficulty: number): BuiltFlow => {
-  const harder = difficulty >= 1150;
+  const band = toBand(difficulty);
+  const harder = band === 'hard' || band === 'expert' || band === 'master';
   const style = Math.random() < 0.55 ? 'paren' : 'ax_plus_c';
 
   if (style === 'paren') {
-    const x = harder ? randInt(10, 34) : randInt(4, 18);
-    const shift = harder ? randInt(4, 14) : randInt(2, 9);
-    const factor = harder ? randInt(3, 9) : randInt(2, 6);
+    const x = harder ? randInt(10, 44) : randInt(4, 18);
+    const shift = harder ? randInt(4, 16) : randInt(2, 9);
+    const factor = harder ? randInt(3, 11) : randInt(2, 6);
     const rhs = factor * (x - shift);
     return {
       signature: `eq-2step-paren-${x}-${shift}-${factor}`,
@@ -378,9 +494,9 @@ const createTwoStep = (difficulty: number): BuiltFlow => {
     };
   }
 
-  const factor = harder ? randInt(3, 11) : randInt(2, 7);
-  const c = harder ? randInt(8, 30) : randInt(3, 14);
-  const x = harder ? randInt(10, 36) : randInt(4, 18);
+  const factor = harder ? randInt(3, 13) : randInt(2, 7);
+  const c = harder ? randInt(8, 36) : randInt(3, 14);
+  const x = harder ? randInt(10, 42) : randInt(4, 18);
   const rhs = factor * x + c;
   return {
     signature: `eq-2step-axplusc-${factor}-${x}-${c}`,
@@ -451,26 +567,20 @@ const pickTemplate = (difficulty: number): Template => {
 };
 
 const passesConstraints = (item: FlowItem, rating: number): boolean => {
-  if (rating < 975) return true;
+  if (rating < 975) {
+    if (item.template === 'add_sub' && Number(item.answer) < 0) return false;
+    return true;
+  }
+  const hasTag = (prefixOrTag: string) =>
+    prefixOrTag.endsWith(':')
+      ? item.tags.some((tag) => tag.startsWith(prefixOrTag))
+      : item.tags.includes(prefixOrTag);
 
   if (item.template === 'mult_div') {
-    const multMatch = item.prompt.match(/^(\d+)\s*[×x]\s*(\d+)\s*=\s*\?$/);
-    if (multMatch) {
-      const left = Number(multMatch[1]);
-      const right = Number(multMatch[2]);
-      const tinyFact = left <= 6 && right <= 6;
-      const basicFact = left <= 9 && right <= 9;
-      if (tinyFact && Math.random() < 0.92) return false;
-      if (basicFact && rating >= 1050 && Math.random() < 0.75) return false;
-    }
-
-    const divMatch = item.prompt.match(/^(\d+)\s*÷\s*(\d+)\s*=\s*\?$/);
-    if (divMatch) {
-      const dividend = Number(divMatch[1]);
-      const divisor = Number(divMatch[2]);
-      const quotient = divisor === 0 ? 0 : dividend / divisor;
-      if (rating >= 975 && divisor <= 6 && quotient <= 6 && Math.random() < 0.92) return false;
-      if (dividend <= 100 && divisor <= 12 && rating >= 1050 && Math.random() < 0.8) return false;
+    if (rating >= 975 && hasTag('pattern:times-table') && Math.random() < 0.7) return false;
+    if (rating >= 1050 && (hasTag('pattern:×10') || hasTag('pattern:÷10')) && Math.random() < 0.9) return false;
+    if (rating >= 1125 && (hasTag('pattern:times-table') || hasTag('pattern:÷2') || hasTag('pattern:÷5')) && Math.random() < 0.95) {
+      return false;
     }
   }
 
@@ -488,6 +598,12 @@ const passesConstraints = (item: FlowItem, rating: number): boolean => {
       const rhs = Number(multMatch[2]);
       if (factor <= 4 && rhs <= 40) return false;
     }
+    if (rating >= 1125 && item.difficulty < 1040 && Math.random() < 0.9) return false;
+  }
+
+  if (item.template === 'add_sub' && rating >= 1125) {
+    const needsBorrowCarry = hasTag('requires:borrow') || hasTag('requires:carry');
+    if (!needsBorrowCarry && item.difficulty < 1040 && Math.random() < 0.9) return false;
   }
 
   return true;
@@ -507,6 +623,8 @@ const assertIntegerSafe = (candidate: FlowItem) => {
 };
 
 const isTrivialForHardPlus = (item: FlowItem): boolean => {
+  if (item.difficulty < 1040) return true;
+  if (item.tags.some((tag) => tag === 'pattern:times-table' || tag === 'pattern:×10' || tag === 'pattern:÷10')) return true;
   const prompt = item.prompt;
   const multMatch = prompt.match(/^(\d+)\s*[×x]\s*(\d+)\s*=\s*\?$/);
   if (multMatch) {
@@ -544,11 +662,19 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
     const difficulty = clamp(Math.round(targetDifficulty + randInt(-45, 45)), 800, 1700);
     const template = pickTemplate(difficulty);
     const built = template.build(difficulty);
-    const candidate: FlowItem = {
+    const rawCandidate: FlowItem = {
       id: `${template.key}-${built.signature}`,
       type: 'flow',
       difficulty,
       ...built
+    };
+    const annotated = annotateFlowItem(rawCandidate);
+    const candidate: FlowItem = {
+      ...rawCandidate,
+      difficulty: annotated.difficulty,
+      tier: annotated.tier,
+      tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
+      difficultyBreakdown: annotated.breakdown
     };
     if (passesConstraints(candidate, rating) && assertIntegerSafe(candidate)) {
       if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
@@ -560,11 +686,19 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
   for (let attempts = 0; attempts < 20; attempts += 1) {
     const fallbackTemplate = pickTemplate(fallbackDifficulty);
     const fallback = fallbackTemplate.build(fallbackDifficulty);
-    const candidate: FlowItem = {
+    const rawCandidate: FlowItem = {
       id: `${fallbackTemplate.key}-${fallback.signature}`,
       type: 'flow',
       difficulty: fallbackDifficulty,
       ...fallback
+    };
+    const annotated = annotateFlowItem(rawCandidate);
+    const candidate: FlowItem = {
+      ...rawCandidate,
+      difficulty: annotated.difficulty,
+      tier: annotated.tier,
+      tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
+      difficultyBreakdown: annotated.breakdown
     };
     if (assertIntegerSafe(candidate)) {
       if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
@@ -574,11 +708,19 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
 
   // Guaranteed integer-safe emergency fallback.
   const emergency = createAddSub(Math.max(900, fallbackDifficulty));
-  return {
+  const emergencyRaw: FlowItem = {
     id: `add_sub-${emergency.signature}`,
     type: 'flow',
     difficulty: fallbackDifficulty,
     ...emergency
+  };
+  const annotated = annotateFlowItem(emergencyRaw);
+  return {
+    ...emergencyRaw,
+    difficulty: annotated.difficulty,
+    tier: annotated.tier,
+    tags: [...new Set([...(emergencyRaw.tags ?? []), ...annotated.tags])],
+    difficultyBreakdown: annotated.breakdown
   };
 };
 
@@ -587,16 +729,18 @@ export const generateAdaptiveFlowItem = (
   usedSignatures: Set<string>,
   prevDifficulty?: number,
   recentTemplates: string[] = [],
-  recentShapes: string[] = []
+  recentShapes: string[] = [],
+  recentPatternTags: string[] = [],
+  correctStreak = 0
 ): FlowItem => {
-  const target = chooseTargetDifficulty(rating);
+  const target = chooseTargetDifficulty(rating, correctStreak);
   const candidates = Array.from({ length: 24 }, () => buildCandidate(target, rating));
   const fresh = candidates.filter((candidate) => !usedSignatures.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
 
   const scored = pool.map((item) => {
     const jumpPenalty = prevDifficulty === undefined ? 0 : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - 90) * 3;
-    const diversityPenalty = getFlowDiversityPenalty(item, recentTemplates, recentShapes);
+    const diversityPenalty = getFlowDiversityPenalty(item, recentTemplates, recentShapes, recentPatternTags);
     return {
       item,
       score: Math.abs(item.difficulty - target) + jumpPenalty + diversityPenalty

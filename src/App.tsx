@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
+import { tierFromDifficulty, type DifficultyTier } from './lib/difficulty';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
@@ -13,7 +14,6 @@ type Screen = 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
-type DifficultyTier = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
 type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit';
 type PlayerCharacter = {
   id: string;
@@ -41,6 +41,7 @@ interface RunState {
   usedPuzzleIds: Set<string>;
   recentTemplates: string[];
   recentShapes: string[];
+  recentPatternTags: string[];
   flowStreak: number;
   starsThisRound: number;
   puzzlesSolvedThisRound: number;
@@ -170,6 +171,7 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   usedPuzzleIds: new Set<string>(),
   recentTemplates: [],
   recentShapes: [],
+  recentPatternTags: [],
   flowStreak: 0,
   starsThisRound: 0,
   puzzlesSolvedThisRound: 0,
@@ -221,12 +223,16 @@ const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): b
   return acceptAnswers.every((answer) => parseLooseNumber(answer) !== null);
 };
 
-const getTier = (difficulty: number): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
-  if (difficulty >= 1350) return { label: 'Master', icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
-  if (difficulty >= 1200) return { label: 'Expert', icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
-  if (difficulty >= 1050) return { label: 'Hard', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
-  if (difficulty >= 900) return { label: 'Medium', icon: '🛰️', flowPoints: 12, puzzlePoints: 36 };
-  return { label: 'Easy', icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
+const getTier = (
+  difficulty: number,
+  explicitTier?: DifficultyTier
+): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
+  const label = explicitTier ?? tierFromDifficulty(difficulty);
+  if (label === 'Master') return { label, icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
+  if (label === 'Expert') return { label, icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
+  if (label === 'Hard') return { label, icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
+  if (label === 'Medium') return { label, icon: '🛰️', flowPoints: 12, puzzlePoints: 36 };
+  return { label, icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
 };
 
 const getPuzzleAnswerChoices = (answer: string): string[] | null => {
@@ -1146,7 +1152,9 @@ export default function App() {
         seeded.usedFlowIds,
         undefined,
         seeded.recentTemplates,
-        seeded.recentShapes
+        seeded.recentShapes,
+        seeded.recentPatternTags,
+        seeded.flowStreak
       );
     }
     else seeded.currentPuzzleChoices = getPuzzleChoices(state.skill.rating, seeded.usedPuzzleIds);
@@ -1189,10 +1197,10 @@ export default function App() {
     const answers = [item.answer, ...(item.accept_answers ?? [])];
     const correct = isSmartAnswerMatch(input, answers);
 
-    const updatedRating = updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount);
-    const tier = getTier(item.difficulty);
+    const nextStreak = correct ? Math.min(run.flowStreak + 1, 8) : 0;
+    const updatedRating = updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount, nextStreak);
+    const tier = getTier(item.difficulty, item.tier);
     const hintPenalty = run.currentHints * 3;
-    const nextStreak = correct ? Math.min(run.flowStreak + 1, 5) : 0;
     const gain = correct ? Math.max(tier.flowPoints - hintPenalty, 4) : 0;
     const nextTotals = applyStarAward(state.totals, gain);
     const nextState: AppState = {
@@ -1205,6 +1213,8 @@ export default function App() {
     usedFlowIds.add(item.id);
     const recentTemplates = [...run.recentTemplates, item.template].slice(-6);
     const recentShapes = [...run.recentShapes, item.shapeSignature].slice(-6);
+    const currentPatternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
+    const recentPatternTags = [...run.recentPatternTags, ...currentPatternTags].slice(-6);
     const nextFlowDone = run.flowDone + 1;
 
     if (nextFlowDone >= run.flowTarget) {
@@ -1216,6 +1226,7 @@ export default function App() {
           usedFlowIds,
           recentTemplates,
           recentShapes,
+          recentPatternTags,
           currentHints: 0,
           currentFlow: undefined,
           starsThisRound: run.starsThisRound + gain
@@ -1235,6 +1246,7 @@ export default function App() {
         currentPuzzle: undefined,
         recentTemplates,
         recentShapes,
+        recentPatternTags,
         flowStreak: nextStreak,
         currentHints: 0,
         starsThisRound: run.starsThisRound + gain
@@ -1260,7 +1272,9 @@ export default function App() {
       usedFlowIds,
       item.difficulty,
       recentTemplates,
-      recentShapes
+      recentShapes,
+      recentPatternTags,
+      nextStreak
     );
     setRun({
       ...run,
@@ -1269,6 +1283,7 @@ export default function App() {
       usedFlowIds,
       recentTemplates,
       recentShapes,
+      recentPatternTags,
       currentFlow: nextItem,
       flowStreak: nextStreak,
       currentHints: 0,
@@ -1801,7 +1816,6 @@ export default function App() {
       <section className="section-header mission-header">
         <div className="section-head-copy">
           <h2 className="text-title">Mission Control</h2>
-          <p className="mission-brand-line">🪐 GALAXY GENIUS</p>
         </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
       </section>
@@ -1876,7 +1890,7 @@ export default function App() {
         {run.phase === 'flow' && run.currentFlow && (
           <>
             <div className="tier-row">
-              <span className="tag difficulty-tag">{getTier(run.currentFlow.difficulty).icon} {getTier(run.currentFlow.difficulty).label}</span>
+              <span className="tag difficulty-tag">{getTier(run.currentFlow.difficulty, run.currentFlow.tier).icon} {getTier(run.currentFlow.difficulty, run.currentFlow.tier).label}</span>
             </div>
             <h3 className="math-display"><InlineMathText text={run.currentFlow.prompt} /></h3>
 
