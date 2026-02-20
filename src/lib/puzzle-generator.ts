@@ -4,6 +4,8 @@ import type { PuzzleItem } from './types';
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = <T,>(items: T[]): T => items[randInt(0, items.length - 1)];
+const hasDecimal = (text: string) => /\d+\.\d+/.test(text);
+const bannedAlgebraNotation = /\bn\b|n\^2|n²|n\(\s*n\s*[\+\-]\s*1\s*\)|n\(\s*n\s*-\s*1\s*\)|n\(\s*n\s*\+\s*1\s*\)/i;
 
 type PuzzleTemplate = {
   key: string;
@@ -355,15 +357,33 @@ const pickTemplate = (difficulty: number): PuzzleTemplate => {
   return eligible.length ? pick(eligible) : templates[0];
 };
 
+const isKidSafePuzzle = (candidate: PuzzleItem): boolean => {
+  const textFields = [candidate.title, candidate.core_prompt, candidate.core_answer, ...(candidate.hint_ladder ?? []), ...(candidate.solution_steps ?? [])];
+  if (textFields.some((text) => bannedAlgebraNotation.test(text))) return false;
+  if (candidate.id.startsWith('area_yn-') && textFields.some((text) => hasDecimal(text))) return false;
+  return true;
+};
+
 const buildCandidate = (targetDifficulty: number): PuzzleItem => {
-  const difficulty = clamp(Math.round(targetDifficulty + randInt(-60, 60)), 900, 1700);
-  const template = pickTemplate(difficulty);
-  const built = template.build(difficulty);
+  for (let attempts = 0; attempts < 14; attempts += 1) {
+    const difficulty = clamp(Math.round(targetDifficulty + randInt(-60, 60)), 900, 1700);
+    const template = pickTemplate(difficulty);
+    const built = template.build(difficulty);
+    const candidate: PuzzleItem = {
+      id: `${template.key}-${built.signature}`,
+      type: 'puzzle',
+      difficulty,
+      ...built
+    };
+    if (isKidSafePuzzle(candidate)) return candidate;
+  }
+
+  const fallbackBuilt = yesNoAreaPuzzle();
   return {
-    id: `${template.key}-${built.signature}`,
+    id: `area_yn-${fallbackBuilt.signature}`,
     type: 'puzzle',
-    difficulty,
-    ...built
+    difficulty: 1000,
+    ...fallbackBuilt
   };
 };
 

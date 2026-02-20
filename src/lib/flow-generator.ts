@@ -9,6 +9,12 @@ const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0
 const gcd = (x: number, y: number): number => (y === 0 ? Math.abs(x) : gcd(y, x % y));
 const hasDecimalToken = (text: string) => /\d+\.\d+/.test(text);
 const isIntegerString = (value: string) => /^-?\d+$/.test(value.trim());
+const shouldDebugFlowDifficulty = () => {
+  const globalDebug = (globalThis as { __GG_DEBUG_FLOW__?: boolean }).__GG_DEBUG_FLOW__ === true;
+  const envDebug =
+    (globalThis as { process?: { env?: { GG_DEBUG_FLOW?: string } } }).process?.env?.GG_DEBUG_FLOW === '1';
+  return globalDebug || envDebug;
+};
 
 type BuiltFlow = Omit<FlowItem, 'id' | 'difficulty' | 'type'> & { signature: string };
 
@@ -549,9 +555,9 @@ const createRatio = (difficulty: number): BuiltFlow => {
     prompt: `${a}:${b} = x:${right}`,
     answer: String(answer),
     hints: [
-      'Find how much the right side grew.',
-      `${b} → ${right} is ×${scale}`,
-      `Do that to ${a}: ${a} × ${scale}`
+      `How did ${b} change to ${right}?`,
+      `Show it: ${b} × ${scale} = ${right}.`,
+      `Do the same to ${a}: ${a} × ${scale} = ${answer}.`
     ],
     solution_steps: [`Scale by ${scale}.`, `x = ${a} × ${scale} = ${answer}.`]
   };
@@ -932,6 +938,14 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
       difficultyBreakdown: annotated.breakdown
     };
+    if (shouldDebugFlowDifficulty()) {
+      console.log({
+        templateKey: candidate.template,
+        shapeSignature: candidate.shapeSignature,
+        rawScore: candidate.difficulty,
+        label: candidate.tier
+      });
+    }
     if (passesConstraints(candidate, rating) && assertIntegerSafe(candidate)) {
       if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
       return candidate;
@@ -956,6 +970,14 @@ const buildCandidate = (targetDifficulty: number, rating: number): FlowItem => {
       tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
       difficultyBreakdown: annotated.breakdown
     };
+    if (shouldDebugFlowDifficulty()) {
+      console.log({
+        templateKey: candidate.template,
+        shapeSignature: candidate.shapeSignature,
+        rawScore: candidate.difficulty,
+        label: candidate.tier
+      });
+    }
     if (assertIntegerSafe(candidate)) {
       if (rating >= 1125 && isTrivialForHardPlus(candidate)) continue;
       return candidate;

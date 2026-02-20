@@ -646,7 +646,6 @@ const getCoachVisual = (item: { tags: string[]; prompt?: string; core_prompt?: s
 
   if (item.tags.includes('fractions')) return buildFractionVisual(text);
   if (item.tags.includes('percents')) return buildPercentVisual(text);
-  if (item.tags.includes('ratios_rates')) return buildRatioVisual(text);
   if (item.tags.includes('geometry_area') || item.tags.includes('spatial')) return buildAreaVisual(text);
   return null;
 };
@@ -1542,7 +1541,7 @@ export default function App() {
     if (tags.includes('fractions')) return 'Compare which piece is bigger.';
     if (tags.includes('equations')) return 'Undo one step at a time.';
     if (tags.includes('geometry_area')) return 'Area is squares inside. Perimeter is walking the edge.';
-    if (tags.includes('ratios_rates')) return 'Grow both sides the same way.';
+    if (tags.includes('ratios_rates')) return 'Use the same times number on both sides.';
     if (tags.includes('percents')) return 'Percent means out of 100.';
     if (tags.includes('order_ops')) return 'Circle the multiply or divide chunk first.';
     if (tags.includes('counting')) return 'Try a smaller example first.';
@@ -1627,6 +1626,22 @@ export default function App() {
         `Step 2: ${divideHint}`,
         'Step 3: Check with multiplication to confirm.'
       ];
+    }
+
+    if (item.template === 'ratio') {
+      const ratioMatch = item.prompt.match(/^(\d+):(\d+)\s*=\s*x:(\d+)$/);
+      if (ratioMatch) {
+        const leftA = Number(ratioMatch[1]);
+        const leftB = Number(ratioMatch[2]);
+        const rightB = Number(ratioMatch[3]);
+        const scale = rightB / Math.max(1, leftB);
+        const answer = Number(item.answer);
+        return [
+          `Step 1: How did ${leftB} change to ${rightB}?`,
+          `Step 2: It is ×${formatCoachNumber(scale)}, so ${leftB} × ${formatCoachNumber(scale)} = ${rightB}.`,
+          `Step 3: Do the same to ${leftA}: ${leftA} × ${formatCoachNumber(scale)} = ${answer}. So x = ${answer}.`
+        ];
+      }
     }
 
     if (item.template === 'mult_div') {

@@ -56,6 +56,18 @@ describe('difficulty tags', () => {
       }
     }
   });
+
+  it('does not label non-negative one-step equations as Hard+', () => {
+    let checked = 0;
+    for (let i = 0; i < 6000 && checked < 200; i += 1) {
+      const item = generateAdaptiveFlowItem(1125, new Set<string>());
+      if (item.template !== 'equation_1' || !item.tags.includes('eq:one-step') || item.tags.includes('sub:negative')) continue;
+      checked += 1;
+      const label = item.tier ?? difficultyLabelFromScore(item.difficulty);
+      expect(['Hard', 'Expert', 'Master']).not.toContain(label);
+    }
+    expect(checked).toBeGreaterThanOrEqual(40);
+  });
 });
 
 describe('puzzle prompt safety', () => {

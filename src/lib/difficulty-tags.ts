@@ -109,36 +109,37 @@ export const analyzeFlowItem = (
       break;
     }
     case 'mult_div': {
-      applyBase(890);
+      applyBase(840);
       const mult = parseBinaryPrompt(item.prompt, '×');
       const div = parseBinaryPrompt(item.prompt, '÷');
       if (mult) {
         const { left, right } = mult;
         addTag(tags, 'form:multiply');
-        addScore(breakdown, 'digits', (countDigits(left) + countDigits(right)) * 55);
+        addScore(breakdown, 'digits', (countDigits(left) + countDigits(right)) * 35);
         const isTimesTable = left >= 3 && left <= 12 && right >= 3 && right <= 12;
         const isTenVariant = (left === 10 && right >= 3 && right <= 12) || (right === 10 && left >= 3 && left <= 12);
         if (isTimesTable || isTenVariant) {
           addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:times-table', -240);
+          addScore(breakdown, 'easy:times-table', -220);
         }
         if (left === 10 || right === 10) {
           addTag(tags, 'pattern:×10');
-          addScore(breakdown, 'easy:×10', -170);
+          addScore(breakdown, 'easy:×10', -150);
         }
         if (left % 10 === 0 || right % 10 === 0) {
           addTag(tags, 'pattern:trailing-zero');
-          addScore(breakdown, 'easy:trailing-zero', -70);
+          addScore(breakdown, 'easy:trailing-zero', -60);
         }
+        if (left >= 10 && right >= 10) addScore(breakdown, 'two_digit_by_two_digit', 120);
         if ((left % 10) * (right % 10) >= 10) {
           addTag(tags, 'requires:carry');
-          addScore(breakdown, 'carry', 70);
+          addScore(breakdown, 'carry', 55);
         }
       } else if (div) {
         const { left: dividend, right: divisor } = div;
         const quotient = divisor === 0 ? 0 : dividend / divisor;
         addTag(tags, 'form:divide');
-        addScore(breakdown, 'digits', (countDigits(dividend) + countDigits(divisor)) * 45);
+        addScore(breakdown, 'digits', (countDigits(dividend) + countDigits(divisor)) * 30);
 
         const isTimesTableInverse =
           divisor >= 3 &&
@@ -150,20 +151,23 @@ export const analyzeFlowItem = (
         if (isTimesTableInverse) {
           addTag(tags, 'div:times-table');
           addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:table-div', -240);
+          addScore(breakdown, 'easy:table-div', -220);
         }
         if (divisor === 10) {
           addTag(tags, 'pattern:÷10');
-          addScore(breakdown, 'easy:÷10', -170);
+          addScore(breakdown, 'easy:÷10', -150);
         }
         if (divisor === 2 || divisor === 5) {
           addTag(tags, 'pattern:÷2/÷5');
-          addScore(breakdown, 'easy:÷2/÷5', -120);
+          addScore(breakdown, 'easy:÷2/÷5', -100);
         }
         if (dividend % 10 === 0 && (divisor % 10 === 0 || divisor === 2 || divisor === 5)) {
           addTag(tags, 'pattern:trailing-zero');
           addScore(breakdown, 'easy:trailing-zero', -60);
         }
+        if (dividend >= 200) addScore(breakdown, 'larger_dividend', 70);
+        if (divisor >= 8) addScore(breakdown, 'larger_divisor', 50);
+        if (Number.isFinite(quotient) && quotient >= 20) addScore(breakdown, 'larger_quotient', 40);
       }
       break;
     }
@@ -193,16 +197,25 @@ export const analyzeFlowItem = (
       break;
     }
     case 'equation_1': {
-      applyBase(990);
+      applyBase(885);
       const one = parseOneStep(item.prompt);
       if (one) {
+        addTag(tags, 'eq:one-step');
         addTag(tags, `form:${one.form}`);
         if (one.form === 'eq_one_step_add') {
-          addScore(breakdown, 'one_step_add', 70);
-          if (one.a <= 12 && one.b <= 35) addScore(breakdown, 'easy_tiny_add_eq', -140);
+          addScore(breakdown, 'one_step_add', 30);
+          addScore(breakdown, 'size', (countDigits(one.a) + countDigits(one.b)) * 30);
+          if (one.a <= 12 && one.b <= 35) addScore(breakdown, 'easy_tiny_add_eq', -120);
+          if (one.a >= 20 || one.b >= 80) addScore(breakdown, 'larger_constants', 35);
         } else {
-          addScore(breakdown, 'one_step_mul', 105);
-          if (one.a <= 5 && one.b <= 12) addScore(breakdown, 'easy_tiny_mul_eq', -140);
+          addScore(breakdown, 'one_step_mul', 60);
+          addScore(breakdown, 'size', (countDigits(one.a) + countDigits(one.b)) * 26);
+          if (one.a <= 5 && one.b <= 12) addScore(breakdown, 'easy_tiny_mul_eq', -120);
+          if (one.a >= 10 || one.b >= 40) addScore(breakdown, 'larger_constants', 45);
+        }
+        if (/=\s*-\d+/.test(item.prompt)) {
+          addTag(tags, 'sub:negative');
+          addScore(breakdown, 'negative_rhs', 120);
         }
       }
       break;
@@ -220,7 +233,7 @@ export const analyzeFlowItem = (
       break;
     }
     case 'percent': {
-      applyBase(1010);
+      applyBase(930);
       const match = item.prompt.match(/^(\d+)%\s+of\s+(\d+)\s*=\s*\?$/i);
       if (match) {
         const percent = Number(match[1]);
@@ -254,21 +267,21 @@ export const analyzeFlowItem = (
       break;
     }
     case 'geometry': {
-      applyBase(990);
+      applyBase(930);
       if (item.shapeSignature === 'geom_rect_perim') {
         addTag(tags, 'form:geometry_perimeter');
-        addScore(breakdown, 'perimeter', 115);
+        addScore(breakdown, 'perimeter', 90);
       } else if (item.shapeSignature === 'geom_tri_area') {
         addTag(tags, 'form:geometry_triangle_area');
-        addScore(breakdown, 'triangle_area', 145);
+        addScore(breakdown, 'triangle_area', 120);
       } else {
         addTag(tags, 'form:geometry_rect_area');
-        addScore(breakdown, 'rect_area', 130);
+        addScore(breakdown, 'rect_area', 95);
       }
       const numbers = [...item.prompt.matchAll(/\d+/g)].map((m) => Number(m[0]));
       if (numbers.length) {
         const average = numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
-        addScore(breakdown, 'dimension_scale', Math.round(average * 6));
+        addScore(breakdown, 'dimension_scale', Math.min(60, Math.round(average * 2)));
       }
       break;
     }
@@ -300,7 +313,10 @@ export const analyzeFlowItem = (
       applyBase(item.difficulty || 900);
   }
 
-  const difficultyScore = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
+  let difficultyScore = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
+  if (item.template === 'equation_1' && !tags.includes('sub:negative')) {
+    difficultyScore = Math.min(difficultyScore, 1045);
+  }
   const difficultyLabel = difficultyLabelFromScore(difficultyScore);
   return {
     tags: unique(tags),

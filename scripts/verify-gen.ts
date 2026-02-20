@@ -60,6 +60,14 @@ const getUglyFlags = (item: FlowItem, previous: FlowItem | null): string[] => {
   if (previous && previous.template === item.template) flags.push('repeat-template');
   if (previous && previous.shapeSignature === item.shapeSignature) flags.push('repeat-shape');
   if (['Hard', 'Expert', 'Master'].includes(label) && isTrivialForHardPlus(item)) flags.push('trivial-hardplus');
+  if (
+    item.template === 'equation_1' &&
+    item.tags.includes('eq:one-step') &&
+    !item.tags.includes('sub:negative') &&
+    ['Hard', 'Expert', 'Master'].includes(label)
+  ) {
+    flags.push('mislabel:eq-one-step');
+  }
   if (item.prompt.length < 8) flags.push('too-short');
   if (hasDecimal(item.prompt) || hasDecimal(item.answer)) flags.push('decimal');
   return flags;
@@ -145,6 +153,7 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
     let subtractionCount = 0;
     let easyNegativeSubtractions = 0;
     let hardPlusTrivial = 0;
+    let oneStepHardPlus = 0;
     const decimalExamples: string[] = [];
 
     for (let i = 0; i < FLOW_SELECTIONS_PER_BAND; i += 1) {
@@ -187,6 +196,14 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
       }
 
       if (tier.rating >= 1125 && isTrivialForHardPlus(item)) hardPlusTrivial += 1;
+      if (
+        item.template === 'equation_1' &&
+        item.tags.includes('eq:one-step') &&
+        !item.tags.includes('sub:negative') &&
+        ['Hard', 'Expert', 'Master'].includes(label)
+      ) {
+        oneStepHardPlus += 1;
+      }
 
       const patternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
       recentTemplates = [...recentTemplates, item.template].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
@@ -213,6 +230,9 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
         `  Hard+ trivial pattern rate: ${percent(hardPlusTrivial, FLOW_SELECTIONS_PER_BAND)}% (${hardPlusTrivial}/${FLOW_SELECTIONS_PER_BAND})`
       );
     }
+    if (oneStepHardPlus > 0) {
+      console.log(`  One-step equation Hard+ count: ${oneStepHardPlus}`);
+    }
 
     if (decimalExamples.length > 0) {
       failures.push(`Decimal text found in flow generation at ${tier.name}. Example: ${decimalExamples[0]}`);
@@ -222,6 +242,9 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
     }
     if (tier.rating >= 1125 && hardPlusTrivial > 0) {
       failures.push(`Hard+ trivial content detected at ${tier.name}: ${hardPlusTrivial} cases.`);
+    }
+    if (oneStepHardPlus > 0) {
+      failures.push(`One-step equations mislabeled Hard+ at ${tier.name}: ${oneStepHardPlus} cases.`);
     }
   }
 

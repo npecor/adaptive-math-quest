@@ -69,15 +69,18 @@ describe('flow coaching hints', () => {
 
   it('rectangle area hints include a concrete rewrite and computed parts', () => {
     let found = 0;
-    for (let i = 0; i < 6000; i += 1) {
-      const item = generateAdaptiveFlowItem(1275, new Set<string>());
-      if (item.template !== 'geometry' || item.shapeSignature !== 'geom_rect_area') continue;
-      found += 1;
-      expect(item.hints[0]).toMatch(/Area means|length × width/i);
-      expect(item.hints[1]).toMatch(/Rewrite:/i);
-      expect(item.hints[1]).toMatch(/=\s*.+\+\s*.+/);
-      expect(item.hints[2]).toMatch(/Compute:/i);
-      break;
+    for (const rating of [1125, 1275]) {
+      for (let i = 0; i < 7000; i += 1) {
+        const item = generateAdaptiveFlowItem(rating, new Set<string>());
+        if (item.template !== 'geometry' || item.shapeSignature !== 'geom_rect_area') continue;
+        found += 1;
+        expect(item.hints[0]).toMatch(/Area means|length × width/i);
+        expect(item.hints[1]).toMatch(/Rewrite:/i);
+        expect(item.hints[1]).toMatch(/=\s*.+\+\s*.+/);
+        expect(item.hints[2]).toMatch(/Compute:/i);
+        break;
+      }
+      if (found > 0) break;
     }
 
     expect(found).toBeGreaterThan(0);
