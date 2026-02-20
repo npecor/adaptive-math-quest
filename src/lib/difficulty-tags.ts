@@ -35,11 +35,11 @@ const parseOneStep = (prompt: string) => {
   const plus = prompt.match(/^x\s*\+\s*(\d+)\s*=\s*(\d+)$/);
   if (plus) return { form: 'eq_one_step_add' as const, a: Number(plus[1]), b: Number(plus[2]) };
   const minus = prompt.match(/^x\s*-\s*(\d+)\s*=\s*(\d+)$/);
-  if (minus) return { form: 'eq_one_step_add' as const, a: Number(minus[1]), b: Number(minus[2]) };
+  if (minus) return { form: 'eq_one_step_sub' as const, a: Number(minus[1]), b: Number(minus[2]) };
   const mul = prompt.match(/^(\d+)x\s*=\s*(\d+)$/);
   if (mul) return { form: 'eq_one_step_mul' as const, a: Number(mul[1]), b: Number(mul[2]) };
   const div = prompt.match(/^x\/(\d+)\s*=\s*(\d+)$/);
-  if (div) return { form: 'eq_one_step_mul' as const, a: Number(div[1]), b: Number(div[2]) };
+  if (div) return { form: 'eq_one_step_div' as const, a: Number(div[1]), b: Number(div[2]) };
   return null;
 };
 
@@ -193,16 +193,36 @@ export const analyzeFlowItem = (
       break;
     }
     case 'equation_1': {
-      applyBase(990);
+      applyBase(900);
       const one = parseOneStep(item.prompt);
       if (one) {
+        addTag(tags, 'eq:one-step');
         addTag(tags, `form:${one.form}`);
+        const answerValue = Number(item.answer);
+        const hasNegativeResult = Number.isFinite(answerValue) && answerValue < 0;
+
         if (one.form === 'eq_one_step_add') {
-          addScore(breakdown, 'one_step_add', 70);
+          addTag(tags, 'eq:one-step-add');
+          addScore(breakdown, 'one_step_add', 45);
           if (one.a <= 12 && one.b <= 35) addScore(breakdown, 'easy_tiny_add_eq', -140);
-        } else {
-          addScore(breakdown, 'one_step_mul', 105);
+        } else if (one.form === 'eq_one_step_sub') {
+          addTag(tags, 'eq:one-step-sub');
+          addScore(breakdown, 'one_step_sub', 55);
+          if (one.a <= 12 && one.b <= 35) addScore(breakdown, 'easy_tiny_sub_eq', -130);
+        } else if (one.form === 'eq_one_step_mul') {
+          addTag(tags, 'eq:one-step-mul');
+          addScore(breakdown, 'one_step_mul', 95);
           if (one.a <= 5 && one.b <= 12) addScore(breakdown, 'easy_tiny_mul_eq', -140);
+        } else {
+          addTag(tags, 'eq:one-step-div');
+          addTag(tags, 'eq:fraction-form');
+          addScore(breakdown, 'one_step_div', 140);
+          if (one.a <= 12 && one.b <= 16) addScore(breakdown, 'easy_small_div_eq', -70);
+        }
+
+        if (hasNegativeResult) {
+          addTag(tags, 'eq:negative');
+          addScore(breakdown, 'negative_solution', 105);
         }
       }
       break;
@@ -300,7 +320,10 @@ export const analyzeFlowItem = (
       applyBase(item.difficulty || 900);
   }
 
-  const difficultyScore = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
+  let difficultyScore = clamp(Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)), 800, 1700);
+  if (tags.includes('eq:one-step')) {
+    difficultyScore = Math.min(difficultyScore, 1040);
+  }
   const difficultyLabel = difficultyLabelFromScore(difficultyScore);
   return {
     tags: unique(tags),

@@ -211,6 +211,57 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
   return { failures };
 }
 
+function runEquationOneStepGuard(): { failures: string[] } {
+  const failures: string[] = [];
+  const sampleTarget = 200;
+  const ratings = [925, 1000, 1125, 1275];
+  const samples: FlowItem[] = [];
+  const used = new Set<string>();
+  let prevDifficulty: number | undefined;
+  let recentTemplates: string[] = [];
+  let recentShapes: string[] = [];
+  let recentPatternTags: string[] = [];
+  let guard = 0;
+
+  while (samples.length < sampleTarget && guard < 30000) {
+    guard += 1;
+    const rating = ratings[guard % ratings.length]!;
+    const item = generateAdaptiveFlowItem(rating, used, prevDifficulty, recentTemplates, recentShapes, recentPatternTags, 0);
+    prevDifficulty = item.difficulty;
+    recentTemplates = [...recentTemplates, item.template].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentShapes = [...recentShapes, item.shapeSignature].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentPatternTags = [...recentPatternTags, ...item.tags.filter((tag) => tag.startsWith('pattern:'))].slice(
+      -FLOW_SELECTION_SETTINGS.recentHistorySize
+    );
+    used.add(item.id);
+    if (guard % 10 === 0) used.clear();
+
+    if (item.template !== 'equation_1') continue;
+    samples.push(item);
+    const label = inferFlowLabel(item);
+    if (item.tags.includes('eq:one-step') && ['Hard', 'Expert', 'Master'].includes(label)) {
+      failures.push(
+        `eq:one-step labeled ${label}: ${item.id} | ${item.prompt} | d=${item.difficulty} | tags=${item.tags.join(',')}`
+      );
+    }
+  }
+
+  if (samples.length < sampleTarget) {
+    failures.push(`Equation guard only collected ${samples.length}/${sampleTarget} equation_1 items.`);
+  }
+
+  const labelCounts: Record<string, number> = {};
+  for (const item of samples) {
+    const label = inferFlowLabel(item);
+    labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+  }
+
+  console.log(`\n=== Equation One-Step Guard (${samples.length} equation_1 samples) ===`);
+  printDistributionTable('Label distribution for equation_1 samples', labelCounts, Math.max(samples.length, 1));
+
+  return { failures };
+}
+
 function printFlowSamples(): { failures: string[] } {
   const failures: string[] = [];
   console.log(`\n=== Flow Samples (${SAMPLE_COUNT_PER_TIER} per tier) ===`);
@@ -327,9 +378,10 @@ function main(): void {
   printAdaptiveInputsAndFormula();
 
   const flowStats = runFlowDistributionAndAssertions();
+  const equationGuard = runEquationOneStepGuard();
   const flowSamples = printFlowSamples();
   const puzzleStats = runPuzzleSanity();
-  const failures = [...flowStats.failures, ...flowSamples.failures, ...puzzleStats.failures];
+  const failures = [...flowStats.failures, ...equationGuard.failures, ...flowSamples.failures, ...puzzleStats.failures];
 
   if (failures.length > 0) {
     console.error('\n=== Verification Failures ===');
