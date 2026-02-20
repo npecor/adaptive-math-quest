@@ -249,29 +249,20 @@ p {
   gap: 10px;
 }
 
-.user-pill {
-  display: flex;
+.app-brand-inline {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 5px 12px 5px 5px;
+  gap: 4px;
+  color: #a5f3fc;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
 }
 
-.user-pill-button {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-}
-
-.user-pill-button:hover {
-  color: #bae6fd;
-}
-
-.profile-pill-name {
-  color: var(--color-ink);
+.app-brand-inline span:first-child {
+  font-size: 13px;
 }
 
 .avatar {
@@ -962,6 +953,14 @@ p {
   gap: 2px;
 }
 
+.mission-brand-line {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #a5f3fc;
+}
+
 .section-subtitle {
   margin: 0;
   color: #cbd5e1;
@@ -1591,6 +1590,19 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.run-main-card {
+  position: relative;
+  padding-top: 58px;
+}
+
+.run-main-card .tier-row {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  margin: 0;
+  justify-content: flex-end;
 }
 
 .points-pill {
@@ -2386,9 +2398,33 @@ p {
   gap: 12px;
 }
 
+.home-hero-avatar {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, rgba(186, 230, 253, 0.25), rgba(15, 23, 42, 0.12));
+  border: 1px solid rgba(186, 230, 253, 0.36);
+  box-shadow: 0 10px 20px rgba(8, 47, 73, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  animation: home-avatar-float 2.4s ease-in-out infinite;
+}
+
+.home-hero-avatar::after {
+  content: '✦';
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  font-size: 14px;
+  color: #67e8f9;
+  text-shadow: 0 0 12px rgba(103, 232, 249, 0.75);
+  animation: home-avatar-spark 1.2s ease-in-out infinite;
+}
+
 .home-hero-copy {
   display: grid;
-  gap: 12px;
+  gap: 6px;
 }
 
 .home-hero-title {
@@ -2403,6 +2439,26 @@ p {
   color: #dbeafe;
   font-size: 14px;
   line-height: 1.42;
+}
+
+@keyframes home-avatar-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes home-avatar-spark {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 .player-title {
@@ -2433,6 +2489,20 @@ p {
 }
 
 @media (max-width: 440px) {
+  .app-brand-inline {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+  }
+
+  .run-main-card {
+    padding-top: 52px;
+  }
+
+  .run-main-card .tier-row {
+    top: 14px;
+    right: 16px;
+  }
+
   .text-title {
     font-size: 18px;
   }

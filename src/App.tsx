@@ -12,7 +12,7 @@ type Screen = 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
-type DifficultyTier = 'Cadet' | 'Navigator' | 'Pilot' | 'Commander' | 'Captain';
+type DifficultyTier = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
 type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit';
 type PlayerCharacter = {
   id: string;
@@ -24,6 +24,7 @@ type PlayerCharacter = {
 
 interface RunState {
   phase: 'flow' | 'puzzle_pick' | 'puzzle' | 'boss';
+  bossStage: 'intro' | 'question';
   gameMode: GameMode;
   flowTarget: number;
   puzzleTarget: number;
@@ -79,13 +80,22 @@ const fallbackLeaderboardRows: LeaderboardRow[] = [
 ];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
-  galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzle cards', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
+  galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzles', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
   puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 }
 };
 
+const bonusRound = {
+  title: 'Fraction Fox',
+  prompt: 'Which fraction is greater: 3/4 or 2/3?',
+  choices: ['3/4', '2/3', 'Equal'],
+  answer: '3/4',
+  hint: 'Try twelfths: 3/4 = 9/12 and 2/3 = 8/12.'
+};
+
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
+  bossStage: 'intro',
   gameMode: mode,
   flowTarget: modeConfig[mode].flowTarget,
   puzzleTarget: modeConfig[mode].puzzleTarget,
@@ -146,11 +156,11 @@ const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): b
 };
 
 const getTier = (difficulty: number): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
-  if (difficulty >= 1350) return { label: 'Captain', icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
-  if (difficulty >= 1200) return { label: 'Commander', icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
-  if (difficulty >= 1050) return { label: 'Pilot', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
-  if (difficulty >= 900) return { label: 'Navigator', icon: '🛰️', flowPoints: 12, puzzlePoints: 36 };
-  return { label: 'Cadet', icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
+  if (difficulty >= 1350) return { label: 'Master', icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
+  if (difficulty >= 1200) return { label: 'Expert', icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
+  if (difficulty >= 1050) return { label: 'Hard', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
+  if (difficulty >= 900) return { label: 'Medium', icon: '🛰️', flowPoints: 12, puzzlePoints: 36 };
+  return { label: 'Easy', icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
 };
 
 const getPuzzleAnswerChoices = (answer: string): string[] | null => {
@@ -831,6 +841,8 @@ export default function App() {
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = Boolean(state.user);
   const onboardingCadetName = nameInput.trim() || 'Cadet';
+  const homeCadetName = state.user?.username ?? onboardingCadetName;
+  const homeCharacterId = selectedCharacter?.id ?? state.user?.avatarId ?? defaultCharacterId;
 
   const totalScore = run.sprintScore + run.brainScore;
   const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.highs.bestTotal;
@@ -1212,6 +1224,7 @@ export default function App() {
         puzzleDone,
         usedPuzzleIds,
         phase: 'boss',
+        bossStage: 'intro',
         currentHints: 0,
         currentPuzzle: undefined,
         currentPuzzleChoices: []
@@ -1258,6 +1271,20 @@ export default function App() {
     setShowTutor(false);
     setShowClarifyDialog(false);
     setTutorStep(0);
+  };
+
+  const startBonusRound = () => {
+    setRun({ ...run, bossStage: 'question' as const });
+    setInput('');
+    setFeedback('Bonus challenge unlocked. Solve it to double puzzle points!');
+    setFeedbackTone('info');
+  };
+
+  const submitBonusRound = () => {
+    if (!input.trim()) return;
+    const correct = isSmartAnswerMatch(input, [bonusRound.answer]);
+    const snapshot: RunState = { ...run, bossStage: 'question' };
+    finishRun(correct, snapshot);
   };
 
   const askPuzzleClarifyingQuestion = () => {
@@ -1554,8 +1581,20 @@ export default function App() {
       <section className="section-header mission-header">
         <div className="section-head-copy">
           <h2 className="text-title">Mission Control</h2>
+          <p className="mission-brand-line">🪐 GALAXY GENIUS</p>
         </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
+      </section>
+
+      <section className="card home-hero">
+        <div className="home-hero-head">
+          <div className="selected-player-avatar home-hero-avatar">
+            <CharacterAvatar characterId={homeCharacterId} size="lg" />
+          </div>
+          <div className="home-hero-copy">
+            <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
+          </div>
+        </div>
       </section>
 
       <section className="card mission-launch-card">
@@ -1613,7 +1652,7 @@ export default function App() {
 
   const runView = (
     <>
-      <section className={`card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
+      <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
         {run.phase === 'flow' && run.currentFlow && (
           <>
             <div className="tier-row">
@@ -1880,13 +1919,51 @@ export default function App() {
 
         {run.phase === 'boss' && (
           <>
-            <h3>Bonus Round: Fraction Fox</h3>
-            <p>Try it to double your puzzle points this game.</p>
-            <div className="btn-row">
-              <button className="btn btn-primary" onClick={() => finishRun(true)}>Play Bonus Round</button>
-              <button className="btn btn-secondary" onClick={() => finishRun(false)}>Finish Game</button>
-            </div>
-            <p className="muted">Bonus preview: {run.brainScore} → {run.brainScore * 2}</p>
+            {run.bossStage === 'intro' ? (
+              <>
+                <h3>Bonus Round: {bonusRound.title}</h3>
+                <p>Try it to double your puzzle points this game.</p>
+                <div className="btn-row">
+                  <button className="btn btn-primary" onClick={startBonusRound}>Play Bonus Round</button>
+                  <button className="btn btn-secondary" onClick={() => finishRun(false)}>Finish Game</button>
+                </div>
+                <p className="muted">Bonus preview: {run.brainScore} → {run.brainScore * 2}</p>
+              </>
+            ) : (
+              <>
+                <h3>Bonus Round: {bonusRound.title}</h3>
+                <p className="puzzle-question-prompt"><InlineMathText text={bonusRound.prompt} /></p>
+                <div className="chips">
+                  {bonusRound.choices.map((choice) => (
+                    <button
+                      key={choice}
+                      className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
+                      onClick={() => setInput(choice)}
+                    >
+                      <InlineMathText text={choice} />
+                    </button>
+                  ))}
+                </div>
+                <input
+                  className="math-input"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder="Your bonus answer"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') submitBonusRound();
+                  }}
+                />
+                <div className="btn-row">
+                  <button className="btn btn-primary" onClick={submitBonusRound} disabled={!input.trim()}>
+                    Submit Bonus Answer
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => finishRun(false)}>
+                    Skip Bonus
+                  </button>
+                </div>
+                <p className="muted">{bonusRound.hint}</p>
+              </>
+            )}
           </>
         )}
 
@@ -2088,11 +2165,11 @@ export default function App() {
 
       <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
-          <button className="user-pill user-pill-button" onClick={() => setScreen('onboarding')}>
-            <CharacterAvatar characterId={state.user.avatarId} size="xs" />
-            <span className="text-label profile-pill-name">{state.user.username}</span>
-          </button>
-          <div className="streak-counter">⭐ {topBarPoints}</div>
+          <div className="app-brand-inline" aria-label="Galaxy Genius">
+            <span aria-hidden="true">🪐</span>
+            <span>Galaxy Genius</span>
+          </div>
+          <div className="streak-counter" title="Score">⭐ {topBarPoints}</div>
         </header>
 
         {screen === 'home' && home}
