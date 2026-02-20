@@ -12,7 +12,7 @@ type Screen = 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
-type DifficultyTier = 'Comet' | 'Rocket' | 'Supernova';
+type DifficultyTier = 'Cadet' | 'Navigator' | 'Pilot' | 'Commander' | 'Captain';
 type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit';
 type PlayerCharacter = {
   id: string;
@@ -152,9 +152,11 @@ const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): b
 };
 
 const getTier = (difficulty: number): { label: DifficultyTier; icon: string; flowPoints: number; puzzlePoints: number } => {
-  if (difficulty >= 1250) return { label: 'Supernova', icon: '🌟', flowPoints: 20, puzzlePoints: 60 };
-  if (difficulty >= 1000) return { label: 'Rocket', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
-  return { label: 'Comet', icon: '☄️', flowPoints: 10, puzzlePoints: 30 };
+  if (difficulty >= 1350) return { label: 'Captain', icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
+  if (difficulty >= 1200) return { label: 'Commander', icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
+  if (difficulty >= 1050) return { label: 'Pilot', icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
+  if (difficulty >= 900) return { label: 'Navigator', icon: '🛰️', flowPoints: 12, puzzlePoints: 36 };
+  return { label: 'Cadet', icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
 };
 
 const getPuzzleAnswerChoices = (answer: string): string[] | null => {
