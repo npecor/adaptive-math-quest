@@ -45,7 +45,6 @@ interface RunState {
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
-const FLOW_HINT_STEPS = 3;
 const MAX_PUZZLE_HINTS = 2;
 
 const playerCharacters: PlayerCharacter[] = [
@@ -1332,6 +1331,22 @@ export default function App() {
   };
 
   const getFlowTutorSteps = (item: FlowItem) => {
+    if (item.template === 'lcm') {
+      const match =
+        item.prompt.match(/Smallest shared multiple:\s*(\d+)\s*and\s*(\d+)/i) ??
+        item.prompt.match(/Smallest shared multiple of\s*(\d+)\s*and\s*(\d+)\s*=\s*\?/i);
+      if (match) {
+        const a = Number(match[1]);
+        const b = Number(match[2]);
+        return [
+          `Step 1: We want the smallest number that ${a} and ${b} both go into evenly.`,
+          "Step 2: That's the smallest shared multiple (also called the least common multiple).",
+          'Step 3: List multiples of each number until you see the first match.',
+          'Step 4: The first match is the answer.'
+        ];
+      }
+    }
+
     if (item.shapeSignature === 'geom_rect_perim') {
       const rectMatch = item.prompt.match(/Rectangle:\s*(\d+)\s*by\s*(\d+)\.\s*Perimeter\s*=\s*\?/i);
       if (rectMatch) {
@@ -1769,16 +1784,13 @@ export default function App() {
               >
                 <span aria-hidden="true">🧑‍🏫</span> Teach me
               </button>
-              {run.currentHints < Math.min(run.currentFlow.hints.length, FLOW_HINT_STEPS) && (
+              {run.currentHints < run.currentFlow.hints.length && (
                 <button
                   className="btn btn-secondary utility-btn"
                   onClick={() =>
                     setRun({
                       ...run,
-                      currentHints: Math.min(
-                        run.currentHints + 1,
-                        Math.min(run.currentFlow?.hints.length ?? 0, FLOW_HINT_STEPS)
-                      )
+                      currentHints: Math.min(run.currentHints + 1, run.currentFlow?.hints.length ?? 0)
                     })
                   }
                 >
