@@ -4,7 +4,7 @@ import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
-import { applyStarAward, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, sortLeaderboardRows, upsertSolvedPuzzleIds } from './lib/progress';
+import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, upsertSolvedPuzzleIds } from './lib/progress';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
@@ -77,69 +77,6 @@ const characterVariantById: Record<string, string> = {
   'animal-jelly-jet': 'jelly-jet',
   'animal-cosmo-cat': 'cosmo-cat'
 };
-
-const fallbackLeaderboardRows: LeaderboardRow[] = [
-  {
-    rank: 1,
-    userId: 'bot-astro',
-    username: 'Astro',
-    avatarId: 'astro-bot',
-    allTimeStars: 14200,
-    bestRunStars: 1860,
-    trophiesEarned: 38,
-    extensionsSolved: 24,
-    updatedAt: '',
-    isBot: true
-  },
-  {
-    rank: 2,
-    userId: 'bot-nova',
-    username: 'Nova',
-    avatarId: 'animal-axo-naut',
-    allTimeStars: 13780,
-    bestRunStars: 1720,
-    trophiesEarned: 35,
-    extensionsSolved: 21,
-    updatedAt: '',
-    isBot: true
-  },
-  {
-    rank: 3,
-    userId: 'bot-cyber',
-    username: 'Cyber',
-    avatarId: 'astro-cactus-cadet',
-    allTimeStars: 13040,
-    bestRunStars: 1640,
-    trophiesEarned: 32,
-    extensionsSolved: 18,
-    updatedAt: '',
-    isBot: true
-  },
-  {
-    rank: 4,
-    userId: 'bot-cometx',
-    username: 'Comet_X',
-    avatarId: 'animal-stardust-fish',
-    allTimeStars: 11900,
-    bestRunStars: 1490,
-    trophiesEarned: 29,
-    extensionsSolved: 15,
-    updatedAt: '',
-    isBot: true
-  },
-  {
-    rank: 5,
-    userId: 'bot-sputnik',
-    username: 'Sputnik',
-    avatarId: 'animal-jelly-jet',
-    allTimeStars: 10800,
-    bestRunStars: 1380,
-    trophiesEarned: 25,
-    extensionsSolved: 12,
-    updatedAt: '',
-    isBot: true
-  }
-];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
   galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzles', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
@@ -1817,38 +1754,46 @@ export default function App() {
   const solvedRows = useMemo(() => museumRows.filter((entry) => entry.solved), [museumRows]);
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
+  const activeLeaderboardMetric = useMemo(
+    () =>
+      leaderboardMode === 'all_time'
+        ? { icon: '⭐', label: 'All-Time Stars' }
+        : leaderboardMode === 'best_run'
+          ? { icon: '🚀', label: 'Best Run' }
+          : { icon: '🏆', label: 'Trophies Earned' },
+    [leaderboardMode]
+  );
+
   const leaderboard = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
-    const youAvatar = state.user?.avatarId ?? defaultCharacterId;
-    const youRow: LeaderboardRow = {
-      rank: 0,
-      userId: youUserId ?? 'local-you',
-      username: youUsername ?? 'You',
-      avatarId: youAvatar,
-      allTimeStars: state.totals.allTimeStars,
-      bestRunStars: state.totals.bestRunStars,
-      trophiesEarned: state.totals.trophiesEarned,
-      extensionsSolved: state.totals.extensionsSolved,
-      updatedAt: ''
-    };
+    const rows = buildLeaderboardEntries(
+      leaderboardMode,
+      {
+        userId: youUserId,
+        username: youUsername,
+        avatarId: state.user?.avatarId ?? defaultCharacterId,
+        allTimeStars: state.totals.allTimeStars,
+        bestRunStars: state.totals.bestRunStars,
+        trophiesEarned: state.totals.trophiesEarned,
+        extensionsSolved: state.totals.extensionsSolved
+      },
+      remoteLeaderboardRows
+    );
 
-    const sourceRows = remoteLeaderboardRows.length
-      ? remoteLeaderboardRows
-      : [...fallbackLeaderboardRows, youRow];
-
-    return sortLeaderboardRows(sourceRows, leaderboardMode)
-      .map((entry, index) => ({
-        rank: index + 1,
-        name: entry.username,
-        avatarId: entry.avatarId,
-        primaryValue: getLeaderboardPrimaryValue(entry, leaderboardMode),
-        allTimeStars: entry.allTimeStars,
-        bestRunStars: entry.bestRunStars,
-        trophiesEarned: entry.trophiesEarned,
-        extensionsSolved: entry.extensionsSolved,
-        isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
-      }));
+    return rows.map((entry) => ({
+      rank: entry.rank,
+      userId: entry.userId,
+      name: entry.username,
+      avatarId: entry.avatarId,
+      primaryValue: getLeaderboardPrimaryValue(entry, leaderboardMode),
+      allTimeStars: entry.allTimeStars,
+      bestRunStars: entry.bestRunStars,
+      trophiesEarned: entry.trophiesEarned,
+      extensionsSolved: entry.extensionsSolved,
+      isBot: entry.isBot,
+      isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
+    }));
   }, [leaderboardMode, remoteLeaderboardRows, state.totals, state.user]);
   const podiumLeaders = useMemo(
     () =>
@@ -2468,50 +2413,49 @@ export default function App() {
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'all_time' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('all_time')}
           >
-            All-Time Stars
+            ⭐ All-Time Stars
           </button>
           <button
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'best_run' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('best_run')}
           >
-            Best Run
+            🚀 Best Run
           </button>
           <button
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'trophies' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('trophies')}
           >
-            Trophies Earned
+            🏆 Trophies Earned
           </button>
         </div>
       </section>
 
       <section className="card podium-wrap">
         {podiumLeaders.map((entry) => (
-          <div key={entry.name} className={`podium-item rank-${entry.rank}`}>
+          <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
             <span>{entry.name}</span>
-            <small>{entry.primaryValue}</small>
+            <small>{activeLeaderboardMetric.icon} {entry.primaryValue}</small>
           </div>
         ))}
       </section>
 
       <section className="list-container">
         {leaderboard.map((entry) => (
-          <div key={`${entry.name}-${entry.rank}`} className={`rank-row ${entry.isYou ? 'me' : ''}`}>
-            <span className="rank-number">{entry.rank}</span>
-            <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-            <span className="row-name">
-              {entry.name}
-              <small className="muted">
-                {leaderboardMode === 'all_time'
-                  ? `BR ${entry.bestRunStars} · 🏆 ${entry.trophiesEarned}`
-                  : leaderboardMode === 'best_run'
-                    ? `⭐ ${entry.allTimeStars} · 🏆 ${entry.trophiesEarned}`
-                    : `⭐ ${entry.allTimeStars} · ✨ ${entry.extensionsSolved}`}
-              </small>
-            </span>
-            <span className="row-score">{entry.primaryValue}</span>
+          <div key={entry.userId} className={`rank-row ${entry.isYou ? 'me' : ''}`}>
+            <div className="rank-row-left">
+              <span className="rank-number">#{entry.rank}</span>
+              <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
+              <span className="row-main">
+                <span className="row-name-line">
+                  <span className="row-name" title={entry.name}>{entry.name}</span>
+                  {entry.isYou && <span className="you-chip">You</span>}
+                </span>
+                <small className="muted row-subtle">⭐ {entry.allTimeStars} • 🚀 {entry.bestRunStars} • 🏆 {entry.trophiesEarned}</small>
+              </span>
+            </div>
+            <span className="row-score"><span className="row-score-icon">{activeLeaderboardMetric.icon}</span>{entry.primaryValue}</span>
           </div>
         ))}
       </section>
