@@ -159,6 +159,12 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
       if (decimalFields.some((field) => hasDecimal(field))) {
         decimalExamples.push(`${item.id} :: ${item.prompt} => ${item.answer}`);
       }
+      if (item.choices?.length) {
+        const uniqueCount = new Set(item.choices).size;
+        if (uniqueCount !== item.choices.length) {
+          failures.push(`Duplicate MC choices detected: ${item.id} :: [${item.choices.join(', ')}]`);
+        }
+      }
       if (!Array.isArray(item.hints) || item.hints.length !== 3) {
         failures.push(`Hints length != 3 for ${item.id}`);
       }

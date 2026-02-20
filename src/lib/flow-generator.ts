@@ -22,6 +22,59 @@ type Template = {
 
 type DifficultyBand = 'easy' | 'medium' | 'hard' | 'expert' | 'master';
 
+export const makeUniqueChoices = (correct: number, candidates: number[], count = 4): number[] => {
+  const targetCount = Math.max(2, count);
+  const uniquePool = new Set<number>();
+  const ordered: number[] = [correct];
+  uniquePool.add(correct);
+
+  for (const candidate of shuffle(candidates)) {
+    if (!Number.isFinite(candidate)) continue;
+    const normalized = Math.round(candidate);
+    if (normalized <= 0 || uniquePool.has(normalized)) continue;
+    uniquePool.add(normalized);
+    ordered.push(normalized);
+    if (ordered.length >= targetCount) break;
+  }
+
+  const offsets = [2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 24, 30];
+  let step = 2;
+  while (ordered.length < targetCount) {
+    const pivot = offsets[(ordered.length + step) % offsets.length] ?? step;
+    const plus = correct + pivot;
+    const minus = correct - pivot;
+
+    if (plus > 0 && !uniquePool.has(plus)) {
+      uniquePool.add(plus);
+      ordered.push(plus);
+      if (ordered.length >= targetCount) break;
+    }
+
+    if (minus > 0 && !uniquePool.has(minus)) {
+      uniquePool.add(minus);
+      ordered.push(minus);
+      if (ordered.length >= targetCount) break;
+    }
+
+    step += 1;
+    if (step > 60) {
+      const deterministic = correct + ordered.length + 7;
+      if (!uniquePool.has(deterministic)) {
+        uniquePool.add(deterministic);
+        ordered.push(deterministic);
+      } else {
+        const fallback = correct + step;
+        if (!uniquePool.has(fallback)) {
+          uniquePool.add(fallback);
+          ordered.push(fallback);
+        }
+      }
+    }
+  }
+
+  return shuffle(ordered.slice(0, targetCount));
+};
+
 const toBand = (difficulty: number): DifficultyBand => {
   if (difficulty >= 1400) return 'master';
   if (difficulty >= 1250) return 'expert';
@@ -191,6 +244,10 @@ const createFractionCompare = (difficulty: number): BuiltFlow => {
   let d2 = randInt(3, 12);
   let n1 = randInt(1, d1 - 1);
   let n2 = randInt(1, d2 - 1);
+  while (n1 === n2 && d1 === d2) {
+    d2 = randInt(3, 12);
+    n2 = randInt(1, d2 - 1);
+  }
   let shapeSignature = 'frac_compare_pair';
   const extraTags: string[] = [];
 
@@ -574,11 +631,12 @@ const createLCM = (): BuiltFlow => {
   while (b === a) b = pick([9, 10, 12, 14, 15, 18, 20, 21, 24]);
   const gcd = (x: number, y: number): number => (y === 0 ? x : gcd(y, x % y));
   const smallestCommonMultiple = (a * b) / gcd(a, b);
-  const wrong1 = smallestCommonMultiple + pick([2, 4, 6, 8]);
-  const wrong2 = smallestCommonMultiple - pick([2, 4, 6]);
+  const wrong1 = smallestCommonMultiple + pick([2, 4, 6, 8, 10, 12]);
+  const wrong2 = Math.max(2, smallestCommonMultiple - pick([2, 4, 6, 8, 10]));
   const wrong3 = a * b;
-  const choices = shuffle([String(smallestCommonMultiple), String(Math.max(2, wrong2)), String(wrong1), String(wrong3)]).slice(0, 4);
-  if (!choices.includes(String(smallestCommonMultiple))) choices[0] = String(smallestCommonMultiple);
+  const wrong4 = Math.max(a, b) * pick([2, 3, 4]);
+  const wrong5 = Math.max(a, b) + Math.min(a, b);
+  const choices = makeUniqueChoices(smallestCommonMultiple, [wrong1, wrong2, wrong3, wrong4, wrong5], 4).map(String);
 
   return {
     signature: `smallest-common-multiple-${a}-${b}`,
