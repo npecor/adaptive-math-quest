@@ -2123,9 +2123,13 @@ p {
 }
 
 .character-card.selected .character-avatar {
-  animation: character-dance 1.85s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
+  animation: onboarding-avatar-drift 9.6s ease-in-out infinite;
   transform-origin: center 70%;
   filter: drop-shadow(0 8px 10px rgba(2, 6, 23, 0.32));
+}
+
+.character-card.selected .character-avatar .character-avatar-svg {
+  animation: none;
 }
 
 .character-card.selected .character-card-head::before {
@@ -2167,11 +2171,11 @@ p {
   border-radius: 999px;
   background: rgba(2, 6, 23, 0.34);
   filter: blur(1px);
-  animation: character-shadow 2.45s ease-in-out infinite;
+  animation: character-shadow 3.1s ease-in-out infinite;
 }
 
 .character-card.selected .character-avatar-mouth {
-  animation: character-expression 1.85s ease-in-out infinite;
+  animation: footer-expression 3.5s ease-in-out infinite;
 }
 
 .character-card.selected .character-avatar-eye {
@@ -2179,11 +2183,11 @@ p {
 }
 
 .character-card.selected .character-avatar-foot {
-  animation: character-feet 0.36s ease-in-out infinite alternate;
+  animation: none;
 }
 
 .character-card.selected .character-avatar-foot:last-child {
-  animation-delay: 0.18s;
+  animation-delay: 0s;
 }
 
 .character-card-head {
@@ -2243,6 +2247,18 @@ p {
   }
   88% {
     transform: translate(-2px, -2px) rotateZ(-2deg) scale(1.02);
+  }
+}
+
+@keyframes onboarding-avatar-drift {
+  0%, 100% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  40% {
+    transform: translate(1px, -3px) rotate(0.8deg);
+  }
+  72% {
+    transform: translate(-1px, -1px) rotate(-0.6deg);
   }
 }
 
@@ -2325,13 +2341,17 @@ p {
 }
 
 .selected-player-avatar .character-avatar {
-  animation: selected-footer-dance 1.25s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
+  animation: onboarding-avatar-drift 9.6s ease-in-out infinite;
   transform-origin: center 74%;
   filter: drop-shadow(0 4px 8px rgba(2, 6, 23, 0.32));
 }
 
+.selected-player-avatar .character-avatar .character-avatar-svg {
+  animation: none;
+}
+
 .selected-player-avatar .character-avatar-mouth {
-  animation: footer-expression 1.25s ease-in-out infinite;
+  animation: footer-expression 3.5s ease-in-out infinite;
 }
 
 .selected-player-avatar .character-avatar-eye {
@@ -2406,6 +2426,8 @@ p {
 
 .home-hero-button {
   width: calc(100% - (var(--space-page) * 2));
+  color: var(--color-ink);
+  font: inherit;
   text-align: left;
   cursor: pointer;
   appearance: none;
