@@ -439,6 +439,63 @@ const simplifyCoachLine = (line: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+type TutorBreakPlan = {
+  original: number;
+  partA: number;
+  partB: number;
+  rewriteLine: string;
+  partLineA: string;
+  partLineB: string;
+  valueA: number;
+  valueB: number;
+};
+
+const splitTutorNumber = (value: number): [number, number] => {
+  if (value >= 12) {
+    const tens = Math.floor(value / 10) * 10;
+    const ones = value - tens;
+    if (ones > 0) return [tens, ones];
+    const half = Math.floor(value / 2);
+    return [half, value - half];
+  }
+  if (value >= 4) return [value - 2, 2];
+  return [value - 1, 1];
+};
+
+const buildTutorBreakPlan = (left: number, right: number): TutorBreakPlan => {
+  const splitRight = (right >= 10 && right % 10 !== 0) || (left < 10 && right >= left);
+  const original = splitRight ? right : left;
+  const [partA, partB] = splitTutorNumber(original);
+
+  if (splitRight) {
+    const valueA = left * partA;
+    const valueB = left * partB;
+    return {
+      original,
+      partA,
+      partB,
+      rewriteLine: `${left}×${right} = ${left}×${partA} + ${left}×${partB}`,
+      partLineA: `${left}×${partA}`,
+      partLineB: `${left}×${partB}`,
+      valueA,
+      valueB
+    };
+  }
+
+  const valueA = partA * right;
+  const valueB = partB * right;
+  return {
+    original,
+    partA,
+    partB,
+    rewriteLine: `${left}×${right} = ${partA}×${right} + ${partB}×${right}`,
+    partLineA: `${partA}×${right}`,
+    partLineB: `${partB}×${right}`,
+    valueA,
+    valueB
+  };
+};
+
 const buildFractionVisual = (text: string): CoachVisualData | null => {
   const matches = [...text.matchAll(/(\d+)\s*\/\s*(\d+)/g)]
     .slice(0, 2)
@@ -1481,7 +1538,7 @@ export default function App() {
   };
 
   const getKidStrategyLine = (tags: string[]) => {
-    if (tags.includes('mult_div')) return 'Think in equal groups.';
+    if (tags.includes('mult_div')) return 'Break a number into smaller parts.';
     if (tags.includes('fractions')) return 'Compare which piece is bigger.';
     if (tags.includes('equations')) return 'Undo one step at a time.';
     if (tags.includes('geometry_area')) return 'Use the area formula for the shape.';
@@ -1528,9 +1585,12 @@ export default function App() {
       if (rectMatch) {
         const a = Number(rectMatch[1]);
         const b = Number(rectMatch[2]);
+        const breakApart = buildTutorBreakPlan(a, b);
         return [
-          'Step 1: Area = length × width.',
-          `Step 2: ${a}×${b} = ${item.answer}.`
+          'Step 1: Area = length × width, so we multiply the side lengths.',
+          `Step 2: Break ${breakApart.original} into ${breakApart.partA} and ${breakApart.partB} to make smaller facts.`,
+          `Step 3: Rewrite ${breakApart.rewriteLine}.`,
+          `Step 4: ${breakApart.partLineA}=${breakApart.valueA} and ${breakApart.partLineB}=${breakApart.valueB}; add to get ${item.answer}.`
         ];
       }
     }
@@ -1566,6 +1626,67 @@ export default function App() {
         `Step 2: ${divideHint}`,
         'Step 3: Use that number as your answer.'
       ];
+    }
+
+    if (item.template === 'mult_div') {
+      const multiplyMatch = item.prompt.match(/^\s*(\d+)\s*[×x]\s*(\d+)\s*=\s*\?\s*$/);
+      if (multiplyMatch) {
+        const left = Number(multiplyMatch[1]);
+        const right = Number(multiplyMatch[2]);
+        const result = Number(item.answer);
+        if (left <= 12 && right <= 12) {
+          return [
+            'Step 1: Use a times-table fact you already know.',
+            `Step 2: Check ${left}×${right} with skip counting.`,
+            `Step 3: The product is ${result}.`
+          ];
+        }
+        const breakApart = buildTutorBreakPlan(left, right);
+        return [
+          `Step 1: Break ${breakApart.original} into ${breakApart.partA} and ${breakApart.partB} so each part is easier.`,
+          `Step 2: Rewrite ${breakApart.rewriteLine}.`,
+          `Step 3: Solve each part: ${breakApart.partLineA}=${breakApart.valueA}, ${breakApart.partLineB}=${breakApart.valueB}.`,
+          `Step 4: Add ${breakApart.valueA}+${breakApart.valueB} to get ${result}.`
+        ];
+      }
+    }
+
+    if (item.template === 'order_ops') {
+      const parenMatch = item.prompt.match(/^\((\d+)\s*\+\s*(\d+)\)\s*×\s*(\d+)(?:\s*-\s*(\d+))?\s*=\s*\?\s*$/);
+      if (parenMatch) {
+        const a = Number(parenMatch[1]);
+        const b = Number(parenMatch[2]);
+        const c = Number(parenMatch[3]);
+        const d = parenMatch[4] ? Number(parenMatch[4]) : null;
+        const chunk = a + b;
+        const product = chunk * c;
+        const tailText = d === null ? '' : ` - ${d}`;
+        const finalValue = d === null ? product : product - d;
+        return [
+          `Step 1: Find the chunk first: (${a} + ${b}) = ${chunk}.`,
+          `Step 2: Plug back in: ${chunk} × ${c}${tailText}.`,
+          `Step 3: Multiply: ${chunk}×${c} = ${product}.`,
+          `Step 4: Finish the last step to get ${finalValue}.`
+        ];
+      }
+
+      const orderMatch = item.prompt.match(/^(\d+)\s*\+\s*(\d+)\s*×\s*(\d+)(?:\s*-\s*(\d+))?\s*=\s*\?\s*$/);
+      if (orderMatch) {
+        const a = Number(orderMatch[1]);
+        const b = Number(orderMatch[2]);
+        const c = Number(orderMatch[3]);
+        const d = orderMatch[4] ? Number(orderMatch[4]) : null;
+        const breakApart = buildTutorBreakPlan(b, c);
+        const product = b * c;
+        const tailText = d === null ? '' : ` - ${d}`;
+        const finalValue = d === null ? a + product : a + product - d;
+        return [
+          `Step 1: Do multiplication first, so solve ${b}×${c} before adding or subtracting.`,
+          `Step 2: Break it into parts: ${breakApart.rewriteLine}.`,
+          `Step 3: Plug back in: ${a} + ${product}${tailText}.`,
+          `Step 4: Finish the line to get ${finalValue}.`
+        ];
+      }
     }
 
     const firstHint = item.hints[0] ? simplifyCoachLine(item.hints[0]) : 'Start with what you already know.';

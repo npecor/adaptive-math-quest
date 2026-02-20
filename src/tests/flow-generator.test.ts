@@ -45,3 +45,56 @@ describe('flow multiple-choice generation', () => {
     expect(found).toBeGreaterThan(0);
   });
 });
+
+describe('flow coaching hints', () => {
+  it('non-times-table multiplication includes a concrete break-apart rewrite', () => {
+    let found = 0;
+    for (let i = 0; i < 6000; i += 1) {
+      const item = generateAdaptiveFlowItem(1125, new Set<string>());
+      if (item.template !== 'mult_div' || item.shapeSignature !== 'mul_basic') continue;
+      const match = item.prompt.match(/^\s*(\d+)\s*[×x]\s*(\d+)\s*=\s*\?\s*$/);
+      if (!match) continue;
+      const left = Number(match[1]);
+      const right = Number(match[2]);
+      if (left <= 12 && right <= 12) continue;
+      found += 1;
+      const hintBlob = item.hints.join(' ');
+      expect(hintBlob).toMatch(/\bBreak\b/i);
+      expect(hintBlob).toMatch(/=\s*.+\+\s*.+/);
+      break;
+    }
+
+    expect(found).toBeGreaterThan(0);
+  });
+
+  it('rectangle area hints include a concrete rewrite and computed parts', () => {
+    let found = 0;
+    for (let i = 0; i < 6000; i += 1) {
+      const item = generateAdaptiveFlowItem(1275, new Set<string>());
+      if (item.template !== 'geometry' || item.shapeSignature !== 'geom_rect_area') continue;
+      found += 1;
+      expect(item.hints[0]).toMatch(/Area = length × width/i);
+      expect(item.hints[1]).toMatch(/Rewrite:/i);
+      expect(item.hints[1]).toMatch(/=\s*.+\+\s*.+/);
+      expect(item.hints[2]).toMatch(/Compute:/i);
+      break;
+    }
+
+    expect(found).toBeGreaterThan(0);
+  });
+
+  it('order-of-ops hints tell kids to do multiplication first and plug back in', () => {
+    let found = 0;
+    for (let i = 0; i < 6000; i += 1) {
+      const item = generateAdaptiveFlowItem(1125, new Set<string>());
+      if (item.template !== 'order_ops' || item.shapeSignature !== 'expr_order_ops') continue;
+      found += 1;
+      expect(item.hints[0]).toMatch(/multiplication first/i);
+      expect(item.hints[2]).toMatch(/Plug back in/i);
+      expect(item.hints[2]).toMatch(/=/);
+      break;
+    }
+
+    expect(found).toBeGreaterThan(0);
+  });
+});

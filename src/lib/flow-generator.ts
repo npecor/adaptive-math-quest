@@ -83,6 +83,67 @@ const toBand = (difficulty: number): DifficultyBand => {
   return 'easy';
 };
 
+type BreakApartPlan = {
+  splitTarget: 'left' | 'right';
+  original: number;
+  partA: number;
+  partB: number;
+  rewriteLine: string;
+  partLineA: string;
+  partLineB: string;
+  valueA: number;
+  valueB: number;
+};
+
+const splitIntoFriendlyParts = (value: number): [number, number] => {
+  if (value >= 12) {
+    const tens = Math.floor(value / 10) * 10;
+    const ones = value - tens;
+    if (ones > 0) return [tens, ones];
+    const half = Math.floor(value / 2);
+    return [half, value - half];
+  }
+  if (value >= 4) return [value - 2, 2];
+  return [value - 1, 1];
+};
+
+const buildBreakApartPlan = (left: number, right: number): BreakApartPlan => {
+  const splitTarget: 'left' | 'right' =
+    (right >= 10 && right % 10 !== 0) || (left < 10 ? true : right >= left) ? 'right' : 'left';
+  const original = splitTarget === 'right' ? right : left;
+  const [partA, partB] = splitIntoFriendlyParts(original);
+
+  if (splitTarget === 'right') {
+    const valueA = left * partA;
+    const valueB = left * partB;
+    return {
+      splitTarget,
+      original,
+      partA,
+      partB,
+      rewriteLine: `${left}×${right} = ${left}×${partA} + ${left}×${partB}`,
+      partLineA: `${left}×${partA}`,
+      partLineB: `${left}×${partB}`,
+      valueA,
+      valueB
+    };
+  }
+
+  const valueA = partA * right;
+  const valueB = partB * right;
+  return {
+    splitTarget,
+    original,
+    partA,
+    partB,
+    rewriteLine: `${left}×${right} = ${partA}×${right} + ${partB}×${right}`,
+    partLineA: `${partA}×${right}`,
+    partLineB: `${partB}×${right}`,
+    valueA,
+    valueB
+  };
+};
+
 const createAddSub = (difficulty: number): BuiltFlow => {
   const band = toBand(difficulty);
   const isAdd = Math.random() < 0.5;
@@ -184,6 +245,8 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
       b = randInt(14, 45);
     }
     const result = a * b;
+    const isTimesTable = a <= 12 && b <= 12;
+    const breakApart = buildBreakApartPlan(a, b);
     return {
       signature: `mult-${a}-${b}`,
       template: 'mult_div',
@@ -192,12 +255,24 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
       format: 'numeric_input',
       prompt: `${a} × ${b} = ?`,
       answer: String(result),
-      hints: [
-        'Think in equal groups.',
-        `${a} groups of ${b}`,
-        'Break one factor to make mental math faster.'
-      ],
-      solution_steps: [`${a} × ${b} = ${result}.`, `Answer: ${result}.`]
+      hints: isTimesTable
+        ? [
+            'Use a times-table fact you know.',
+            `${a}×${b} = ?`,
+            `Count by ${Math.min(a, b)} to check your answer.`
+          ]
+        : [
+            `Break ${breakApart.original} into ${breakApart.partA} and ${breakApart.partB}.`,
+            `Rewrite: ${breakApart.rewriteLine}.`,
+            `Compute: ${breakApart.partLineA}=${breakApart.valueA}, ${breakApart.partLineB}=${breakApart.valueB}, then add to get ${result}.`
+          ],
+      solution_steps: isTimesTable
+        ? [`${a} × ${b} = ${result}.`, `Answer: ${result}.`]
+        : [
+            breakApart.rewriteLine,
+            `${breakApart.partLineA} = ${breakApart.valueA}, ${breakApart.partLineB} = ${breakApart.valueB}.`,
+            `${breakApart.valueA} + ${breakApart.valueB} = ${result}.`
+          ]
     };
   }
 
@@ -231,7 +306,7 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
     hints: [
       'Turn division into multiplication.',
       `${divisor} × ? = ${dividend}`,
-      'That missing factor is the answer.'
+      'That missing number is the answer.'
     ],
     solution_steps: [`${divisor} × ${quotient} = ${dividend}.`, `So ${dividend} ÷ ${divisor} = ${quotient}.`]
   };
@@ -467,6 +542,11 @@ const createOrderOfOps = (difficulty: number): BuiltFlow => {
     ? `(${a} + ${b}) × ${c}${includeTail ? ` - ${d}` : ''}`
     : `${a} + ${b} × ${c}${includeTail ? ` - ${d}` : ''}`;
   const answer = evaluateOrderOps(rawExpression);
+  const multiplyPlan = buildBreakApartPlan(b, c);
+  const multiplied = b * c;
+  const parenValue = a + b;
+  const tailExpression = includeTail ? ` - ${d}` : '';
+  const pluggedLine = withParens ? `${parenValue} × ${c}${tailExpression}` : `${a} + ${multiplied}${tailExpression}`;
   return {
     signature: `order-${rawExpression.replace(/\s+/g, '')}`,
     template: 'order_ops',
@@ -475,13 +555,22 @@ const createOrderOfOps = (difficulty: number): BuiltFlow => {
     format: 'numeric_input',
     prompt: `${rawExpression} = ?`,
     answer: String(answer),
-    hints: [
-      withParens ? 'Do parentheses first.' : 'Do multiplication before add/subtract.',
-      withParens ? `Solve (${a} + ${b}) first, then multiply by ${c}.` : `Compute ${b} × ${c} first.`,
-      includeTail ? `Then finish with ${withParens ? 'the subtraction' : 'the remaining add/subtract'}.` : 'Then finish the remaining step.'
-    ],
+    hints: withParens
+      ? [
+          `Find the chunk first: (${a} + ${b}).`,
+          `Rewrite: (${a} + ${b}) × ${c}${tailExpression} = ${parenValue} × ${c}${tailExpression}.`,
+          `Plug back in: ${pluggedLine} = ${answer}.`
+        ]
+      : [
+          `Do multiplication first. Circle ${b}×${c}.`,
+          `Break it: ${multiplyPlan.rewriteLine}.`,
+          `Plug back in: ${pluggedLine} = ${answer}.`
+        ],
     solution_steps: [
-      withParens ? `(${a} + ${b}) first, then × ${c}${includeTail ? `, then - ${d}` : ''}.` : `${b} × ${c} first, then add ${a}${includeTail ? `, then - ${d}` : ''}.`,
+      withParens
+        ? `(${a} + ${b}) = ${parenValue}, so ${rawExpression} becomes ${parenValue} × ${c}${tailExpression}.`
+        : `${multiplyPlan.rewriteLine}; ${multiplyPlan.partLineA}=${multiplyPlan.valueA}, ${multiplyPlan.partLineB}=${multiplyPlan.valueB}, so ${b}×${c}=${multiplied}.`,
+      `Now solve ${pluggedLine}.`,
       `Answer: ${answer}.`
     ]
   };
@@ -515,6 +604,7 @@ const createGeometry = (difficulty: number): BuiltFlow => {
     const a = randInt(rectRange.aMin, rectRange.aMax);
     const b = randInt(rectRange.bMin, rectRange.bMax);
     const area = a * b;
+    const breakApart = buildBreakApartPlan(a, b);
     return {
       signature: `geo-rect-area-${a}-${b}`,
       template: 'geometry',
@@ -525,10 +615,15 @@ const createGeometry = (difficulty: number): BuiltFlow => {
       answer: String(area),
       hints: [
         'Area = length × width.',
-        `${a} × ${b}`,
-        'Try a mental trick: split one factor.'
+        `Rewrite: ${breakApart.rewriteLine}.`,
+        `Compute: ${breakApart.partLineA}=${breakApart.valueA}, ${breakApart.partLineB}=${breakApart.valueB}, so area = ${area}.`
       ],
-      solution_steps: [`Area = ${a} × ${b}.`, `Answer: ${area}.`]
+      solution_steps: [
+        `Area = ${a} × ${b}.`,
+        breakApart.rewriteLine,
+        `${breakApart.partLineA} = ${breakApart.valueA}, ${breakApart.partLineB} = ${breakApart.valueB}.`,
+        `${breakApart.valueA} + ${breakApart.valueB} = ${area}.`
+      ]
     };
   }
 
