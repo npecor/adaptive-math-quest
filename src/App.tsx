@@ -45,43 +45,43 @@ const PUZZLE_TARGET = 3;
 const MAX_HINTS_PER_QUESTION = 2;
 
 const playerCharacters: PlayerCharacter[] = [
-  { id: 'astro-cactus-cadet', emoji: '🌵', name: 'Cactus Cadet', vibe: 'Spiky + silly', kind: 'astronaut' },
   { id: 'astro-bot', emoji: '🤖', name: 'Astro Bot', vibe: 'Cheerful robot astronaut', kind: 'astronaut' },
-  { id: 'animal-axo-naut', emoji: '🦎', name: 'Axo-Naut', vibe: 'Coral pink explorer', kind: 'animal' },
-  { id: 'animal-shellster', emoji: '🐢', name: 'Shellster', vibe: 'Steady turtle pilot', kind: 'animal' },
+  { id: 'animal-axo-naut', emoji: '🦎', name: 'Axo Naut', vibe: 'Coral pink explorer', kind: 'animal' },
   { id: 'animal-jelly-jet', emoji: '🪼', name: 'Jelly Jet', vibe: 'Floaty neon jellyfish', kind: 'animal' },
-  { id: 'animal-captain-paws', emoji: '🐱', name: 'Captain Paws', vibe: 'Mischievous cat captain', kind: 'animal' }
+  { id: 'astro-cactus-cadet', emoji: '🌵', name: 'Cactus Comet', vibe: 'Spiky + silly', kind: 'astronaut' },
+  { id: 'animal-stardust-fish', emoji: '⭐', name: 'Stardust Fish', vibe: 'Sparkly star swimmer', kind: 'animal' },
+  { id: 'animal-cosmo-cat', emoji: '🐱', name: 'Cosmo Cat', vibe: 'Solar flares + mischief', kind: 'animal' }
 ];
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
   'astro-cactus-cadet': { base: '#d9f99d', accent: '#84cc16', trim: '#fef08a', mark: '#365314' },
   'astro-bot': { base: '#f8fafc', accent: '#60a5fa', trim: '#e2e8f0', mark: '#0f172a' },
   'animal-axo-naut': { base: '#f9a8d4', accent: '#fb7185', trim: '#fecdd3', mark: '#3f1d2e' },
-  'animal-shellster': { base: '#bbf7d0', accent: '#16a34a', trim: '#dcfce7', mark: '#14532d' },
+  'animal-stardust-fish': { base: '#67e8f9', accent: '#06b6d4', trim: '#bae6fd', mark: '#0f172a' },
   'animal-jelly-jet': { base: '#c4b5fd', accent: '#7c3aed', trim: '#e9d5ff', mark: '#312e81' },
-  'animal-captain-paws': { base: '#fbcfe8', accent: '#f472b6', trim: '#f5f3ff', mark: '#3f1d2e' }
+  'animal-cosmo-cat': { base: '#fdba74', accent: '#f59e0b', trim: '#fde68a', mark: '#7c2d12' }
 };
 const characterVariantById: Record<string, string> = {
   'astro-cactus-cadet': 'cactus-cadet',
   'astro-bot': 'astro-bot',
   'animal-axo-naut': 'axo-naut',
-  'animal-shellster': 'shellster',
+  'animal-stardust-fish': 'stardust-fish',
   'animal-jelly-jet': 'jelly-jet',
-  'animal-captain-paws': 'captain-paws'
+  'animal-cosmo-cat': 'cosmo-cat'
 };
 
 const fallbackLeaderboardRows: LeaderboardRow[] = [
   { rank: 1, userId: 'bot-astro', username: 'Astro', avatarId: 'astro-bot', score: 14200, updatedAt: '', isBot: true },
   { rank: 2, userId: 'bot-nova', username: 'Nova', avatarId: 'animal-axo-naut', score: 13780, updatedAt: '', isBot: true },
   { rank: 3, userId: 'bot-cyber', username: 'Cyber', avatarId: 'astro-cactus-cadet', score: 13040, updatedAt: '', isBot: true },
-  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-shellster', score: 11900, updatedAt: '', isBot: true },
+  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-stardust-fish', score: 11900, updatedAt: '', isBot: true },
   { rank: 5, userId: 'bot-sputnik', username: 'Sputnik', avatarId: 'animal-jelly-jet', score: 10800, updatedAt: '', isBot: true }
 ];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
   galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzle cards', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
-  puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzle cards only', flowTarget: 0, puzzleTarget: 5 }
+  puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 }
 };
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
@@ -249,7 +249,13 @@ const phaseLabel = (phase: RunState['phase']) => {
   return 'Bonus Round';
 };
 
-const getCharacterById = (characterId?: string) => playerCharacters.find((character) => character.id === characterId);
+const getCharacterById = (characterId?: string) => {
+  const normalizedId =
+    characterId === 'animal-captain-paws'
+      ? 'animal-cosmo-cat'
+      : characterId;
+  return playerCharacters.find((character) => character.id === normalizedId);
+};
 
 const toFriendlyPuzzleTitle = (title?: string, puzzleId?: string) => {
   if (title && title.trim() && !/^puz_\d+$/i.test(title.trim())) return title;
@@ -292,7 +298,14 @@ const hashString = (value: string) => {
 };
 
 const pickBySeed = (items: string[], seed: string) => items[hashString(seed) % items.length];
-
+const randomCadetName = () => {
+  const starts = ['Star', 'Nova', 'Comet', 'Orbit', 'Rocket', 'Cosmo', 'Lunar', 'Solar'];
+  const ends = ['Scout', 'Pilot', 'Whiz', 'Ranger', 'Spark', 'Genius', 'Cadet', 'Quest'];
+  const start = starts[Math.floor(Math.random() * starts.length)];
+  const end = ends[Math.floor(Math.random() * ends.length)];
+  const num = Math.floor(Math.random() * 90) + 10;
+  return `${start}${end}${num}`;
+};
 const getPuzzleEmoji = (puzzle: { id?: string; title?: string; tags?: string[]; answer_type?: string }) => {
   const seed = `${puzzle.id ?? ''}-${puzzle.title ?? ''}`;
   const tags = puzzle.tags ?? [];
@@ -582,17 +595,26 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
     case 'axo-naut':
       return (
         <>
-          <ellipse cx="28" cy="32" rx="14" ry="11" fill="#fb7185" />
-          <ellipse cx="72" cy="32" rx="14" ry="11" fill="#fb7185" />
-          <circle cx="50" cy="54" r="30" fill="#f9a8d4" />
-          <ellipse cx="39" cy="52" rx="9.4" ry="10" className="character-avatar-eye" fill="#3f1d2e" />
-          <ellipse cx="61" cy="52" rx="9.4" ry="10" className="character-avatar-eye" fill="#3f1d2e" />
-          <circle cx="42" cy="49" r="2.2" fill="#fff" />
-          <circle cx="64" cy="49" r="2.2" fill="#fff" />
-          <circle cx="50" cy="60" r="2.5" fill="#9d174d" />
-          <path d="M45 66 Q50 71 55 66" className="character-avatar-mouth" />
-          <circle cx="33" cy="59" r="2.3" fill="#fecdd3" />
-          <circle cx="67" cy="59" r="2.3" fill="#fecdd3" />
+          <ellipse cx="50" cy="52" rx="35" ry="31" fill="none" stroke="rgba(191,219,254,0.7)" strokeWidth="1.8" />
+          <ellipse cx="18" cy="47" rx="7.5" ry="15.5" fill="#fb7185" />
+          <ellipse cx="26" cy="39" rx="7" ry="12.5" fill="#fb7185" />
+          <ellipse cx="32" cy="49" rx="6.5" ry="11.5" fill="#fb7185" />
+          <ellipse cx="82" cy="47" rx="7.5" ry="15.5" fill="#fb7185" />
+          <ellipse cx="74" cy="39" rx="7" ry="12.5" fill="#fb7185" />
+          <ellipse cx="68" cy="49" rx="6.5" ry="11.5" fill="#fb7185" />
+          <ellipse cx="50" cy="53" rx="30" ry="27" fill="#fff7fb" />
+          <ellipse cx="50" cy="53" rx="30" ry="27" fill="none" stroke="#fecdd3" strokeWidth="2" />
+          <ellipse cx="39" cy="51" rx="9.2" ry="10.2" className="character-avatar-eye" fill="#27272a" />
+          <ellipse cx="61" cy="51" rx="9.2" ry="10.2" className="character-avatar-eye" fill="#27272a" />
+          <circle cx="42" cy="48" r="2.2" fill="#fff" />
+          <circle cx="64" cy="48" r="2.2" fill="#fff" />
+          <ellipse cx="50" cy="60" rx="2.8" ry="2.1" fill="#3f3f46" />
+          <path d="M46 66 Q50 69 54 66" className="character-avatar-mouth" />
+          <circle cx="31" cy="54" r="2.1" fill="#fda4af" />
+          <circle cx="69" cy="54" r="2.1" fill="#fda4af" />
+          <polygon points="50,24 52,29 57,29 53,32 55,37 50,34 45,37 47,32 43,29 48,29" className="character-avatar-star" />
+          <circle cx="24" cy="27" r="1.2" className="character-avatar-star" />
+          <circle cx="76" cy="27" r="1.2" className="character-avatar-star" />
           <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
           <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
         </>
@@ -617,29 +639,38 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
           <circle cx="72" cy="63" r="1.3" fill="#365314" />
           <circle cx="37" cy="68" r="1.1" fill="#365314" />
           <circle cx="63" cy="70" r="1.1" fill="#365314" />
+          <path d="M33 33 Q50 23 67 33" fill="none" stroke="rgba(125,211,252,0.7)" strokeWidth="1.6" />
+          <circle cx="50" cy="21" r="1.5" className="character-avatar-star" />
         </>
       );
-    case 'shellster':
+    case 'stardust-fish':
       return (
         <>
           <defs>
-            <radialGradient id={shellId} cx="32%" cy="24%">
-              <stop offset="0%" stopColor="#dcfce7" />
-              <stop offset="100%" stopColor="#16a34a" />
+            <radialGradient id={shellId} cx="30%" cy="26%">
+              <stop offset="0%" stopColor="#ecfeff" />
+              <stop offset="48%" stopColor="#22d3ee" />
+              <stop offset="100%" stopColor="#0e7490" />
             </radialGradient>
           </defs>
-          <circle cx="25" cy="54" r="9" fill="#a7f3d0" />
-          <circle cx="75" cy="54" r="9" fill="#a7f3d0" />
-          <circle cx="36" cy="76" r="8.6" fill="#a7f3d0" />
-          <circle cx="64" cy="76" r="8.6" fill="#a7f3d0" />
-          <ellipse cx="50" cy="54" rx="30" ry="24" fill={`url(#${shellId})`} />
-          <path d="M32 54 H68 M50 35 V73 M38 43 Q50 53 62 43 M38 65 Q50 55 62 65" stroke="#14532d" strokeWidth="2.1" fill="none" strokeLinecap="round" />
-          <circle cx="50" cy="30" r="10" fill="#bbf7d0" />
-          <circle cx="46" cy="28.5" r="2.8" className="character-avatar-eye" fill="#14532d" />
-          <circle cx="54" cy="28.5" r="2.8" className="character-avatar-eye" fill="#14532d" />
-          <path d="M46 34 Q50 37 54 34" className="character-avatar-mouth" />
-          <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
-          <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <path d="M50 10 L60 35 L86 35 L65 50 L73 76 L50 61 L27 76 L35 50 L14 35 L40 35 Z" fill={`url(#${shellId})`} />
+          <path d="M50 19 L57 37 L77 37 L61 49 L67 68 L50 56 L33 68 L39 49 L23 37 L43 37 Z" fill="none" stroke="rgba(255,255,255,0.38)" strokeWidth="1.5" />
+          <circle cx="33" cy="32" r="6" fill="#67e8f9" fillOpacity="0.26" />
+          <circle cx="67" cy="32" r="6" fill="#93c5fd" fillOpacity="0.24" />
+          <circle cx="49" cy="58" r="1.2" fill="#fff" />
+          <circle cx="56" cy="52" r="1.2" fill="#fff" />
+          <circle cx="44" cy="52" r="1.2" fill="#fff" />
+          <circle cx="42.2" cy="43" r="3.5" className="character-avatar-eye" fill="#0f172a" />
+          <circle cx="57.8" cy="43" r="3.5" className="character-avatar-eye" fill="#0f172a" />
+          <circle cx="43.3" cy="42" r="1.2" fill="#fff" />
+          <circle cx="58.9" cy="42" r="1.2" fill="#fff" />
+          <path d="M45 50 Q50 54 55 50" className="character-avatar-mouth" />
+          <circle cx="38.6" cy="48.2" r="1.7" fill="#bae6fd" />
+          <circle cx="61.4" cy="48.2" r="1.7" fill="#bae6fd" />
+          <path d="M14 51 Q50 15 86 51" fill="none" stroke="rgba(186,230,253,0.62)" strokeWidth="1.3" />
+          <circle cx="20" cy="47" r="1.15" className="character-avatar-star" />
+          <circle cx="50" cy="16" r="1.25" className="character-avatar-star" />
+          <circle cx="80" cy="47" r="1.15" className="character-avatar-star" />
         </>
       );
     case 'astro-bot':
@@ -662,6 +693,9 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
           <rect x="43" y="73" width="3.5" height="8" rx="2" fill="#60a5fa" />
           <rect x="47.5" y="73" width="3.5" height="8" rx="2" fill="#f472b6" />
           <rect x="52" y="73" width="3.5" height="8" rx="2" fill="#fbbf24" />
+          <circle cx="25" cy="31" r="1.2" className="character-avatar-star" />
+          <circle cx="75" cy="30" r="1.2" className="character-avatar-star" />
+          <circle cx="50" cy="13" r="1.4" className="character-avatar-star" />
           <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
           <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
         </>
@@ -685,22 +719,26 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
           <path d="M45 57 Q50 62 55 57" className="character-avatar-mouth" />
           <circle cx="31" cy="39" r="2.2" fill="#e9d5ff" />
           <circle cx="69" cy="39" r="2.2" fill="#e9d5ff" />
-          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
-          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <circle cx="22" cy="31" r="1.1" className="character-avatar-star" />
+          <circle cx="78" cy="33" r="1.1" className="character-avatar-star" />
+          <polygon points="50,22 51.5,26 55.5,26 52.2,28.5 53.5,32.5 50,30.1 46.5,32.5 47.8,28.5 44.5,26 48.5,26" className="character-avatar-star" />
         </>
       );
-    case 'captain-paws':
+    case 'cosmo-cat':
       return (
         <>
-          <polygon points="28,28 36,12 43,30" fill="#f472b6" />
-          <polygon points="72,28 64,12 57,30" fill="#f472b6" />
-          <circle cx="50" cy="52" r="30" fill="#fbcfe8" />
-          <ellipse cx="38" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#3f1d2e" />
-          <ellipse cx="62" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#3f1d2e" />
+          <polygon points="28,28 36,12 43,30" fill="#f59e0b" />
+          <polygon points="72,28 64,12 57,30" fill="#f59e0b" />
+          <circle cx="50" cy="52" r="30" fill="#fdba74" />
+          <ellipse cx="38" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#7c2d12" />
+          <ellipse cx="62" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#7c2d12" />
           <circle cx="40" cy="49" r="2" fill="#fff" />
           <circle cx="64" cy="49" r="2" fill="#fff" />
+          <polygon points="50,33 52,37.8 57,37.8 53,41 54.5,46 50,43.1 45.5,46 47,41 43,37.8 48,37.8" fill="#fef08a" className="character-avatar-star" />
           <path d="M45 64 Q50 69 55 64" className="character-avatar-mouth" />
-          <path d="M31 61 H40 M60 61 H69" stroke="#be185d" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M31 61 H40 M60 61 H69" stroke="#b45309" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="27" cy="35" r="1.1" className="character-avatar-star" />
+          <circle cx="73" cy="35" r="1.1" className="character-avatar-star" />
           <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
           <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
         </>
@@ -750,7 +788,7 @@ const CharacterAvatar = ({ characterId, size = 'md' }: { characterId?: string; s
   return (
     <span className={`character-avatar ${character?.kind ?? 'astronaut'} ${variant} size-${size}`} style={style} aria-hidden="true">
       <svg className="character-avatar-svg" viewBox="0 0 100 100" role="presentation">
-        {renderCharacterSprite(variant, idPrefix)}
+        <g className={`character-sprite ${variant}`}>{renderCharacterSprite(variant, idPrefix)}</g>
       </svg>
     </span>
   );
@@ -782,23 +820,24 @@ export default function App() {
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
     const saved = loadState().user?.avatarId;
-    return getCharacterById(saved)?.id ?? defaultCharacterId;
+    if (saved) return getCharacterById(saved)?.id ?? defaultCharacterId;
+    return '';
   });
   const [remoteLeaderboardRows, setRemoteLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
+  const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const explorerLevel = Math.floor(state.highs.bestTotal / 250) + 1;
-  const selectedCharacter = getCharacterById(selectedCharacterId) ?? playerCharacters[0];
-  const selectedModeConfig = modeConfig[selectedMode];
+  const selectedCharacter = getCharacterById(selectedCharacterId);
+  const isEditingProfile = Boolean(state.user);
+  const onboardingCadetName = nameInput.trim() || 'Cadet';
 
   const totalScore = run.sprintScore + run.brainScore;
   const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.highs.bestTotal;
   const runTargetTotal = run.flowTarget + run.puzzleTarget;
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
-  const puzzleSolveRate = state.museum.length
-    ? Math.round((state.museum.filter((entry) => entry.solved).length / state.museum.length) * 100)
-    : 0;
+  const hasCadetSnapshot = state.highs.bestTotal > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
 
   const save = (next: AppState) => {
     setState(next);
@@ -1284,14 +1323,15 @@ export default function App() {
 
   const completeOnboarding = async () => {
     const username = nameInput.trim();
-    if (!username || isRegisteringPlayer) return;
+    const chosenAvatarId = getCharacterById(selectedCharacterId)?.id ?? state.user?.avatarId;
+    if (!username || !chosenAvatarId || isRegisteringPlayer) return;
 
     setIsRegisteringPlayer(true);
     try {
       const registered = await registerPlayer({
         userId: state.user?.userId,
         username,
-        avatarId: selectedCharacterId
+        avatarId: chosenAvatarId
       });
 
       const nextState: AppState = {
@@ -1299,7 +1339,7 @@ export default function App() {
         user: {
           userId: registered.userId,
           username: registered.username,
-          avatarId: selectedCharacterId,
+          avatarId: chosenAvatarId,
           createdAt: registered.createdAt
         }
       };
@@ -1319,7 +1359,7 @@ export default function App() {
         user: {
           userId: state.user?.userId,
           username,
-          avatarId: selectedCharacterId,
+          avatarId: chosenAvatarId,
           createdAt: state.user?.createdAt ?? new Date().toISOString()
         }
       });
@@ -1328,6 +1368,31 @@ export default function App() {
       setIsRegisteringPlayer(false);
     }
   };
+
+  const continueToCharacterStep = () => {
+    if (!nameInput.trim()) return;
+    setOnboardingStage('character');
+  };
+
+  const pickOnboardingCharacter = (characterId: string) => {
+    setSelectedCharacterId(characterId);
+  };
+
+  const onOnboardingPrimaryAction = () => {
+    if (isEditingProfile) {
+      completeOnboarding();
+      return;
+    }
+    if (!selectedCharacter) {
+      return;
+    }
+    completeOnboarding();
+  };
+
+  useEffect(() => {
+    if (screen !== 'onboarding') return;
+    setOnboardingStage(state.user ? 'character' : 'name');
+  }, [screen, state.user?.userId]);
 
   const museumRows = useMemo(
     () =>
@@ -1387,156 +1452,162 @@ export default function App() {
   const onboarding = (
     <div className="auth-shell">
       <div className="card onboarding-card">
-        {state.user ? (
+        <div className="onboarding-brand">
+          <span className="onboarding-brand-badge" aria-hidden="true">🪐</span>
+          <div className="onboarding-brand-copy">
+            <p className="onboarding-brand-name">GALAXY GENIUS</p>
+          </div>
+        </div>
+
+        {isEditingProfile ? (
           <>
-            <h1 className="onboarding-title">Welcome to Galaxy Genius!</h1>
-            <p className="muted onboarding-intro">Update your player name or switch your character.</p>
+            <h1 className="onboarding-title">Update Cadet Profile</h1>
+            <p className="muted onboarding-intro">Change your cadet name or switch your character.</p>
           </>
         ) : (
           <>
-            <h1 className="onboarding-title">Welcome to Galaxy Genius</h1>
-            <p className="muted onboarding-intro">Create your player name and choose your first character to begin.</p>
+            {onboardingStage === 'name' ? (
+              <>
+                <h1 className="onboarding-title">Welcome, Space Cadet!</h1>
+                <p className="muted onboarding-intro">Blast through math missions and level up.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="onboarding-title">Welcome aboard, {onboardingCadetName}!</h1>
+                <p className="muted onboarding-intro">Pick your space buddy to start your first mission.</p>
+              </>
+            )}
           </>
         )}
 
-        <div className="onboarding-name-block">
-          <p className="text-label onboarding-step-label">Step 1: Pick a player name</p>
-          <input
-            className="math-input"
-            placeholder="Player name"
-            value={nameInput}
-            onChange={(event) => setNameInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') completeOnboarding();
-            }}
-          />
-        </div>
-
-        <div className="character-section">
-          <p className="text-label onboarding-step-label">Step 2: Choose your astronaut</p>
-          <div className="character-grid">
-            {playerCharacters
-              .filter((character) => character.kind === 'astronaut')
-              .map((character) => (
-                <button
-                  key={character.id}
-                  className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedCharacterId(character.id)}
-                >
-                  <div className="character-card-head">
-                    <CharacterAvatar characterId={character.id} size="md" />
-                  </div>
-                  <span className="character-name">{character.name}</span>
+        {(isEditingProfile || onboardingStage === 'name') && (
+          <div className="onboarding-name-block onboarding-phase-block">
+            <p className="text-label onboarding-step-label">{isEditingProfile ? 'Cadet name' : 'Choose your cadet name'}</p>
+            <input
+              className="math-input"
+              placeholder="RocketRyder11"
+              value={nameInput}
+              onChange={(event) => setNameInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                if (isEditingProfile) completeOnboarding();
+                else continueToCharacterStep();
+              }}
+            />
+            {!isEditingProfile && (
+              <>
+                <button className="btn btn-primary onboarding-continue-btn" disabled={!nameInput.trim()} onClick={continueToCharacterStep}>
+                  Beam Me Up
                 </button>
-              ))}
-          </div>
-          <div className="character-grid">
-            {playerCharacters
-              .filter((character) => character.kind === 'animal')
-              .map((character) => (
-                <button
-                  key={character.id}
-                  className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedCharacterId(character.id)}
-                >
-                  <div className="character-card-head">
-                    <CharacterAvatar characterId={character.id} size="md" />
-                  </div>
-                  <span className="character-name">{character.name}</span>
-                </button>
-              ))}
-          </div>
-        </div>
-
-        <div className="onboarding-footer">
-          <p className="muted selected-player-row">
-            <span className="selected-player-label">Selected:</span>
-            <span className="selected-player-avatar">
-              <CharacterAvatar characterId={selectedCharacter.id} size="sm" />
-            </span>
-            <span className="selected-player-name">{selectedCharacter.name}</span>
-          </p>
-
-          <div className="btn-row">
-            <button className="btn btn-primary" disabled={!nameInput.trim() || isRegisteringPlayer} onClick={completeOnboarding}>
-              {isRegisteringPlayer ? 'Saving...' : state.user ? 'Save Player' : 'Start Playing'}
-            </button>
-            {state.user && (
-              <button className="btn btn-secondary" onClick={() => setScreen('home')}>
-                Cancel
-              </button>
+              </>
             )}
           </div>
-        </div>
+        )}
+
+        {(isEditingProfile || onboardingStage === 'character') && (
+          <>
+            <div className="character-section onboarding-phase-block onboarding-character-section">
+              <p className="text-label onboarding-step-label">{isEditingProfile ? 'Choose Character' : 'Choose your buddy'}</p>
+              <div className="character-grid">
+                {playerCharacters.map((character) => (
+                  <button
+                    key={character.id}
+                    className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''}`}
+                    onClick={() => pickOnboardingCharacter(character.id)}
+                  >
+                    {selectedCharacterId === character.id && <span className="character-selected-badge">✓</span>}
+                    <div className="character-card-head">
+                      <CharacterAvatar characterId={character.id} size="lg" />
+                    </div>
+                    <span className="character-name">{character.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {(isEditingProfile || onboardingStage === 'character') && (
+          <div className="onboarding-footer">
+            <div className="btn-row">
+              <button
+                className={`btn btn-primary ${!isEditingProfile && !selectedCharacter ? 'btn-soft-lock' : ''}`}
+                disabled={isRegisteringPlayer || (isEditingProfile && (!nameInput.trim() || !selectedCharacter))}
+                onClick={onOnboardingPrimaryAction}
+              >
+                {isRegisteringPlayer ? 'Saving...' : isEditingProfile ? 'Save Player' : selectedCharacter ? 'Start Mission' : 'Choose a buddy to launch'}
+              </button>
+              {isEditingProfile && (
+                <button className="btn btn-secondary" onClick={() => setScreen('home')}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 
   const home = (
     <>
-      <section className="section-header">
-        <h2 className="text-title">Mission Control</h2>
+      <section className="section-header mission-header">
+        <div className="section-head-copy">
+          <h2 className="text-title">Mission Control</h2>
+        </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
       </section>
 
-      <section className="card home-hero">
-        <div className="home-hero-head">
-          <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
-          <div className="home-hero-copy">
-            <h3 className="home-hero-title">Ready for launch, {state.user?.username}?</h3>
-            <p className="home-hero-subtitle">Choose a mode and start your next space mission.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <p className="muted">Pick your space adventure:</p>
+      <section className="card mission-launch-card">
+        <p className="text-label mission-label">Choose your mission:</p>
         <div className="mode-card-grid">
           {(Object.keys(modeConfig) as GameMode[]).map((mode) => (
             <button
               key={mode}
               className={`mode-card-option ${selectedMode === mode ? 'selected' : ''}`}
-              onClick={() => setSelectedMode(mode)}
+              onClick={() => {
+                setSelectedMode(mode);
+                startRun(mode);
+              }}
             >
-              <span className="mode-card-title">{modeConfig[mode].icon} {modeConfig[mode].name}</span>
-              <span className="mode-card-subtitle">{modeConfig[mode].subtitle}</span>
-              <span className="mode-card-meta">
-                {modeConfig[mode].flowTarget > 0 ? `${modeConfig[mode].flowTarget} quick` : '0 quick'} · {modeConfig[mode].puzzleTarget} puzzles
+              <span className="mode-card-head">
+                <span className="mode-card-title">{modeConfig[mode].icon} {modeConfig[mode].name}</span>
+                <span className="mode-card-counts">
+                  {modeConfig[mode].flowTarget > 0 && modeConfig[mode].puzzleTarget > 0
+                    ? `⚡ ${modeConfig[mode].flowTarget} + 🧩 ${modeConfig[mode].puzzleTarget}`
+                    : modeConfig[mode].flowTarget > 0
+                      ? `⚡ ${modeConfig[mode].flowTarget}`
+                      : `🧩 ${modeConfig[mode].puzzleTarget}`}
+                </span>
               </span>
+              <span className="mode-card-subtitle">{modeConfig[mode].subtitle}</span>
             </button>
           ))}
         </div>
-        {!isMobileViewport && (
-          <div className="btn-row">
-            <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
-              {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
-            </button>
-          </div>
-        )}
       </section>
 
-      <section className="section-header player-title">
-        <h3 className="text-title">Player Pulse</h3>
-      </section>
+      {hasCadetSnapshot && (
+        <>
+          <section className="section-header player-title">
+            <h3 className="text-title">Cadet Snapshot</h3>
+          </section>
 
-      <section className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-value">{state.highs.bestTotal}</span>
-          <span className="stat-label">⭐ Best Score</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value accent">{state.streaks.dailyStreak}</span>
-          <span className="stat-label">🔥 Day Streak</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{puzzleSolveRate}%</span>
-          <span className="stat-label">🧠 Puzzle Solve</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{state.museum.length}</span>
-          <span className="stat-label">🏆 Trophies</span>
-        </div>
-      </section>
+          <section className="stats-grid snapshot-grid">
+            <div className="stat-card">
+              <span className="stat-value accent">{state.streaks.dailyStreak}</span>
+              <span className="stat-label">🔥 Day Streak</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">{state.highs.bestTotal}</span>
+              <span className="stat-label">⭐ Best Score</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">{state.streaks.puzzleStreak}</span>
+              <span className="stat-label">🧠 Puzzle Streak</span>
+            </div>
+          </section>
+        </>
+      )}
     </>
   );
 
@@ -2015,10 +2086,7 @@ export default function App() {
         </div>
       )}
 
-      <div
-        className={`app-container ${screen === 'home' && isMobileViewport ? 'home-mobile-with-cta' : ''}`}
-        ref={appContainerRef}
-      >
+      <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
           <button className="user-pill user-pill-button" onClick={() => setScreen('onboarding')}>
             <CharacterAvatar characterId={state.user.avatarId} size="xs" />
@@ -2044,14 +2112,6 @@ export default function App() {
             <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
           </div>
         </section>
-      )}
-
-      {screen === 'home' && isMobileViewport && (
-        <div className="btn-row home-mode-actions">
-          <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>
-            {runInProgress ? `New ${selectedModeConfig.name}` : `Start ${selectedModeConfig.name}`}
-          </button>
-        </div>
       )}
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
