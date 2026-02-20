@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardRow } from './lib/leaderboard-api';
@@ -45,43 +45,37 @@ const PUZZLE_TARGET = 3;
 const MAX_HINTS_PER_QUESTION = 2;
 
 const playerCharacters: PlayerCharacter[] = [
-  { id: 'astro-starlight', emoji: '👩‍🚀', name: 'Starlight', vibe: 'Sparkly (feminine)', kind: 'astronaut' },
-  { id: 'astro-comet', emoji: '👨‍🚀', name: 'Comet Ace', vibe: 'Classic (boyish)', kind: 'astronaut' },
-  { id: 'astro-nebula', emoji: '🧑‍🚀', name: 'Nebula Nova', vibe: 'Neutral', kind: 'astronaut' },
-  { id: 'astro-cadet', emoji: '🛸', name: 'Sky Cadet', vibe: 'Goofy', kind: 'astronaut' },
-  { id: 'animal-space-fox', emoji: '🦊', name: 'Zippy Fox', vibe: 'Sneaky + zany', kind: 'animal' },
-  { id: 'animal-cosmic-cat', emoji: '🐱', name: 'Captain Paws', vibe: 'Cute + clever', kind: 'animal' },
-  { id: 'animal-octo-pilot', emoji: '🐙', name: 'Octo Pilot', vibe: 'Wacky', kind: 'animal' },
-  { id: 'animal-panda-jet', emoji: '🐼', name: 'Panda Jet', vibe: 'Calm + funny', kind: 'animal' }
+  { id: 'astro-cactus-cadet', emoji: '🌵', name: 'Cactus Cadet', vibe: 'Spiky + silly', kind: 'astronaut' },
+  { id: 'astro-bot', emoji: '🤖', name: 'Astro Bot', vibe: 'Cheerful robot astronaut', kind: 'astronaut' },
+  { id: 'animal-axo-naut', emoji: '🦎', name: 'Axo-Naut', vibe: 'Coral pink explorer', kind: 'animal' },
+  { id: 'animal-shellster', emoji: '🐢', name: 'Shellster', vibe: 'Steady turtle pilot', kind: 'animal' },
+  { id: 'animal-jelly-jet', emoji: '🪼', name: 'Jelly Jet', vibe: 'Floaty neon jellyfish', kind: 'animal' },
+  { id: 'animal-captain-paws', emoji: '🐱', name: 'Captain Paws', vibe: 'Mischievous cat captain', kind: 'animal' }
 ];
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
-  'astro-starlight': { base: '#F9A8D4', accent: '#F472B6', trim: '#FDE68A', mark: '#1F2937' },
-  'astro-comet': { base: '#93C5FD', accent: '#3B82F6', trim: '#E2E8F0', mark: '#0F172A' },
-  'astro-nebula': { base: '#C4B5FD', accent: '#8B5CF6', trim: '#BAE6FD', mark: '#1E1B4B' },
-  'astro-cadet': { base: '#67E8F9', accent: '#06B6D4', trim: '#86EFAC', mark: '#082F49' },
-  'animal-space-fox': { base: '#FDBA74', accent: '#FB923C', trim: '#FDE68A', mark: '#431407' },
-  'animal-cosmic-cat': { base: '#F9A8D4', accent: '#EC4899', trim: '#C4B5FD', mark: '#3F1D2E' },
-  'animal-octo-pilot': { base: '#A78BFA', accent: '#7C3AED', trim: '#FBCFE8', mark: '#1E1B4B' },
-  'animal-panda-jet': { base: '#E2E8F0', accent: '#94A3B8', trim: '#67E8F9', mark: '#020617' }
+  'astro-cactus-cadet': { base: '#d9f99d', accent: '#84cc16', trim: '#fef08a', mark: '#365314' },
+  'astro-bot': { base: '#f8fafc', accent: '#60a5fa', trim: '#e2e8f0', mark: '#0f172a' },
+  'animal-axo-naut': { base: '#f9a8d4', accent: '#fb7185', trim: '#fecdd3', mark: '#3f1d2e' },
+  'animal-shellster': { base: '#bbf7d0', accent: '#16a34a', trim: '#dcfce7', mark: '#14532d' },
+  'animal-jelly-jet': { base: '#c4b5fd', accent: '#7c3aed', trim: '#e9d5ff', mark: '#312e81' },
+  'animal-captain-paws': { base: '#fbcfe8', accent: '#f472b6', trim: '#f5f3ff', mark: '#3f1d2e' }
 };
 const characterVariantById: Record<string, string> = {
-  'astro-starlight': 'astro-star',
-  'astro-comet': 'astro-classic',
-  'astro-nebula': 'astro-round',
-  'astro-cadet': 'astro-goofy',
-  'animal-space-fox': 'animal-fox',
-  'animal-cosmic-cat': 'animal-cat',
-  'animal-octo-pilot': 'animal-octo',
-  'animal-panda-jet': 'animal-panda'
+  'astro-cactus-cadet': 'cactus-cadet',
+  'astro-bot': 'astro-bot',
+  'animal-axo-naut': 'axo-naut',
+  'animal-shellster': 'shellster',
+  'animal-jelly-jet': 'jelly-jet',
+  'animal-captain-paws': 'captain-paws'
 };
 
 const fallbackLeaderboardRows: LeaderboardRow[] = [
-  { rank: 1, userId: 'bot-astro', username: 'Astro', avatarId: 'astro-comet', score: 14200, updatedAt: '', isBot: true },
-  { rank: 2, userId: 'bot-nova', username: 'Nova', avatarId: 'astro-starlight', score: 13780, updatedAt: '', isBot: true },
-  { rank: 3, userId: 'bot-cyber', username: 'Cyber', avatarId: 'astro-cadet', score: 13040, updatedAt: '', isBot: true },
-  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-space-fox', score: 11900, updatedAt: '', isBot: true },
-  { rank: 5, userId: 'bot-sputnik', username: 'Sputnik', avatarId: 'animal-panda-jet', score: 10800, updatedAt: '', isBot: true }
+  { rank: 1, userId: 'bot-astro', username: 'Astro', avatarId: 'astro-bot', score: 14200, updatedAt: '', isBot: true },
+  { rank: 2, userId: 'bot-nova', username: 'Nova', avatarId: 'animal-axo-naut', score: 13780, updatedAt: '', isBot: true },
+  { rank: 3, userId: 'bot-cyber', username: 'Cyber', avatarId: 'astro-cactus-cadet', score: 13040, updatedAt: '', isBot: true },
+  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-shellster', score: 11900, updatedAt: '', isBot: true },
+  { rank: 5, userId: 'bot-sputnik', username: 'Sputnik', avatarId: 'animal-jelly-jet', score: 10800, updatedAt: '', isBot: true }
 ];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
@@ -579,9 +573,166 @@ const InlineMathText = ({ text }: { text: string }) => {
   return <>{parts}</>;
 };
 
+const renderCharacterSprite = (variant: string, idPrefix: string) => {
+  const shellId = `${idPrefix}-shell`;
+  const orbId = `${idPrefix}-orb`;
+  const haloId = `${idPrefix}-halo`;
+
+  switch (variant) {
+    case 'axo-naut':
+      return (
+        <>
+          <ellipse cx="28" cy="32" rx="14" ry="11" fill="#fb7185" />
+          <ellipse cx="72" cy="32" rx="14" ry="11" fill="#fb7185" />
+          <circle cx="50" cy="54" r="30" fill="#f9a8d4" />
+          <ellipse cx="39" cy="52" rx="9.4" ry="10" className="character-avatar-eye" fill="#3f1d2e" />
+          <ellipse cx="61" cy="52" rx="9.4" ry="10" className="character-avatar-eye" fill="#3f1d2e" />
+          <circle cx="42" cy="49" r="2.2" fill="#fff" />
+          <circle cx="64" cy="49" r="2.2" fill="#fff" />
+          <circle cx="50" cy="60" r="2.5" fill="#9d174d" />
+          <path d="M45 66 Q50 71 55 66" className="character-avatar-mouth" />
+          <circle cx="33" cy="59" r="2.3" fill="#fecdd3" />
+          <circle cx="67" cy="59" r="2.3" fill="#fecdd3" />
+          <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+    case 'cactus-cadet':
+      return (
+        <>
+          <rect x="8" y="44" width="26" height="17" rx="8.5" fill="#bef264" transform="rotate(-18 21 52)" />
+          <rect x="66" y="44" width="26" height="17" rx="8.5" fill="#bef264" transform="rotate(18 79 52)" />
+          <rect x="24" y="28" width="52" height="54" rx="15" fill="#d9f99d" />
+          <line x1="50" y1="28" x2="50" y2="14" stroke="#84cc16" strokeWidth="2.2" />
+          <circle cx="50" cy="13" r="3.6" fill="#fef08a" />
+          <circle cx="40" cy="50" r="7.3" fill="#f8fafc" />
+          <circle cx="60" cy="50" r="7.3" fill="#f8fafc" />
+          <circle cx="40" cy="50" r="2.7" className="character-avatar-eye" fill="#111827" />
+          <circle cx="60" cy="50" r="2.7" className="character-avatar-eye" fill="#111827" />
+          <path d="M45 61 Q50 66 55 61" className="character-avatar-mouth" />
+          <rect x="27" y="76" width="46" height="18" rx="8" fill="#1f2937" />
+          <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <circle cx="30" cy="37" r="1.3" fill="#365314" />
+          <circle cx="72" cy="63" r="1.3" fill="#365314" />
+          <circle cx="37" cy="68" r="1.1" fill="#365314" />
+          <circle cx="63" cy="70" r="1.1" fill="#365314" />
+        </>
+      );
+    case 'shellster':
+      return (
+        <>
+          <defs>
+            <radialGradient id={shellId} cx="32%" cy="24%">
+              <stop offset="0%" stopColor="#dcfce7" />
+              <stop offset="100%" stopColor="#16a34a" />
+            </radialGradient>
+          </defs>
+          <circle cx="25" cy="54" r="9" fill="#a7f3d0" />
+          <circle cx="75" cy="54" r="9" fill="#a7f3d0" />
+          <circle cx="36" cy="76" r="8.6" fill="#a7f3d0" />
+          <circle cx="64" cy="76" r="8.6" fill="#a7f3d0" />
+          <ellipse cx="50" cy="54" rx="30" ry="24" fill={`url(#${shellId})`} />
+          <path d="M32 54 H68 M50 35 V73 M38 43 Q50 53 62 43 M38 65 Q50 55 62 65" stroke="#14532d" strokeWidth="2.1" fill="none" strokeLinecap="round" />
+          <circle cx="50" cy="30" r="10" fill="#bbf7d0" />
+          <circle cx="46" cy="28.5" r="2.8" className="character-avatar-eye" fill="#14532d" />
+          <circle cx="54" cy="28.5" r="2.8" className="character-avatar-eye" fill="#14532d" />
+          <path d="M46 34 Q50 37 54 34" className="character-avatar-mouth" />
+          <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+    case 'astro-bot':
+      return (
+        <>
+          <defs>
+            <radialGradient id={haloId} cx="50%" cy="26%">
+              <stop offset="0%" stopColor="#0f172a" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#0f172a" stopOpacity="0.95" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="46" r="30" fill="none" stroke="#f8fafc" strokeWidth="8" />
+          <circle cx="50" cy="46" r="24" fill={`url(#${haloId})`} />
+          <circle cx="41" cy="45" r="5.2" fill="#f8fafc" />
+          <circle cx="59" cy="45" r="5.2" fill="#f8fafc" />
+          <circle cx="41" cy="45" r="2.2" className="character-avatar-eye" fill="#111827" />
+          <circle cx="59" cy="45" r="2.2" className="character-avatar-eye" fill="#111827" />
+          <path d="M44 56 Q50 62 56 56" className="character-avatar-mouth" stroke="#f472b6" />
+          <rect x="37" y="66" width="26" height="20" rx="8" fill="#f8fafc" />
+          <rect x="43" y="73" width="3.5" height="8" rx="2" fill="#60a5fa" />
+          <rect x="47.5" y="73" width="3.5" height="8" rx="2" fill="#f472b6" />
+          <rect x="52" y="73" width="3.5" height="8" rx="2" fill="#fbbf24" />
+          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+    case 'jelly-jet':
+      return (
+        <>
+          <defs>
+            <radialGradient id={orbId} cx="34%" cy="30%">
+              <stop offset="0%" stopColor="#ddd6fe" />
+              <stop offset="45%" stopColor="#a78bfa" />
+              <stop offset="100%" stopColor="#7c3aed" />
+            </radialGradient>
+          </defs>
+          <path d="M24 46 Q50 18 76 46 V62 Q50 76 24 62 Z" fill={`url(#${orbId})`} />
+          <path d="M34 63 V84 M44 65 V88 M56 65 V88 M66 63 V84" stroke="#a78bfa" strokeWidth="4" strokeLinecap="round" />
+          <circle cx="41" cy="47" r="6.4" fill="#f8fafc" />
+          <circle cx="59" cy="47" r="6.4" fill="#f8fafc" />
+          <circle cx="41" cy="47" r="2.5" className="character-avatar-eye" fill="#312e81" />
+          <circle cx="59" cy="47" r="2.5" className="character-avatar-eye" fill="#312e81" />
+          <path d="M45 57 Q50 62 55 57" className="character-avatar-mouth" />
+          <circle cx="31" cy="39" r="2.2" fill="#e9d5ff" />
+          <circle cx="69" cy="39" r="2.2" fill="#e9d5ff" />
+          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+    case 'captain-paws':
+      return (
+        <>
+          <polygon points="28,28 36,12 43,30" fill="#f472b6" />
+          <polygon points="72,28 64,12 57,30" fill="#f472b6" />
+          <circle cx="50" cy="52" r="30" fill="#fbcfe8" />
+          <ellipse cx="38" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#3f1d2e" />
+          <ellipse cx="62" cy="52" rx="8.3" ry="8.8" className="character-avatar-eye" fill="#3f1d2e" />
+          <circle cx="40" cy="49" r="2" fill="#fff" />
+          <circle cx="64" cy="49" r="2" fill="#fff" />
+          <path d="M45 64 Q50 69 55 64" className="character-avatar-mouth" />
+          <path d="M31 61 H40 M60 61 H69" stroke="#be185d" strokeWidth="1.8" strokeLinecap="round" />
+          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+    case 'animal-cat':
+    case 'astro-classic':
+    case 'astro-round':
+    case 'astro-goofy':
+    case 'astro-star':
+    case 'animal-octo':
+    case 'animal-panda':
+    case 'animal-fox':
+    default:
+      return (
+        <>
+          <circle cx="50" cy="52" r="30" fill="#e2e8f0" />
+          <circle cx="40" cy="52" r="8" className="character-avatar-eye" fill="#0f172a" />
+          <circle cx="60" cy="52" r="8" className="character-avatar-eye" fill="#0f172a" />
+          <circle cx="42" cy="50" r="2" fill="#fff" />
+          <circle cx="62" cy="50" r="2" fill="#fff" />
+          <path d="M45 64 Q50 69 55 64" className="character-avatar-mouth" />
+          <ellipse cx="41" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="59" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+        </>
+      );
+  }
+};
+
 const CharacterAvatar = ({ characterId, size = 'md' }: { characterId?: string; size?: 'xs' | 'sm' | 'md' | 'lg' }) => {
   const character = getCharacterById(characterId);
-  const variant = characterVariantById[character?.id ?? ''] ?? 'astro-classic';
+  const variant = characterVariantById[character?.id ?? ''] ?? 'astro-bot';
+  const idPrefix = useId().replace(/:/g, '');
   const palette = characterPaletteById[character?.id ?? ''] ?? {
     base: '#93C5FD',
     accent: '#3B82F6',
@@ -598,25 +749,9 @@ const CharacterAvatar = ({ characterId, size = 'md' }: { characterId?: string; s
 
   return (
     <span className={`character-avatar ${character?.kind ?? 'astronaut'} ${variant} size-${size}`} style={style} aria-hidden="true">
-      <span className="character-avatar-head">
-        <span className="character-avatar-face">
-          <span className="character-avatar-eye" />
-          <span className="character-avatar-eye" />
-        </span>
-        <span className="character-avatar-mouth" />
-        <span className="character-avatar-feature feature-a" />
-        <span className="character-avatar-feature feature-b" />
-        <span className="character-avatar-blush" />
-      </span>
-      <span className="character-avatar-body">
-        <span className="character-avatar-belly" />
-        <span className="character-avatar-feature body-feature" />
-      </span>
-      <span className="character-avatar-feet">
-        <span className="character-avatar-foot" />
-        <span className="character-avatar-foot" />
-      </span>
-      <span className="character-avatar-accent" />
+      <svg className="character-avatar-svg" viewBox="0 0 100 100" role="presentation">
+        {renderCharacterSprite(variant, idPrefix)}
+      </svg>
     </span>
   );
 };
@@ -668,6 +803,15 @@ export default function App() {
   const save = (next: AppState) => {
     setState(next);
     saveState(next);
+  };
+
+  const resetScrollToTop = () => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    const container = appContainerRef.current;
+    if (container) container.scrollTop = 0;
   };
 
   const resetInputAndFeedback = () => {
@@ -756,11 +900,10 @@ export default function App() {
     setHomeNavRevealed(false);
   }, [screen]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    const container = appContainerRef.current;
-    if (container) container.scrollTop = 0;
+  useLayoutEffect(() => {
+    resetScrollToTop();
+    const rafId = window.requestAnimationFrame(() => resetScrollToTop());
+    return () => window.cancelAnimationFrame(rafId);
   }, [screen]);
 
   useEffect(() => {

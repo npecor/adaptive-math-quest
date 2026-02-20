@@ -148,11 +148,8 @@ p {
 }
 
 .result-flash.error .result-flash-character .character-avatar-mouth {
-  width: 23%;
-  height: 12%;
-  border-bottom: 0;
-  border-top: 2px solid var(--char-mark);
-  border-radius: 10px 10px 0 0;
+  transform: translateY(2px) scaleY(-1);
+  transform-origin: center;
 }
 
 @keyframes result-somersault {
@@ -713,6 +710,184 @@ p {
 .character-avatar.animal-panda .character-avatar-mouth {
   width: 12%;
   border-bottom-color: #0f172a;
+}
+
+.character-avatar {
+  display: inline-grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.character-avatar.size-xs { width: 28px; height: 28px; }
+.character-avatar.size-sm { width: 34px; height: 34px; }
+.character-avatar.size-md { width: 44px; height: 44px; }
+.character-avatar.size-lg { width: 60px; height: 60px; }
+
+.character-avatar::before,
+.character-avatar::after {
+  content: none;
+}
+
+.character-avatar-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+  animation: idle-float 3.8s ease-in-out infinite;
+  transform-origin: 50% 58%;
+}
+
+.character-avatar-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.character-avatar-mouth {
+  fill: none;
+  stroke: var(--char-mark);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.character-avatar-foot {
+  fill: rgba(255, 255, 255, 0.56);
+}
+
+.character-avatar.axo-naut .character-avatar-svg {
+  animation: idle-axolotl 3.2s ease-in-out infinite;
+}
+
+.character-avatar.shellster .character-avatar-svg {
+  animation: idle-shellster 4.8s ease-in-out infinite;
+}
+
+.character-avatar.jelly-jet .character-avatar-svg {
+  animation: idle-jelly 2.9s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
+}
+
+.character-avatar.captain-paws .character-avatar-svg {
+  animation: idle-cat 3.1s ease-in-out infinite;
+}
+
+.character-avatar.cactus-cadet .character-avatar-svg {
+  animation: idle-cactus 2.6s ease-in-out infinite;
+}
+
+.character-avatar.astro-bot .character-avatar-svg {
+  animation: idle-bot 3.6s ease-in-out infinite;
+}
+
+.character-avatar.axo-naut .character-avatar-eye {
+  animation: blink-axolotl 3s steps(1, end) infinite;
+}
+
+.character-avatar.shellster .character-avatar-eye {
+  animation: blink-shellster 4.2s steps(1, end) infinite;
+}
+
+.character-avatar.jelly-jet .character-avatar-eye {
+  animation: blink-jelly 2.2s steps(1, end) infinite;
+}
+
+.character-avatar.captain-paws .character-avatar-eye {
+  animation: blink-cat 2.5s steps(1, end) infinite;
+}
+
+.character-avatar.cactus-cadet .character-avatar-eye {
+  animation: blink-cactus 2.7s steps(1, end) infinite;
+}
+
+.character-avatar.astro-bot .character-avatar-eye {
+  animation: blink-bot 3.6s steps(1, end) infinite;
+}
+
+.result-flash-character .character-avatar-svg {
+  animation: none;
+}
+
+@keyframes idle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.2px); }
+}
+
+@keyframes idle-axolotl {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  30% { transform: translateY(-1.3px) rotate(1.2deg); }
+  65% { transform: translateY(-0.2px) rotate(-1.4deg); }
+}
+
+@keyframes idle-shellster {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-0.8px) scale(0.985); }
+}
+
+@keyframes idle-jelly {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-1.8px) scaleY(1.03); }
+  70% { transform: translateY(0.8px) scaleY(0.97); }
+}
+
+@keyframes idle-cat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1.2px) rotate(-1.8deg); }
+  75% { transform: translateY(-0.3px) rotate(1.8deg); }
+}
+
+@keyframes idle-cactus {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-0.8px) rotate(-1.2deg); }
+  60% { transform: translateY(-1.5px) rotate(1.2deg); }
+}
+
+@keyframes idle-bot {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  20% { transform: translateY(-1px) rotate(-1.1deg); }
+  40% { transform: translateY(0) rotate(1.1deg); }
+  60% { transform: translateY(-1px) rotate(-0.9deg); }
+  80% { transform: translateY(0) rotate(0.9deg); }
+}
+
+@keyframes blink-axolotl {
+  0%, 42%, 46%, 90%, 94%, 100% { transform: scaleY(1); }
+  44%, 92% { transform: scaleY(0.2); }
+}
+
+@keyframes blink-shellster {
+  0%, 55%, 59%, 100% { transform: scaleY(1); }
+  57% { transform: scaleY(0.25); }
+}
+
+@keyframes blink-jelly {
+  0%, 34%, 38%, 68%, 72%, 100% { transform: scaleY(1); }
+  36%, 70% { transform: scaleY(0.15); }
+}
+
+@keyframes blink-cat {
+  0%, 36%, 40%, 74%, 78%, 100% { transform: scaleY(1); }
+  38%, 76% { transform: scaleY(0.18); }
+}
+
+@keyframes blink-cactus {
+  0%, 44%, 48%, 84%, 88%, 100% { transform: scaleY(1); }
+  46%, 86% { transform: scaleY(0.2); }
+}
+
+@keyframes blink-bot {
+  0%, 40%, 44%, 80%, 84%, 100% { transform: scaleY(1); }
+  42%, 82% { transform: scaleY(0.22); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-avatar-svg,
+  .character-avatar-eye,
+  .character-avatar-mouth,
+  .character-avatar-foot,
+  .character-avatar {
+    animation: none !important;
+  }
 }
 
 .text-label {
@@ -1844,21 +2019,13 @@ p {
 
 @keyframes character-expression {
   0%, 100% {
-    width: 18%;
-    border-bottom-width: 2px;
-    border-bottom-color: var(--char-mark);
-    transform: translateY(0);
+    transform: translateY(0) scaleX(1);
   }
   30% {
-    width: 24%;
-    border-bottom-width: 2.4px;
-    transform: translateY(-1px);
+    transform: translateY(-0.6px) scaleX(1.2);
   }
   60% {
-    width: 14%;
-    border-bottom-width: 1.4px;
-    border-bottom-color: rgba(15, 23, 42, 0.86);
-    transform: translateY(1px);
+    transform: translateY(0.8px) scaleX(0.84);
   }
 }
 
@@ -1951,12 +2118,10 @@ p {
 
 @keyframes footer-expression {
   0%, 100% {
-    width: 18%;
-    border-bottom-width: 2px;
+    transform: translateY(0) scaleX(1);
   }
   50% {
-    width: 23%;
-    border-bottom-width: 2.4px;
+    transform: translateY(-0.4px) scaleX(1.15);
   }
 }
 
