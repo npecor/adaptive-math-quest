@@ -1210,6 +1210,11 @@ p {
   gap: 8px;
 }
 
+.puzzle-helper-actions {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .utility-btn {
   width: 100%;
   min-height: 34px;
@@ -1232,6 +1237,20 @@ p {
 .helper-actions .utility-btn:only-child {
   grid-column: 1 / -1;
   max-width: 170px;
+}
+
+.help-circle-btn {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  min-width: 34px;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  flex: 0 0 34px;
+  justify-self: end;
 }
 
 .btn:disabled {

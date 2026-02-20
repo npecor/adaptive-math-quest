@@ -187,6 +187,18 @@ const getPuzzleChoiceOptions = (puzzle: PuzzleItem): string[] => {
   return getPuzzleAnswerChoices(puzzle.core_answer) ?? [];
 };
 
+const cleanChoiceMarker = (text: string) =>
+  text
+    .replace(/^\s*[A-Z]\)\s*/g, '')
+    .replace(/\s+[A-Z]\)\s+/g, ' ')
+    .trim();
+
+const cleanPuzzlePromptDisplay = (prompt: string) =>
+  prompt
+    .split('\n')
+    .map((line) => cleanChoiceMarker(line))
+    .join('\n');
+
 const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long_text' => {
   if (puzzle.answer_type) return puzzle.answer_type;
   if (getPuzzleAnswerChoices(puzzle.core_answer)) return 'choice';
@@ -2142,7 +2154,7 @@ export default function App() {
               <span className="tag difficulty-tag">{getTier(run.currentPuzzle.difficulty).icon} {getTier(run.currentPuzzle.difficulty).label}</span>
             </div>
             <h3 className="puzzle-question-title">{run.currentPuzzle.title}</h3>
-            <p className="puzzle-question-prompt"><InlineMathText text={run.currentPuzzle.core_prompt} /></p>
+            <p className="puzzle-question-prompt"><InlineMathText text={cleanPuzzlePromptDisplay(run.currentPuzzle.core_prompt)} /></p>
             {getPuzzleInputMode(run.currentPuzzle) === 'choice' ? (
               <div className="chips">
                 {getPuzzleChoiceOptions(run.currentPuzzle).map((choice) => (
@@ -2151,7 +2163,7 @@ export default function App() {
                     className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
                     onClick={() => setInput(choice)}
                   >
-                    <InlineMathText text={choice} />
+                    <InlineMathText text={cleanChoiceMarker(choice)} />
                   </button>
                 ))}
               </div>
@@ -2182,7 +2194,7 @@ export default function App() {
                 <span aria-hidden="true">🚀</span> Blast Off!
               </button>
             </div>
-            <div className="helper-actions">
+            <div className="helper-actions puzzle-helper-actions">
               <button
                 className="btn btn-secondary utility-btn"
                 onClick={() => {
@@ -2195,21 +2207,22 @@ export default function App() {
               </button>
               <button
                 className="btn btn-secondary utility-btn"
+                onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
+                disabled={run.currentHints >= MAX_PUZZLE_HINTS}
+              >
+                <span aria-hidden="true">😉</span> Hint
+              </button>
+              <button
+                className="btn btn-secondary help-circle-btn"
                 onClick={() => {
                   setShowClarifyDialog(true);
                   setShowTutor(false);
                 }}
+                aria-label="Help"
+                title="Help"
               >
-                <span aria-hidden="true">❓</span> I have a question
+                ?
               </button>
-              {run.currentHints < MAX_PUZZLE_HINTS && (
-                <button
-                  className="btn btn-secondary utility-btn"
-                  onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
-                >
-                  <span aria-hidden="true">😉</span> Hint
-                </button>
-              )}
             </div>
 
             {run.currentHints > 0 && (
