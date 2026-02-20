@@ -13,6 +13,7 @@ export const defaultState: AppState = {
     runsPlayed: 0,
     trophiesEarned: 0,
     extensionsSolved: 0,
+    allTimePuzzleCorrect: 0,
     allTimePuzzleTries: 0
   },
   solvedPuzzleIds: []
@@ -26,10 +27,21 @@ const normalizeState = (raw: unknown): AppState => {
   const solvedFromMuseum = museum.filter((entry) => entry?.solved).map((entry) => entry.puzzleId);
   const solvedPuzzleIds = unique([...(Array.isArray(parsed.solvedPuzzleIds) ? parsed.solvedPuzzleIds : []), ...solvedFromMuseum]);
   const extensionsSolved = museum.reduce((sum, entry) => sum + (entry?.solved ? entry.extensionsCompleted ?? 0 : 0), 0);
+  const parsedTotals: Partial<AppState['totals']> = parsed.totals ?? {};
+  const allTimePuzzleCorrect =
+    typeof parsedTotals.allTimePuzzleCorrect === 'number'
+      ? parsedTotals.allTimePuzzleCorrect
+      : solvedPuzzleIds.length;
+  const allTimePuzzleTries = Math.max(
+    typeof parsedTotals.allTimePuzzleTries === 'number'
+      ? parsedTotals.allTimePuzzleTries
+      : Math.max(defaultState.totals.allTimePuzzleTries, allTimePuzzleCorrect),
+    allTimePuzzleCorrect
+  );
 
   const totals = {
     ...defaultState.totals,
-    ...(parsed.totals ?? {}),
+    ...parsedTotals,
     allTimeStars:
       parsed.totals?.allTimeStars ??
       (typeof parsed.highs?.bestTotal === 'number' ? parsed.highs.bestTotal : defaultState.totals.allTimeStars),
@@ -37,7 +49,9 @@ const normalizeState = (raw: unknown): AppState => {
       parsed.totals?.bestRunStars ??
       (typeof parsed.highs?.bestTotal === 'number' ? parsed.highs.bestTotal : defaultState.totals.bestRunStars),
     trophiesEarned: solvedPuzzleIds.length,
-    extensionsSolved
+    extensionsSolved,
+    allTimePuzzleCorrect,
+    allTimePuzzleTries
   };
 
   return {

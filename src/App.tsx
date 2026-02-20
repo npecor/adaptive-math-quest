@@ -926,7 +926,10 @@ export default function App() {
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
   const puzzleSolveRate = state.totals.allTimePuzzleTries
-    ? Math.max(0, Math.min(100, Math.round((state.totals.trophiesEarned / state.totals.allTimePuzzleTries) * 100)))
+    ? Math.max(
+        0,
+        Math.min(100, Math.round((state.totals.allTimePuzzleCorrect / state.totals.allTimePuzzleTries) * 100))
+      )
     : 0;
   const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
 
@@ -1362,6 +1365,7 @@ export default function App() {
     const totals = recalcTotals(
       {
         ...applyStarAward(state.totals, gain),
+        allTimePuzzleCorrect: state.totals.allTimePuzzleCorrect + (correct ? 1 : 0),
         allTimePuzzleTries: state.totals.allTimePuzzleTries + 1
       },
       solvedPuzzleIds,
@@ -1915,7 +1919,7 @@ export default function App() {
           </div>
           <div className="stat-card">
             <span className="stat-value">{puzzleSolveRate}%</span>
-            <span className="stat-label">🧠 Puzzle Solve</span>
+            <span className="stat-label">🧠 Puzzles Solved</span>
           </div>
           <div className="stat-card">
             <span className="stat-value">{state.museum.length}</span>

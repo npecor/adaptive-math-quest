@@ -9,6 +9,7 @@ const baseTotals = (): TotalsState => ({
   runsPlayed: 0,
   trophiesEarned: 0,
   extensionsSolved: 0,
+  allTimePuzzleCorrect: 0,
   allTimePuzzleTries: 0
 });
 

@@ -81,6 +81,7 @@ export interface TotalsState {
   runsPlayed: number;
   trophiesEarned: number;
   extensionsSolved: number;
+  allTimePuzzleCorrect: number;
   allTimePuzzleTries: number;
 }
 
