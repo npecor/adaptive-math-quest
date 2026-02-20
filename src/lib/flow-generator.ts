@@ -168,6 +168,8 @@ const createAddSub = (difficulty: number): BuiltFlow => {
       }
     }
     const result = a + b;
+    const tens = Math.floor(b / 10) * 10;
+    const ones = b - tens;
     return {
       signature: `addsub-add-${a}-${b}`,
       template: 'add_sub',
@@ -177,9 +179,9 @@ const createAddSub = (difficulty: number): BuiltFlow => {
       prompt: `${a} + ${b} = ?`,
       answer: String(result),
       hints: [
-        'Break into tens and ones.',
-        `${a} + ${b}`,
-        'Add tens first, then ones.'
+        `Split ${b} into tens and ones: ${tens} and ${ones}.`,
+        `Rewrite: ${a}+${b} = (${a}+${tens}) + ${ones}.`,
+        `Do each part, then add: ${a}+${tens} first, then +${ones} to get ${result}.`
       ],
       solution_steps: [`${a} + ${b} = ${result}.`, `Answer: ${result}.`]
     };
@@ -201,6 +203,8 @@ const createAddSub = (difficulty: number): BuiltFlow => {
   }
   const result = left - right;
   const shapeSignature = result < 0 ? 'addsub_sub_neg' : 'addsub_sub_pos';
+  const tens = Math.floor(right / 10) * 10;
+  const ones = right - tens;
   return {
     signature: `addsub-sub-${left}-${right}`,
     template: 'add_sub',
@@ -210,9 +214,9 @@ const createAddSub = (difficulty: number): BuiltFlow => {
     prompt: `${left} - ${right} = ?`,
     answer: String(result),
     hints: [
-      'Subtract tens, then ones.',
-      `${left} - ${right}`,
-      'Check with addition after you solve.'
+      `Break ${right} into tens and ones: ${tens} and ${ones}.`,
+      `Rewrite: ${left}-${right} = (${left}-${tens})-${ones}.`,
+      `Do each part, then check with addition: ${result}+${right} = ${left}.`
     ],
     solution_steps: [`${left} - ${right} = ${result}.`, `Answer: ${result}.`]
   };
@@ -355,9 +359,9 @@ const createFractionCompare = (difficulty: number): BuiltFlow => {
     answer,
     hints: [
       shapeSignature === 'frac_compare_same_denominator'
-        ? 'Same denominator: bigger numerator wins.'
+        ? 'Same bottom number? Bigger top number is bigger.'
         : shapeSignature === 'frac_compare_same_numerator'
-          ? 'Same numerator: smaller denominator is larger.'
+          ? 'Same top number? Smaller bottom number is bigger.'
           : 'Cross-multiply to compare without decimals.',
       shapeSignature === 'frac_compare_pair' ? `${n1}×${d2} vs ${n2}×${d1}` : `Compare ${n1}/${d1} and ${n2}/${d2}.`,
       'Pick the larger fraction (or same if equal).'
@@ -485,6 +489,37 @@ const createPercent = (difficulty: number): BuiltFlow => {
     base = denom * randInt(4, 20);
     result = (percent / 100) * base;
   }
+  const tenPercent = base / 10;
+  const percentHints =
+    percent === 10
+      ? [
+          '10% is easy: move one place to the left.',
+          `Rewrite: 10% of ${base} = ${base} ÷ 10.`,
+          `So ${base} ÷ 10 = ${result}.`
+        ]
+      : percent === 20
+        ? [
+            '10% is easy, and 20% is double 10%.',
+            `Rewrite: 20% of ${base} = (${base} ÷ 10) × 2.`,
+            `So (${tenPercent}) × 2 = ${result}.`
+          ]
+        : percent === 25
+          ? [
+              '25% means one quarter.',
+              `Rewrite: 25% of ${base} = ${base} ÷ 4.`,
+              `So ${base} ÷ 4 = ${result}.`
+            ]
+          : percent === 50
+            ? [
+                '50% means half.',
+                `Rewrite: 50% of ${base} = ${base} ÷ 2.`,
+                `So ${base} ÷ 2 = ${result}.`
+              ]
+            : [
+                'Percent means out of 100.',
+                `Rewrite: ${percent}% of ${base} = (${percent} × ${base}) ÷ 100.`,
+                `Compute the product, then divide by 100 to get ${result}.`
+              ];
   return {
     signature: `percent-${percent}-${base}`,
     template: 'percent',
@@ -493,11 +528,7 @@ const createPercent = (difficulty: number): BuiltFlow => {
     format: 'numeric_input',
     prompt: `${percent}% of ${base} = ?`,
     answer: String(result),
-    hints: [
-      'Percent means out of 100.',
-      `(${percent} ÷ 100) × ${base}`,
-      'Multiply to get the part.'
-    ],
+    hints: percentHints,
     solution_steps: [`${percent}% of ${base} = (${percent} ÷ 100) × ${base}.`, `Answer: ${result}.`]
   };
 };
@@ -614,7 +645,7 @@ const createGeometry = (difficulty: number): BuiltFlow => {
       prompt: `Rectangle: ${a} by ${b}. Area = ?`,
       answer: String(area),
       hints: [
-        'Area = length × width.',
+        'Area means how many squares fit inside.',
         `Rewrite: ${breakApart.rewriteLine}.`,
         `Compute: ${breakApart.partLineA}=${breakApart.valueA}, ${breakApart.partLineB}=${breakApart.valueB}, so area = ${area}.`
       ],
@@ -640,7 +671,7 @@ const createGeometry = (difficulty: number): BuiltFlow => {
       prompt: `Rectangle: ${a} by ${b}. Perimeter = ?`,
       answer: String(perimeter),
       hints: [
-        'Perimeter is the distance around.',
+        'Perimeter means walk around the edge.',
         `Add all sides: ${a}+${b}+${a}+${b}.`,
         `Or do 2×(${a}+${b}).`
       ],
@@ -666,7 +697,7 @@ const createGeometry = (difficulty: number): BuiltFlow => {
     hints: [
       'Triangle area is half of a rectangle.',
       `${base}×${height} = ?`,
-      'Half of that is the area.'
+      `Half of that gives the area: ${product} ÷ 2 = ${area}.`
     ],
     solution_steps: [`${base}×${height} = ${product}.`, `${product} ÷ 2 = ${area}.`]
   };

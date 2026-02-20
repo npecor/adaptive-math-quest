@@ -1541,9 +1541,10 @@ export default function App() {
     if (tags.includes('mult_div')) return 'Break a number into smaller parts.';
     if (tags.includes('fractions')) return 'Compare which piece is bigger.';
     if (tags.includes('equations')) return 'Undo one step at a time.';
-    if (tags.includes('geometry_area')) return 'Use the area formula for the shape.';
+    if (tags.includes('geometry_area')) return 'Area is squares inside. Perimeter is walking the edge.';
     if (tags.includes('ratios_rates')) return 'Grow both sides the same way.';
     if (tags.includes('percents')) return 'Percent means out of 100.';
+    if (tags.includes('order_ops')) return 'Circle the multiply or divide chunk first.';
     if (tags.includes('counting')) return 'Try a smaller example first.';
     if (tags.includes('logic')) return 'Use clues and cross out wrong picks.';
     return 'Take it one small step at a time.';
@@ -1587,7 +1588,7 @@ export default function App() {
         const b = Number(rectMatch[2]);
         const breakApart = buildTutorBreakPlan(a, b);
         return [
-          'Step 1: Area = length × width, so we multiply the side lengths.',
+          'Step 1: Area means how many squares fit inside, so multiply side lengths.',
           `Step 2: Break ${breakApart.original} into ${breakApart.partA} and ${breakApart.partB} to make smaller facts.`,
           `Step 3: Rewrite ${breakApart.rewriteLine}.`,
           `Step 4: ${breakApart.partLineA}=${breakApart.valueA} and ${breakApart.partLineB}=${breakApart.valueB}; add to get ${item.answer}.`
@@ -1619,12 +1620,12 @@ export default function App() {
     if (item.tags.includes('mult_div') && item.prompt.includes('÷')) {
       const divisionMatch = item.prompt.match(/(\d+)\s*÷\s*(\d+)\s*=\s*\?/);
       const divideHint = divisionMatch
-        ? `Think: ${divisionMatch[2]} × ? = ${divisionMatch[1]}.`
-        : 'Think: what number times the second number gives the first number?';
+        ? `Think in groups: how many groups of ${divisionMatch[2]} fit in ${divisionMatch[1]}?`
+        : 'Think in groups: how many groups of the second number fit in the first?';
       return [
-        'Step 1: Turn division into a multiplication fact.',
+        'Step 1: Find how many equal groups fit.',
         `Step 2: ${divideHint}`,
-        'Step 3: Use that number as your answer.'
+        'Step 3: Check with multiplication to confirm.'
       ];
     }
 

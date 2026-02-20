@@ -73,7 +73,7 @@ describe('flow coaching hints', () => {
       const item = generateAdaptiveFlowItem(1275, new Set<string>());
       if (item.template !== 'geometry' || item.shapeSignature !== 'geom_rect_area') continue;
       found += 1;
-      expect(item.hints[0]).toMatch(/Area = length × width/i);
+      expect(item.hints[0]).toMatch(/Area means|length × width/i);
       expect(item.hints[1]).toMatch(/Rewrite:/i);
       expect(item.hints[1]).toMatch(/=\s*.+\+\s*.+/);
       expect(item.hints[2]).toMatch(/Compute:/i);

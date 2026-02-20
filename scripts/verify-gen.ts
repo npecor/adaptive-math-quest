@@ -20,16 +20,13 @@ const PUZZLE_SANITY_COUNT = isCiMode ? 100 : 500;
 const hasDecimal = (text: string) => /\d+\.\d+/.test(text);
 const startsWithTemplate = (id: string, template: string) => id.startsWith(`${template}-`);
 const percent = (n: number, total: number) => ((n / total) * 100).toFixed(2);
-const REWRITE_PATTERN = /(=\s*[0-9() +×x*-]+\+\s*[0-9() +×x*-]+)|(\(\d+\s*\+\s*\d+\))|(\bdouble\b)/i;
+const REWRITE_PATTERN = /(=\s*[0-9() +×x*\-/]+[+\-]\s*[0-9() +×x*\-/]+)|(\(\d+\s*[+\-]\s*\d+\))|(\bdouble\b)/i;
 const BREAK_WORD_PATTERN = /\b(split|break)\b/i;
 
 const toSortedEntries = (counts: Record<string, number>) =>
   Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
 const inferFlowLabel = (item: FlowItem): DifficultyLabel => item.tier ?? difficultyLabelFromScore(item.difficulty);
-
-const requiresConcreteRewriteHint = (item: FlowItem): boolean =>
-  item.template === 'mult_div' || (item.template === 'geometry' && item.shapeSignature === 'geom_rect_area');
 
 const hasConcreteRewriteHint = (item: FlowItem): boolean => {
   const hintBlob = item.hints.join(' ');
@@ -179,7 +176,7 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
       if (!Array.isArray(item.hints) || item.hints.length !== 3) {
         failures.push(`Hints length != 3 for ${item.id}`);
       }
-      if (requiresConcreteRewriteHint(item) && !hasConcreteRewriteHint(item)) {
+      if (!hasConcreteRewriteHint(item)) {
         failures.push(`Missing concrete rewrite hint for ${item.id}: ${item.hints.join(' | ')}`);
       }
 
