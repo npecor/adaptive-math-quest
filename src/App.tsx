@@ -176,6 +176,11 @@ const getPuzzleAnswerChoices = (answer: string): string[] | null => {
   return null;
 };
 
+const getPuzzleChoiceOptions = (puzzle: PuzzleItem): string[] => {
+  if (puzzle.choices?.length) return puzzle.choices;
+  return getPuzzleAnswerChoices(puzzle.core_answer) ?? [];
+};
+
 const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long_text' => {
   if (puzzle.answer_type) return puzzle.answer_type;
   if (getPuzzleAnswerChoices(puzzle.core_answer)) return 'choice';
@@ -1865,7 +1870,7 @@ export default function App() {
             <p className="puzzle-question-prompt"><InlineMathText text={run.currentPuzzle.core_prompt} /></p>
             {getPuzzleInputMode(run.currentPuzzle) === 'choice' ? (
               <div className="chips">
-                {getPuzzleAnswerChoices(run.currentPuzzle.core_answer)?.map((choice) => (
+                {getPuzzleChoiceOptions(run.currentPuzzle).map((choice) => (
                   <button
                     key={choice}
                     className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}

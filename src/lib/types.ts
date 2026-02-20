@@ -32,6 +32,7 @@ export interface PuzzleItem {
   answer_type?: 'choice' | 'short_text' | 'long_text';
   core_prompt: string;
   core_answer: string;
+  choices?: string[];
   accept_answers?: string[];
   extensions: PuzzleExtension[];
   hint_ladder: string[];

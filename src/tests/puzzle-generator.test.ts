@@ -36,4 +36,16 @@ describe('puzzle generator', () => {
     expect(sawStars).toBe(true);
     expect(sawLogic).toBe(true);
   });
+
+  it('avoids decimal tokens in puzzle prompts and core answers', () => {
+    const used = new Set<string>();
+    const decimalPattern = /\d+\.\d+/;
+
+    for (let i = 0; i < 500; i += 1) {
+      const item = generateAdaptivePuzzleItem(1200, used);
+      used.add(item.id);
+      expect(item.core_prompt).not.toMatch(decimalPattern);
+      expect(item.core_answer).not.toMatch(decimalPattern);
+    }
+  });
 });

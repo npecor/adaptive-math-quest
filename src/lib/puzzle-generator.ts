@@ -90,21 +90,22 @@ const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
     tags: ['spatial', 'reasoning', 'geometry_area'],
     title: 'Shape Warp: Area Check',
     answer_type: 'choice',
-    core_prompt: `Can a ${side}x${side} square become a ${a}x${b} rectangle (no stretching)?`,
+    choices: ['Yes', 'No'],
+    core_prompt: `Can a ${side}×${side} square become a ${a}×${b} rectangle (no stretching)?`,
     core_answer: answer,
     hint_ladder: [
-      `Find the square area: ${side}x${side}.`,
-      `Find the rectangle area: ${a}x${b}.`,
-      'If the areas match, it is possible. If not, it is not.',
+      `Find the square’s area: ${side}×${side}.`,
+      `Find the rectangle’s area: ${a}×${b}.`,
+      'No stretching means the area must stay the same.',
       `Compare: ${squareArea} vs ${rectArea}.`
     ],
     solution_steps: [
-      `Square area = ${side}x${side} = ${squareArea}.`,
-      `Rectangle area = ${a}x${b} = ${rectArea}.`,
-      'No stretching means area stays the same.',
-      answer === 'Yes' ? 'Areas match, so the answer is Yes.' : 'Areas do not match, so the answer is No.'
+      `Square area = ${side}×${side} = ${squareArea}.`,
+      `Rectangle area = ${a}×${b} = ${rectArea}.`,
+      'No stretching means area must stay the same.',
+      answer === 'Yes' ? 'Areas match -> Yes.' : 'Areas do not match -> No.'
     ],
-    extensions: extensions('Try making your own Yes example.', 'Try making your own No example.')
+    extensions: extensions('Make your own Yes example.', 'Make your own No example.')
   };
 };
 
@@ -201,6 +202,7 @@ const starsStrategyPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> &
     tags: ['strategy', 'pattern', 'logic'],
     title: v.title,
     answer_type: 'choice',
+    choices: ['Yes', 'No'],
     core_prompt: `There are ${n} stars. You go first. Each turn you may take 1, 2, or 3 stars. Whoever takes the last star wins. Do you have a winning strategy?`,
     core_answer: answer,
     hint_ladder: [
@@ -214,9 +216,9 @@ const starsStrategyPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> &
       'That makes 4 a bad number to start on.',
       'Every multiple of 4 is bad if both players play perfectly.',
       winningMove
-        ? `Since ${n} is not a multiple of 4, take ${winningMove} first to leave ${n - winningMove}, a multiple of 4.`
+        ? `Since ${n} is not a multiple of 4, take ${winningMove} first to leave ${n - winningMove} (a multiple of 4).`
         : `Since ${n} is a multiple of 4, the other player can always respond to keep multiples of 4.`,
-      `So the answer is ${answer}.`
+      `Answer: ${answer}.`
     ],
     extensions: extensions('Try the same game with 20 stars.', 'What if you can take 1 to 4 instead?')
   };
@@ -226,7 +228,9 @@ type LogicVariant = {
   slug: string;
   title: string;
   prompt: string;
+  answerType: PuzzleItem['answer_type'];
   answer: string;
+  choices?: string[];
   accept?: string[];
   hints: string[];
   steps: string[];
@@ -234,128 +238,126 @@ type LogicVariant = {
 
 const LOGIC_VARIANTS: LogicVariant[] = [
   {
-    slug: 'truth-lie',
-    title: 'Truth or Trick?',
-    prompt: 'One alien always tells the truth. One always lies. A says: "B is lying." Who is the truth-teller? (A or B)',
-    answer: 'A',
-    accept: ['a'],
+    slug: 'two-airlocks',
+    title: 'Two Airlocks',
+    prompt: 'Two airlocks: one is SAFE, one is TRAP.\n\nSign on Airlock 1: "Airlock 2 is SAFE."\nSign on Airlock 2: "Airlock 1 is TRAP."\n\nExactly ONE sign is true.\nWhich airlock is SAFE?',
+    answerType: 'choice',
+    choices: ['Airlock 1', 'Airlock 2'],
+    answer: 'Airlock 2',
     hints: [
-      'If A is telling the truth, then B must be lying.',
-      'If A is lying, then B is telling the truth.',
-      'Check which option cannot work.',
-      'Only one choice makes sense.'
+      'Try assuming Airlock 1 is safe, then check both signs.',
+      'You need exactly ONE sign to be true.',
+      'If you get 0 true signs or 2 true signs, that case is wrong.',
+      'Try the other airlock.'
     ],
     steps: [
-      'If A tells the truth, then B is lying.',
-      'If A is lying, then B would be telling the truth.',
-      'A being truthful gives a clean consistent setup.',
-      'So A is the truth-teller.'
+      'Assume Airlock 1 is SAFE -> Airlock 2 is TRAP.',
+      'Sign 1 says "Airlock 2 is SAFE." That would be false.',
+      'Sign 2 says "Airlock 1 is TRAP." That would be false.',
+      'That is 0 true signs, but we need exactly 1 -> impossible.',
+      'So Airlock 1 is not safe -> Airlock 2 is SAFE.',
+      'Answer: Airlock 2.'
     ]
   },
   {
-    slug: 'two-statements',
-    title: 'Two Statements',
-    prompt: 'Only one statement is true: 1) The treasure is on Planet Red. 2) The treasure is NOT on Planet Red. Where is the treasure? (Red or Not Red)',
-    answer: 'Not Red',
-    accept: ['notred', 'not red'],
-    hints: [
-      'The two statements are opposites.',
-      'If one is true, the other must be false.',
-      'Not Red means anywhere except Red.',
-      'Pick the only consistent result.'
-    ],
-    steps: [
-      'Either it is on Red, or it is not on Red.',
-      'The puzzle says only one statement is true.',
-      'The consistent answer is Not Red.'
-    ]
-  },
-  {
-    slug: 'three-buttons',
-    title: 'Three Buttons',
-    prompt: 'A panel has 3 buttons: ZAP, BOOP, and BEEP. Exactly one button opens the door. You press ZAP and the door stays closed. Which buttons could still open the door?',
+    slug: 'robot-buttons',
+    title: 'Robot Buttons',
+    prompt: 'A robot has 3 buttons: ZAP, BOOP, BEEP.\nExactly ONE button gives a candy.\nYou press ZAP and get NO candy.\nWhich buttons could still give candy?',
+    answerType: 'short_text',
     answer: 'BOOP or BEEP',
-    accept: ['boop and beep', 'boop, beep', 'boop or beep', 'beep or boop'],
+    accept: ['boop or beep', 'boop and beep', 'boop, beep', 'BOOP or BEEP', 'BOOP and BEEP'],
     hints: ['ZAP did not work.', 'So it is not ZAP.', 'That leaves two possibilities.', 'Name both.'],
-    steps: ['Only one button works.', 'ZAP failed, so ZAP is not the opener.', 'So the opener must be BOOP or BEEP.']
-  },
-  {
-    slug: 'odd-one-out',
-    title: 'Odd One Out',
-    prompt: 'Which number does NOT belong? 2, 3, 5, 9',
-    answer: '9',
-    accept: ['nine'],
-    hints: [
-      'Look for a shared property among three numbers.',
-      '2, 3, and 5 are all prime.',
-      '9 is not prime.',
-      'So 9 is the odd one out.'
-    ],
-    steps: ['2, 3, and 5 are prime.', '9 has factors 1, 3, and 9.', 'So 9 does not belong.']
-  },
-  {
-    slug: 'always-even',
-    title: 'Even Detector',
-    prompt: 'Pick the expression that is always even: A) odd + odd B) odd + even C) odd x odd',
-    answer: 'A) odd + odd',
-    accept: ['a', 'a) odd + odd', 'odd + odd'],
-    hints: ['Try small examples.', 'Odd + odd: 3 + 5 = 8.', 'Odd + even gives odd.', 'Odd x odd gives odd.'],
-    steps: ['Odd + odd always makes even.', 'Odd + even makes odd.', 'Odd x odd makes odd.', 'So A is always even.']
-  },
-  {
-    slug: 'missing-number',
-    title: 'Missing Number',
-    prompt: 'Fill in the blank: 4, 8, 12, __, 20',
-    answer: '16',
-    accept: ['sixteen'],
-    hints: ['What is the pattern? +4 each time.', '12 + 4 = 16.', 'Then 16 + 4 = 20.', 'So the blank is 16.'],
-    steps: ['The sequence adds 4 each step.', '12 + 4 = 16.', 'So the missing number is 16.']
-  },
-  {
-    slug: 'coin-flip',
-    title: 'Coin Flip Logic',
-    prompt: 'A coin lands Heads. Which was more likely before the flip? A) Heads B) Tails C) Same chance',
-    answer: 'C) Same chance',
-    accept: ['c', 'same chance', 'same'],
-    hints: ['Before the flip, we did not know the result.', 'A fair coin has equal chances.', 'Heads and tails are equally likely.', 'So it is the same chance.'],
-    steps: ['A fair coin has a 50/50 chance.', 'Before the flip, Heads and Tails were equally likely.', 'So the answer is Same chance.']
-  },
-  {
-    slug: 'bigger-fraction',
-    title: 'Fraction Faceoff',
-    prompt: 'Which is bigger? 3/4 or 5/8',
-    answer: '3/4',
-    accept: ['3 / 4', 'three quarters'],
-    hints: ['Use a common denominator: 3/4 = 6/8.', 'Compare 6/8 and 5/8.', '6/8 is bigger.', 'So 3/4 is bigger.'],
-    steps: ['Convert 3/4 to eighths: 3/4 = 6/8.', 'Compare 6/8 vs 5/8.', '6/8 is larger, so 3/4 is larger.']
-  },
-  {
-    slug: 'two-doors',
-    title: 'Two Doors',
-    prompt: 'Two doors: one is SAFE, one is TRAP. A sign on Door 1 says: "Door 2 is SAFE." A sign on Door 2 says: "Door 1 is TRAP." Exactly one sign is true. Which door is SAFE? (1 or 2)',
-    answer: '1',
-    accept: ['door 1'],
-    hints: [
-      'If Door 2 were safe, check both signs.',
-      'Door 1 sign would be true.',
-      'Door 2 sign would also be true, but only one sign can be true.',
-      'So Door 1 must be safe.'
-    ],
     steps: [
-      'Assume Door 2 is safe: Door 1 sign is true.',
-      'Then Door 2 sign ("Door 1 is TRAP") is also true.',
-      'That gives two true signs, not allowed.',
-      'So Door 1 is safe and exactly one sign is true.'
+      'Only one button works.',
+      'ZAP failed, so ZAP is not the candy button.',
+      'So it must be BOOP or BEEP.',
+      'Answer: BOOP or BEEP.'
     ]
   },
   {
-    slug: 'estimate-sum',
-    title: 'Quick Estimate',
-    prompt: 'Which is closest to 51 + 49? A) 80 B) 100 C) 120',
+    slug: 'planet-prime',
+    title: 'Planet Prime',
+    prompt: 'Which number does NOT belong? 2, 3, 5, 9',
+    answerType: 'short_text',
+    answer: '9',
+    accept: ['9', 'nine', 'Nine'],
+    hints: [
+      'Three of these are prime numbers.',
+      'Prime means: only 1 and itself are factors.',
+      '2, 3, and 5 are prime.',
+      '9 is not prime (3x3).'
+    ],
+    steps: ['2, 3, and 5 are prime.', '9 = 3x3, so it has more factors.', 'So 9 does not belong.', 'Answer: 9.']
+  },
+  {
+    slug: 'even-meteor',
+    title: 'Even Meteor',
+    prompt: 'Pick the expression that is ALWAYS even:\nA) odd + odd\nB) odd + even\nC) odd x odd',
+    answerType: 'choice',
+    choices: ['A) odd + odd', 'B) odd + even', 'C) odd x odd'],
+    answer: 'A) odd + odd',
+    hints: ['Try small examples.', '3+5 = 8 (even).', '3+4 = 7 (odd).', '3x5 = 15 (odd).'],
+    steps: ['Odd + odd is always even.', 'Odd + even is always odd.', 'Odd x odd is always odd.', 'Answer: A) odd + odd.']
+  },
+  {
+    slug: 'stardust-estimate',
+    title: 'Stardust Estimate',
+    prompt: 'Which is closest to 51 + 49?\nA) 80\nB) 100\nC) 120',
+    answerType: 'choice',
+    choices: ['A) 80', 'B) 100', 'C) 120'],
     answer: 'B) 100',
-    accept: ['b', '100'],
     hints: ['51 is close to 50.', '49 is close to 50.', '50 + 50 = 100.', 'So 100 is closest.'],
-    steps: ['Round 51 to 50 and 49 to 50.', '50 + 50 = 100.', 'So 100 is the closest.']
+    steps: ['Round 51 -> 50 and 49 -> 50.', '50 + 50 = 100.', 'Answer: B) 100.']
+  },
+  {
+    slug: 'orbit-pattern',
+    title: 'Orbit Pattern',
+    prompt: 'Fill in the blank: 3, 6, 12, __, 48',
+    answerType: 'short_text',
+    answer: '24',
+    accept: ['24', 'twenty four', 'twenty-four'],
+    hints: ['Look at how each number changes.', 'Each step doubles.', '12 x 2 = 24.', 'Then 24 x 2 = 48.'],
+    steps: ['Pattern is x2 each step.', '12 x 2 = 24.', 'Answer: 24.']
+  },
+  {
+    slug: 'rocket-code',
+    title: 'Rocket Code',
+    prompt: 'Code rule: A=1, B=2, C=3...\nWhat is the code value of CAB?',
+    answerType: 'short_text',
+    answer: '6',
+    accept: ['6', 'six'],
+    hints: ['C = 3, A = 1, B = 2.', 'Add them.', '3 + 1 + 2 = 6.', 'So the code is 6.'],
+    steps: ['Convert letters to numbers.', 'C + A + B = 3 + 1 + 2 = 6.', 'Answer: 6.']
+  },
+  {
+    slug: 'meteor-balance',
+    title: 'Meteor Balance',
+    prompt: 'Which is heavier?\nA) 2 kg + 600 g\nB) 2 kg + 500 g',
+    answerType: 'choice',
+    choices: ['A) 2 kg + 600 g', 'B) 2 kg + 500 g'],
+    answer: 'A) 2 kg + 600 g',
+    hints: ['Both have 2 kg.', 'Compare only grams.', '600 g is more than 500 g.', 'So A is heavier.'],
+    steps: ['Both options share 2 kg.', '600 g > 500 g.', 'Answer: A) 2 kg + 600 g.']
+  },
+  {
+    slug: 'moon-fractions',
+    title: 'Moon Fractions',
+    prompt: 'Which is bigger?\nA) 1/2\nB) 3/8',
+    answerType: 'choice',
+    choices: ['A) 1/2', 'B) 3/8'],
+    answer: 'A) 1/2',
+    hints: ['Use eighths.', '1/2 = 4/8.', '4/8 is bigger than 3/8.', 'So A is bigger.'],
+    steps: ['Convert 1/2 to 4/8.', 'Compare 4/8 and 3/8.', 'Answer: A) 1/2.']
+  },
+  {
+    slug: 'alien-train',
+    title: 'Alien Train',
+    prompt: 'A train leaves every 5 minutes.\nIf one left at 3:00, when does the 4th train leave?',
+    answerType: 'short_text',
+    answer: '3:15',
+    accept: ['315', '3 15', '3:15 pm', '3:15'],
+    hints: ['Count trains: 1st at 3:00.', '2nd at 3:05, 3rd at 3:10.', '4th is 5 minutes later.', 'So it is 3:15.'],
+    steps: ['Starts at 3:00.', 'After three 5-minute jumps: 3:15.', 'Answer: 3:15.']
   }
 ];
 
@@ -365,22 +367,22 @@ const miniLogicPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { s
     signature: `logic-${v.slug}`,
     tags: ['logic', 'reasoning'],
     title: v.title,
-    answer_type: 'short_text',
+    answer_type: v.answerType,
     core_prompt: v.prompt,
     core_answer: v.answer,
+    ...(v.choices ? { choices: v.choices } : {}),
     ...(v.accept ? { accept_answers: v.accept } : {}),
-    hint_ladder: v.hints,
-    solution_steps: [...v.steps, `Answer: ${v.answer}.`],
+    hint_ladder: [...v.hints],
+    solution_steps: [...v.steps],
     extensions: extensions('Try making your own version.', 'Explain your reasoning in one sentence.')
   };
 };
 
 const templates: PuzzleTemplate[] = [
   { key: 'pairs', minDifficulty: 900, maxDifficulty: 1150, build: () => pairCountPuzzle() },
-  { key: 'area_yn', minDifficulty: 980, maxDifficulty: 1250, build: () => yesNoAreaPuzzle() },
-  { key: 'stars', minDifficulty: 1000, maxDifficulty: 1450, build: () => starsStrategyPuzzle() },
-  { key: 'logic', minDifficulty: 960, maxDifficulty: 1550, build: () => miniLogicPuzzle() },
-  { key: 'asn', minDifficulty: 1120, maxDifficulty: 1420, build: () => alwaysSometimesNeverPuzzle() },
+  { key: 'area_yn', minDifficulty: 900, maxDifficulty: 1400, build: () => yesNoAreaPuzzle() },
+  { key: 'stars', minDifficulty: 980, maxDifficulty: 1500, build: () => starsStrategyPuzzle() },
+  { key: 'logic', minDifficulty: 900, maxDifficulty: 1500, build: () => miniLogicPuzzle() },
   { key: 'switch', minDifficulty: 1280, maxDifficulty: 1700, build: () => switchPuzzle() }
 ];
 
