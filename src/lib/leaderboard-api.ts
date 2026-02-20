@@ -3,10 +3,15 @@ export interface LeaderboardRow {
   userId: string;
   username: string;
   avatarId: string;
-  score: number;
+  allTimeStars: number;
+  bestRunStars: number;
+  trophiesEarned: number;
+  extensionsSolved: number;
   updatedAt: string;
   isBot?: boolean;
 }
+
+export type LeaderboardMode = 'all_time' | 'best_run' | 'trophies';
 
 interface RegisterPlayerRequest {
   username: string;
@@ -27,7 +32,10 @@ interface UpsertScoreRequest {
   userId: string;
   username: string;
   avatarId: string;
-  score: number;
+  allTimeStars: number;
+  bestRunStars: number;
+  trophiesEarned: number;
+  extensionsSolved: number;
 }
 
 const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -69,8 +77,8 @@ export const upsertScore = async (payload: UpsertScoreRequest): Promise<void> =>
   });
 };
 
-export const fetchLeaderboard = async (limit = 50): Promise<LeaderboardRow[]> => {
-  const data = await jsonRequest<{ rows: LeaderboardRow[] }>(withBaseUrl(`/api/leaderboard?limit=${limit}`));
+export const fetchLeaderboard = async (mode: LeaderboardMode = 'all_time', limit = 50): Promise<LeaderboardRow[]> => {
+  const data = await jsonRequest<{ rows: LeaderboardRow[] }>(withBaseUrl(`/api/leaderboard?mode=${mode}&limit=${limit}`));
   return data.rows;
 };
 

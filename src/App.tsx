@@ -1,8 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
-import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardRow } from './lib/leaderboard-api';
+import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
+import { applyStarAward, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, sortLeaderboardRows, upsertSolvedPuzzleIds } from './lib/progress';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
@@ -41,6 +42,9 @@ interface RunState {
   recentTemplates: string[];
   recentShapes: string[];
   flowStreak: number;
+  starsThisRound: number;
+  puzzlesSolvedThisRound: number;
+  puzzlesTriedThisRound: number;
 }
 
 const FLOW_TARGET = 8;
@@ -74,11 +78,66 @@ const characterVariantById: Record<string, string> = {
 };
 
 const fallbackLeaderboardRows: LeaderboardRow[] = [
-  { rank: 1, userId: 'bot-astro', username: 'Astro', avatarId: 'astro-bot', score: 14200, updatedAt: '', isBot: true },
-  { rank: 2, userId: 'bot-nova', username: 'Nova', avatarId: 'animal-axo-naut', score: 13780, updatedAt: '', isBot: true },
-  { rank: 3, userId: 'bot-cyber', username: 'Cyber', avatarId: 'astro-cactus-cadet', score: 13040, updatedAt: '', isBot: true },
-  { rank: 4, userId: 'bot-cometx', username: 'Comet_X', avatarId: 'animal-stardust-fish', score: 11900, updatedAt: '', isBot: true },
-  { rank: 5, userId: 'bot-sputnik', username: 'Sputnik', avatarId: 'animal-jelly-jet', score: 10800, updatedAt: '', isBot: true }
+  {
+    rank: 1,
+    userId: 'bot-astro',
+    username: 'Astro',
+    avatarId: 'astro-bot',
+    allTimeStars: 14200,
+    bestRunStars: 1860,
+    trophiesEarned: 38,
+    extensionsSolved: 24,
+    updatedAt: '',
+    isBot: true
+  },
+  {
+    rank: 2,
+    userId: 'bot-nova',
+    username: 'Nova',
+    avatarId: 'animal-axo-naut',
+    allTimeStars: 13780,
+    bestRunStars: 1720,
+    trophiesEarned: 35,
+    extensionsSolved: 21,
+    updatedAt: '',
+    isBot: true
+  },
+  {
+    rank: 3,
+    userId: 'bot-cyber',
+    username: 'Cyber',
+    avatarId: 'astro-cactus-cadet',
+    allTimeStars: 13040,
+    bestRunStars: 1640,
+    trophiesEarned: 32,
+    extensionsSolved: 18,
+    updatedAt: '',
+    isBot: true
+  },
+  {
+    rank: 4,
+    userId: 'bot-cometx',
+    username: 'Comet_X',
+    avatarId: 'animal-stardust-fish',
+    allTimeStars: 11900,
+    bestRunStars: 1490,
+    trophiesEarned: 29,
+    extensionsSolved: 15,
+    updatedAt: '',
+    isBot: true
+  },
+  {
+    rank: 5,
+    userId: 'bot-sputnik',
+    username: 'Sputnik',
+    avatarId: 'animal-jelly-jet',
+    allTimeStars: 10800,
+    bestRunStars: 1380,
+    trophiesEarned: 25,
+    extensionsSolved: 12,
+    updatedAt: '',
+    isBot: true
+  }
 ];
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
@@ -111,7 +170,10 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   usedPuzzleIds: new Set<string>(),
   recentTemplates: [],
   recentShapes: [],
-  flowStreak: 0
+  flowStreak: 0,
+  starsThisRound: 0,
+  puzzlesSolvedThisRound: 0,
+  puzzlesTriedThisRound: 0
 });
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -835,7 +897,7 @@ export default function App() {
   const [homeNavRevealed, setHomeNavRevealed] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
-  const lastSubmittedScoreRef = useRef(0);
+  const lastSubmittedStatsRef = useRef('');
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
     const saved = loadState().user?.avatarId;
@@ -843,11 +905,12 @@ export default function App() {
     return '';
   });
   const [remoteLeaderboardRows, setRemoteLeaderboardRows] = useState<LeaderboardRow[]>([]);
+  const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('all_time');
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
-  const explorerLevel = Math.floor(state.highs.bestTotal / 250) + 1;
+  const explorerLevel = Math.floor(state.totals.allTimeStars / 250) + 1;
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = Boolean(state.user);
   const onboardingCadetName = nameInput.trim() || 'Cadet';
@@ -855,11 +918,11 @@ export default function App() {
   const homeCharacterId = selectedCharacter?.id ?? state.user?.avatarId ?? defaultCharacterId;
 
   const totalScore = run.sprintScore + run.brainScore;
-  const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.highs.bestTotal;
+  const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.totals.allTimeStars;
   const runTargetTotal = run.flowTarget + run.puzzleTarget;
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
-  const hasCadetSnapshot = state.highs.bestTotal > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
+  const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
 
   const save = (next: AppState) => {
     setState(next);
@@ -973,10 +1036,11 @@ export default function App() {
       try {
         const health = await fetchLeaderboardHealth();
         if (active) setLeaderboardStatus(health ? 'online' : 'offline');
-        const rows = await fetchLeaderboard(50);
+        const rows = await fetchLeaderboard(leaderboardMode, 50);
         if (active) setRemoteLeaderboardRows(rows);
       } catch {
         if (active) setLeaderboardStatus('offline');
+        if (active) setRemoteLeaderboardRows([]);
         // Keep app usable with fallback rows when backend is unavailable.
       }
     };
@@ -984,7 +1048,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [leaderboardMode]);
 
   useEffect(() => {
     if (screen !== 'scores') return;
@@ -993,10 +1057,11 @@ export default function App() {
       try {
         const health = await fetchLeaderboardHealth();
         if (active) setLeaderboardStatus(health ? 'online' : 'offline');
-        const rows = await fetchLeaderboard(50);
+        const rows = await fetchLeaderboard(leaderboardMode, 50);
         if (active) setRemoteLeaderboardRows(rows);
       } catch {
         if (active) setLeaderboardStatus('offline');
+        if (active) setRemoteLeaderboardRows([]);
         // Ignore transient backend failures; fallback rows still render.
       }
     };
@@ -1004,16 +1069,22 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [screen]);
+  }, [screen, leaderboardMode]);
 
   useEffect(() => {
-    lastSubmittedScoreRef.current = 0;
+    lastSubmittedStatsRef.current = '';
   }, [state.user?.userId]);
 
   useEffect(() => {
     if (!state.user?.userId) return;
-    const bestTotal = state.highs.bestTotal;
-    if (bestTotal <= 0 || bestTotal <= lastSubmittedScoreRef.current) return;
+    const payload = {
+      allTimeStars: state.totals.allTimeStars,
+      bestRunStars: state.totals.bestRunStars,
+      trophiesEarned: state.totals.trophiesEarned,
+      extensionsSolved: state.totals.extensionsSolved
+    };
+    const submissionKey = `${payload.allTimeStars}|${payload.bestRunStars}|${payload.trophiesEarned}|${payload.extensionsSolved}`;
+    if (submissionKey === lastSubmittedStatsRef.current) return;
 
     let cancelled = false;
     const syncScore = async () => {
@@ -1022,12 +1093,12 @@ export default function App() {
           userId: state.user!.userId!,
           username: state.user!.username,
           avatarId: state.user!.avatarId,
-          score: bestTotal
+          ...payload
         });
         if (cancelled) return;
         setLeaderboardStatus('online');
-        lastSubmittedScoreRef.current = bestTotal;
-        const rows = await fetchLeaderboard(50);
+        lastSubmittedStatsRef.current = submissionKey;
+        const rows = await fetchLeaderboard(leaderboardMode, 50);
         if (!cancelled) setRemoteLeaderboardRows(rows);
       } catch {
         if (!cancelled) setLeaderboardStatus('offline');
@@ -1039,23 +1110,27 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [state.highs.bestTotal, state.user]);
+  }, [leaderboardMode, state.totals, state.user]);
 
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
 
-  const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run) => {
+  const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
     const brain = bossAttempted ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
     const total = runSnapshot.sprintScore + brain;
+    const bonusDelta = total - runSnapshot.starsThisRound;
+    const finalRunStars = runSnapshot.starsThisRound + Math.max(0, bonusDelta);
 
     const highs = {
-      bestTotal: Math.max(state.highs.bestTotal, total),
-      bestSprint: Math.max(state.highs.bestSprint, runSnapshot.sprintScore),
-      bestBrain: Math.max(state.highs.bestBrain, brain)
+      bestTotal: Math.max(baseState.highs.bestTotal, total),
+      bestSprint: Math.max(baseState.highs.bestSprint, runSnapshot.sprintScore),
+      bestBrain: Math.max(baseState.highs.bestBrain, brain)
     };
 
-    save({ ...state, highs });
-    setRun({ ...runSnapshot, brainScore: brain });
+    const totals = completeRunTotals(baseState.totals, runSnapshot.starsThisRound, bonusDelta);
+
+    save({ ...baseState, highs, totals });
+    setRun({ ...runSnapshot, brainScore: brain, starsThisRound: finalRunStars });
     setFeedback(bossAttempted ? 'Bonus round played. Final score updated!' : 'Game complete. Great work!');
     setFeedbackTone('info');
     triggerPulse('info');
@@ -1119,11 +1194,12 @@ export default function App() {
     const hintPenalty = run.currentHints * 3;
     const nextStreak = correct ? Math.min(run.flowStreak + 1, 5) : 0;
     const gain = correct ? Math.max(tier.flowPoints - hintPenalty, 4) : 0;
-
-    save({
+    const nextTotals = applyStarAward(state.totals, gain);
+    const nextState: AppState = {
       ...state,
-      skill: { rating: updatedRating, attemptsCount: state.skill.attemptsCount + 1 }
-    });
+      skill: { rating: updatedRating, attemptsCount: state.skill.attemptsCount + 1 },
+      totals: nextTotals
+    };
 
     const usedFlowIds = new Set(run.usedFlowIds);
     usedFlowIds.add(item.id);
@@ -1141,12 +1217,14 @@ export default function App() {
           recentTemplates,
           recentShapes,
           currentHints: 0,
-          currentFlow: undefined
+          currentFlow: undefined,
+          starsThisRound: run.starsThisRound + gain
         };
-        finishRun(false, quickOnlyDone);
+        finishRun(false, quickOnlyDone, nextState);
         return;
       }
 
+      save(nextState);
       setRun({
         ...run,
         flowDone: nextFlowDone,
@@ -1158,7 +1236,8 @@ export default function App() {
         recentTemplates,
         recentShapes,
         flowStreak: nextStreak,
-        currentHints: 0
+        currentHints: 0,
+        starsThisRound: run.starsThisRound + gain
       });
       setFeedback(correct ? 'Awesome! Quick questions complete. Pick your first puzzle.' : `Nice try. ${item.solution_steps[0]}`);
       setFeedbackTone(correct ? 'success' : 'error');
@@ -1175,6 +1254,7 @@ export default function App() {
       return;
     }
 
+    save(nextState);
     const nextItem = generateAdaptiveFlowItem(
       updatedRating,
       usedFlowIds,
@@ -1191,7 +1271,8 @@ export default function App() {
       recentShapes,
       currentFlow: nextItem,
       flowStreak: nextStreak,
-      currentHints: 0
+      currentHints: 0,
+      starsThisRound: run.starsThisRound + gain
     });
 
     setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
@@ -1225,23 +1306,38 @@ export default function App() {
     const streaks = updatePuzzleStreak(state.streaks, correct && !revealUsed);
     const museum = [...state.museum];
     const idx = museum.findIndex((entry) => entry.puzzleId === run.currentPuzzle?.id);
+    const previousEntry = idx >= 0 ? museum[idx] : undefined;
+    const solved = Boolean(previousEntry?.solved) || correct;
+    const extensionGain = correct ? (run.currentHints <= 1 ? 1 : 0) : 0;
     const entry = {
       puzzleId: run.currentPuzzle.id,
       title: run.currentPuzzle.title,
-      solved: correct,
-      extensionsCompleted: correct ? (run.currentHints <= 1 ? 1 : 0) : 0,
-      methodsFound: correct ? ['core-solved'] : []
+      solved,
+      extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, extensionGain),
+      methodsFound: solved ? ['core-solved'] : []
     };
 
     if (idx >= 0) museum[idx] = { ...museum[idx], ...entry };
     else museum.push(entry);
 
-    save({
+    const solvedPuzzleIds = upsertSolvedPuzzleIds(state.solvedPuzzleIds, run.currentPuzzle.id, solved);
+
+    const totals = recalcTotals(
+      {
+        ...applyStarAward(state.totals, gain),
+        allTimePuzzleTries: state.totals.allTimePuzzleTries + 1
+      },
+      solvedPuzzleIds,
+      museum
+    );
+    const nextState: AppState = {
       ...state,
       streaks,
       museum,
+      solvedPuzzleIds,
+      totals,
       skill: { rating: updatedRating, attemptsCount: state.skill.attemptsCount + 1 }
-    });
+    };
 
     if (puzzleDone >= run.puzzleTarget) {
       if (run.gameMode !== 'galaxy_mix') {
@@ -1250,19 +1346,26 @@ export default function App() {
           brainScore: run.brainScore + gain,
           puzzleDone,
           usedPuzzleIds,
+          starsThisRound: run.starsThisRound + gain,
+          puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
+          puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
           currentHints: 0,
           currentPuzzle: undefined,
           currentPuzzleChoices: []
         };
-        finishRun(false, puzzleOnlyDone);
+        finishRun(false, puzzleOnlyDone, nextState);
         return;
       }
 
+      save(nextState);
       setRun({
         ...run,
         brainScore: run.brainScore + gain,
         puzzleDone,
         usedPuzzleIds,
+        starsThisRound: run.starsThisRound + gain,
+        puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
+        puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
         phase: 'boss',
         bossStage: 'intro',
         currentHints: 0,
@@ -1286,11 +1389,15 @@ export default function App() {
       return;
     }
 
+    save(nextState);
     setRun({
       ...run,
       brainScore: run.brainScore + gain,
       puzzleDone,
       usedPuzzleIds,
+      starsThisRound: run.starsThisRound + gain,
+      puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
+      puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
       phase: 'puzzle_pick',
       currentHints: 0,
       currentPuzzle: undefined,
@@ -1470,7 +1577,7 @@ export default function App() {
       setNameInput(registered.username);
       setLeaderboardStatus('online');
       try {
-        const rows = await fetchLeaderboard(50);
+        const rows = await fetchLeaderboard(leaderboardMode, 50);
         setRemoteLeaderboardRows(rows);
       } catch {
         // Ignore refresh failures; retry happens when opening leaderboard.
@@ -1536,25 +1643,35 @@ export default function App() {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
     const youAvatar = state.user?.avatarId ?? defaultCharacterId;
-    const youScore = Math.max(state.highs.bestTotal, totalScore);
+    const youRow: LeaderboardRow = {
+      rank: 0,
+      userId: youUserId ?? 'local-you',
+      username: youUsername ?? 'You',
+      avatarId: youAvatar,
+      allTimeStars: state.totals.allTimeStars,
+      bestRunStars: state.totals.bestRunStars,
+      trophiesEarned: state.totals.trophiesEarned,
+      extensionsSolved: state.totals.extensionsSolved,
+      updatedAt: ''
+    };
 
     const sourceRows = remoteLeaderboardRows.length
       ? remoteLeaderboardRows
-      : [
-          ...fallbackLeaderboardRows,
-          { rank: 0, userId: youUserId ?? 'local-you', username: youUsername ?? 'You', avatarId: youAvatar, score: youScore, updatedAt: '' }
-        ];
+      : [...fallbackLeaderboardRows, youRow];
 
-    return [...sourceRows]
-      .sort((a, b) => b.score - a.score)
+    return sortLeaderboardRows(sourceRows, leaderboardMode)
       .map((entry, index) => ({
         rank: index + 1,
         name: entry.username,
         avatarId: entry.avatarId,
-        score: entry.score,
+        primaryValue: getLeaderboardPrimaryValue(entry, leaderboardMode),
+        allTimeStars: entry.allTimeStars,
+        bestRunStars: entry.bestRunStars,
+        trophiesEarned: entry.trophiesEarned,
+        extensionsSolved: entry.extensionsSolved,
         isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
       }));
-  }, [remoteLeaderboardRows, state.highs.bestTotal, state.user, totalScore]);
+  }, [leaderboardMode, remoteLeaderboardRows, state.totals, state.user]);
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
@@ -1740,8 +1857,8 @@ export default function App() {
               <span className="stat-label">🔥 Day Streak</span>
             </div>
             <div className="stat-card">
-              <span className="stat-value">{state.highs.bestTotal}</span>
-              <span className="stat-label">⭐ Best Score</span>
+              <span className="stat-value">{state.totals.bestRunStars}</span>
+              <span className="stat-label">⭐ Best Run</span>
             </div>
             <div className="stat-card">
               <span className="stat-value">{state.streaks.puzzleStreak}</span>
@@ -2116,16 +2233,16 @@ export default function App() {
       <section className="card">
         <div className="stats-grid">
           <div className="stat-card">
-            <span className="stat-value">{run.sprintScore + run.brainScore}</span>
-            <span className="stat-label">Points</span>
+            <span className="stat-value">{run.starsThisRound}</span>
+            <span className="stat-label">Stars This Round</span>
           </div>
           <div className="stat-card">
             <span className="stat-value">{run.gameMode === 'rocket_rush' ? run.flowDone : run.puzzleDone}</span>
             <span className="stat-label">{run.gameMode === 'rocket_rush' ? 'Math solved' : 'Puzzle cards solved'}</span>
           </div>
           <div className="stat-card">
-            <span className="stat-value">{state.highs.bestTotal}</span>
-            <span className="stat-label">Best points</span>
+            <span className="stat-value">{state.totals.bestRunStars}</span>
+            <span className="stat-label">Best Run</span>
           </div>
           <div className="stat-card">
             <span className="stat-value accent">{state.streaks.dailyStreak}</span>
@@ -2144,11 +2261,33 @@ export default function App() {
     <>
       <section className="section-header">
         <h2 className="text-title">Star Leaderboard</h2>
-        <span className="tag">This Week</span>
+        <span className="tag">GALAXY GENIUS</span>
       </section>
       <p className="muted">
         {leaderboardStatus === 'online' ? '🌐 Online leaderboard' : '📴 Offline (local only)'}
       </p>
+      <section className="list-container">
+        <div className="view-toggle">
+          <button
+            className={`btn btn-secondary chip-btn ${leaderboardMode === 'all_time' ? 'selected' : ''}`}
+            onClick={() => setLeaderboardMode('all_time')}
+          >
+            All-Time Stars
+          </button>
+          <button
+            className={`btn btn-secondary chip-btn ${leaderboardMode === 'best_run' ? 'selected' : ''}`}
+            onClick={() => setLeaderboardMode('best_run')}
+          >
+            Best Run
+          </button>
+          <button
+            className={`btn btn-secondary chip-btn ${leaderboardMode === 'trophies' ? 'selected' : ''}`}
+            onClick={() => setLeaderboardMode('trophies')}
+          >
+            Trophies Earned
+          </button>
+        </div>
+      </section>
 
       <section className="card podium-wrap">
         {podiumLeaders.map((entry) => (
@@ -2156,7 +2295,7 @@ export default function App() {
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
             <span>{entry.name}</span>
-            <small>{entry.score}</small>
+            <small>{entry.primaryValue}</small>
           </div>
         ))}
       </section>
@@ -2166,8 +2305,17 @@ export default function App() {
           <div key={`${entry.name}-${entry.rank}`} className={`rank-row ${entry.isYou ? 'me' : ''}`}>
             <span className="rank-number">{entry.rank}</span>
             <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-            <span className="row-name">{entry.name}</span>
-            <span className="row-score">{entry.score}</span>
+            <span className="row-name">
+              {entry.name}
+              <small className="muted">
+                {leaderboardMode === 'all_time'
+                  ? `BR ${entry.bestRunStars} · 🏆 ${entry.trophiesEarned}`
+                  : leaderboardMode === 'best_run'
+                    ? `⭐ ${entry.allTimeStars} · 🏆 ${entry.trophiesEarned}`
+                    : `⭐ ${entry.allTimeStars} · ✨ ${entry.extensionsSolved}`}
+              </small>
+            </span>
+            <span className="row-score">{entry.primaryValue}</span>
           </div>
         ))}
       </section>
@@ -2178,7 +2326,7 @@ export default function App() {
     <>
       <section className="section-header">
         <h2 className="text-title">Trophy Galaxy</h2>
-        <span className="tag">{solvedRows.length} solved</span>
+        <span className="tag">Collection</span>
       </section>
 
       <section className="card profile-hero collection-hero">
@@ -2189,12 +2337,12 @@ export default function App() {
 
       <section className="stats-grid">
         <div className="stat-card">
-          <span className="stat-value">{solvedRows.length}</span>
-          <span className="stat-label">Solved Puzzles</span>
+          <span className="stat-value">{state.totals.trophiesEarned}</span>
+          <span className="stat-label">Trophies</span>
         </div>
         <div className="stat-card">
-          <span className="stat-value accent">{museumRows.length}</span>
-          <span className="stat-label">Tried Puzzles</span>
+          <span className="stat-value accent">{state.totals.allTimePuzzleTries}</span>
+          <span className="stat-label">Tries</span>
         </div>
       </section>
 
@@ -2204,20 +2352,23 @@ export default function App() {
             className={`btn btn-secondary chip-btn ${!showAttemptedPuzzles ? 'selected' : ''}`}
             onClick={() => setShowAttemptedPuzzles(false)}
           >
-            Solved Only
+            Solved
           </button>
           <button
             className={`btn btn-secondary chip-btn ${showAttemptedPuzzles ? 'selected' : ''}`}
             onClick={() => setShowAttemptedPuzzles(true)}
           >
-            Show Attempts
+            Tries
           </button>
         </div>
       </section>
 
       <section className="list-container">
         {collectionRows.length === 0 && !showAttemptedPuzzles && (
-          <div className="empty-state">No solved puzzles yet. Solve a puzzle card to earn your first star.</div>
+          <div className="empty-state">
+            <p>No trophies yet. Solve a puzzle to earn your first trophy.</p>
+            <button className="btn btn-primary" onClick={() => startRun('puzzle_orbit')}>Play a Puzzle</button>
+          </div>
         )}
         {collectionRows.length === 0 && showAttemptedPuzzles && (
           <div className="empty-state">No puzzle attempts yet. Start a game and pick a puzzle card.</div>

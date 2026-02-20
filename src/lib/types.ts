@@ -73,10 +73,21 @@ export interface MuseumEntry {
   methodsFound: string[];
 }
 
+export interface TotalsState {
+  allTimeStars: number;
+  bestRunStars: number;
+  runsPlayed: number;
+  trophiesEarned: number;
+  extensionsSolved: number;
+  allTimePuzzleTries: number;
+}
+
 export interface AppState {
   user?: UserProfile;
   skill: SkillState;
   streaks: StreakState;
   highs: HighScores;
   museum: MuseumEntry[];
+  totals: TotalsState;
+  solvedPuzzleIds: string[];
 }
