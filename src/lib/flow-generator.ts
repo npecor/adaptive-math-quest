@@ -1,4 +1,4 @@
-import { chooseTargetDifficulty, getFlowDiversityPenalty } from './adaptive';
+import { FLOW_SELECTION_SETTINGS, chooseTargetDifficulty, getFlowDiversityPenalty } from './adaptive';
 import { analyzeFlowItem } from './difficulty-tags';
 import type { FlowItem } from './types';
 
@@ -14,6 +14,7 @@ type BuiltFlow = Omit<FlowItem, 'id' | 'difficulty' | 'type'> & { signature: str
 
 type Template = {
   key: string;
+  label: string;
   minDifficulty: number;
   maxDifficulty: number;
   build: (difficulty: number) => BuiltFlow;
@@ -600,17 +601,35 @@ const createLCM = (): BuiltFlow => {
   };
 };
 
+export const FLOW_TEMPLATE_CATALOG: Array<{
+  key: string;
+  label: string;
+  minDifficulty: number;
+  maxDifficulty: number;
+}> = [
+  { key: 'add_sub', label: 'Addition + Subtraction', minDifficulty: 800, maxDifficulty: 980 },
+  { key: 'mult_div', label: 'Multiplication + Division', minDifficulty: 860, maxDifficulty: 1320 },
+  { key: 'fraction_compare', label: 'Fraction Compare', minDifficulty: 860, maxDifficulty: 1220 },
+  { key: 'order_ops', label: 'Order of Operations', minDifficulty: 960, maxDifficulty: 1500 },
+  { key: 'equation_1', label: 'One-Step Equations', minDifficulty: 980, maxDifficulty: 1180 },
+  { key: 'percent', label: 'Percent of Number', minDifficulty: 1020, maxDifficulty: 1320 },
+  { key: 'ratio', label: 'Ratios + Proportions', minDifficulty: 1080, maxDifficulty: 1380 },
+  { key: 'geometry', label: 'Geometry', minDifficulty: 1120, maxDifficulty: 1500 },
+  { key: 'equation_2', label: 'Two-Step Equations', minDifficulty: 1120, maxDifficulty: 1700 },
+  { key: 'lcm', label: 'Smallest Shared Multiple', minDifficulty: 1320, maxDifficulty: 1700 }
+];
+
 const templates: Template[] = [
-  { key: 'add_sub', minDifficulty: 800, maxDifficulty: 980, build: (difficulty) => createAddSub(difficulty) },
-  { key: 'mult_div', minDifficulty: 860, maxDifficulty: 1320, build: (difficulty) => createMultDiv(difficulty) },
-  { key: 'fraction_compare', minDifficulty: 860, maxDifficulty: 1220, build: (difficulty) => createFractionCompare(difficulty) },
-  { key: 'order_ops', minDifficulty: 960, maxDifficulty: 1500, build: (difficulty) => createOrderOfOps(difficulty) },
-  { key: 'equation_1', minDifficulty: 980, maxDifficulty: 1180, build: (difficulty) => createOneStepEquation(difficulty) },
-  { key: 'percent', minDifficulty: 1020, maxDifficulty: 1320, build: (difficulty) => createPercent(difficulty) },
-  { key: 'ratio', minDifficulty: 1080, maxDifficulty: 1380, build: (difficulty) => createRatio(difficulty) },
-  { key: 'geometry', minDifficulty: 1120, maxDifficulty: 1500, build: (difficulty) => createGeometry(difficulty) },
-  { key: 'equation_2', minDifficulty: 1120, maxDifficulty: 1700, build: (difficulty) => createTwoStep(difficulty) },
-  { key: 'lcm', minDifficulty: 1320, maxDifficulty: 1700, build: () => createLCM() }
+  { key: 'add_sub', label: 'Addition + Subtraction', minDifficulty: 800, maxDifficulty: 980, build: (difficulty) => createAddSub(difficulty) },
+  { key: 'mult_div', label: 'Multiplication + Division', minDifficulty: 860, maxDifficulty: 1320, build: (difficulty) => createMultDiv(difficulty) },
+  { key: 'fraction_compare', label: 'Fraction Compare', minDifficulty: 860, maxDifficulty: 1220, build: (difficulty) => createFractionCompare(difficulty) },
+  { key: 'order_ops', label: 'Order of Operations', minDifficulty: 960, maxDifficulty: 1500, build: (difficulty) => createOrderOfOps(difficulty) },
+  { key: 'equation_1', label: 'One-Step Equations', minDifficulty: 980, maxDifficulty: 1180, build: (difficulty) => createOneStepEquation(difficulty) },
+  { key: 'percent', label: 'Percent of Number', minDifficulty: 1020, maxDifficulty: 1320, build: (difficulty) => createPercent(difficulty) },
+  { key: 'ratio', label: 'Ratios + Proportions', minDifficulty: 1080, maxDifficulty: 1380, build: (difficulty) => createRatio(difficulty) },
+  { key: 'geometry', label: 'Geometry', minDifficulty: 1120, maxDifficulty: 1500, build: (difficulty) => createGeometry(difficulty) },
+  { key: 'equation_2', label: 'Two-Step Equations', minDifficulty: 1120, maxDifficulty: 1700, build: (difficulty) => createTwoStep(difficulty) },
+  { key: 'lcm', label: 'Smallest Shared Multiple', minDifficulty: 1320, maxDifficulty: 1700, build: () => createLCM() }
 ];
 
 const pickTemplate = (difficulty: number): Template => {
@@ -787,12 +806,16 @@ export const generateAdaptiveFlowItem = (
   correctStreak = 0
 ): FlowItem => {
   const target = chooseTargetDifficulty(rating, correctStreak);
-  const candidates = Array.from({ length: 24 }, () => buildCandidate(target, rating));
+  const candidates = Array.from({ length: FLOW_SELECTION_SETTINGS.candidateCount }, () => buildCandidate(target, rating));
   const fresh = candidates.filter((candidate) => !usedSignatures.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
 
   const scored = pool.map((item) => {
-    const jumpPenalty = prevDifficulty === undefined ? 0 : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - 90) * 3;
+    const jumpPenalty =
+      prevDifficulty === undefined
+        ? 0
+        : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - FLOW_SELECTION_SETTINGS.jumpPenalty.freeWindow) *
+          FLOW_SELECTION_SETTINGS.jumpPenalty.multiplier;
     const diversityPenalty = getFlowDiversityPenalty(item, recentTemplates, recentShapes, recentPatternTags);
     return {
       item,
@@ -801,6 +824,6 @@ export const generateAdaptiveFlowItem = (
   });
 
   scored.sort((a, b) => a.score - b.score);
-  const top = scored.slice(0, Math.min(5, scored.length));
+  const top = scored.slice(0, Math.min(FLOW_SELECTION_SETTINGS.topPoolSize, scored.length));
   return pick(top).item;
 };

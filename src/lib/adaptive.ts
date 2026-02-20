@@ -2,6 +2,44 @@ import type { FlowItem } from './types';
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
+export const FLOW_TARGET_DISTRIBUTION = {
+  base: {
+    near: 0.6,
+    above: 0.25,
+    below: 0.15,
+    centerShift: 0,
+    nearSd: 50,
+    aboveRange: [50, 140] as const,
+    belowRange: [-120, -50] as const
+  },
+  streak: {
+    trigger: 4,
+    near: 0.45,
+    above: 0.45,
+    below: 0.1,
+    centerShift: 40,
+    nearSd: 45,
+    aboveRange: [50, 140] as const,
+    belowRange: [-120, -50] as const
+  }
+} as const;
+
+export const FLOW_SELECTION_SETTINGS = {
+  candidateCount: 24,
+  topPoolSize: 5,
+  recentHistorySize: 6,
+  jumpPenalty: {
+    freeWindow: 90,
+    multiplier: 3
+  },
+  diversityPenalty: {
+    templateLast2: 40,
+    templateLast4: 20,
+    shapeLast2: 30,
+    patternLast3: 25
+  }
+} as const;
+
 export const expectedProbability = (rating: number, difficulty: number) =>
   1 / (1 + 10 ** ((difficulty - rating) / 400));
 
@@ -29,18 +67,22 @@ const gaussian = (mean: number, sd: number) => {
 };
 
 export function chooseTargetDifficulty(rating: number, correctStreak = 0): number {
-  const streaking = correctStreak >= 4;
-  const center = streaking ? rating + 40 : rating;
-  const nearProbability = streaking ? 0.45 : 0.6;
-  const aboveProbability = streaking ? 0.45 : 0.25;
-  const belowProbability = streaking ? 0.10 : 0.15;
+  const streaking = correctStreak >= FLOW_TARGET_DISTRIBUTION.streak.trigger;
+  const config = streaking ? FLOW_TARGET_DISTRIBUTION.streak : FLOW_TARGET_DISTRIBUTION.base;
+  const center = rating + config.centerShift;
+  const nearProbability = config.near;
+  const aboveProbability = config.above;
+  const belowProbability = config.below;
   const roll = Math.random();
-  if (roll < nearProbability) return gaussian(center, streaking ? 45 : 50);
-  if (roll < nearProbability + aboveProbability) return randomBetween(center + 50, center + 140);
-  return randomBetween(center - 120, center - 50);
+  void belowProbability;
+  if (roll < nearProbability) return gaussian(center, config.nearSd);
+  if (roll < nearProbability + aboveProbability) {
+    return randomBetween(center + config.aboveRange[0], center + config.aboveRange[1]);
+  }
+  return randomBetween(center + config.belowRange[0], center + config.belowRange[1]);
 }
 
-export const trimRecentHistory = (history: string[], max = 6) => history.slice(-max);
+export const trimRecentHistory = (history: string[], max = FLOW_SELECTION_SETTINGS.recentHistorySize) => history.slice(-max);
 
 export function getFlowDiversityPenalty(
   item: FlowItem,
@@ -54,11 +96,11 @@ export function getFlowDiversityPenalty(
   const recentShape2 = recentShapes.slice(-2);
   const recentPattern3 = recentPatternTags.slice(-3);
 
-  if (recentTemplate2.includes(item.template)) penalty += 40;
-  else if (recentTemplate4.includes(item.template)) penalty += 20;
-  if (recentShape2.includes(item.shapeSignature)) penalty += 30;
+  if (recentTemplate2.includes(item.template)) penalty += FLOW_SELECTION_SETTINGS.diversityPenalty.templateLast2;
+  else if (recentTemplate4.includes(item.template)) penalty += FLOW_SELECTION_SETTINGS.diversityPenalty.templateLast4;
+  if (recentShape2.includes(item.shapeSignature)) penalty += FLOW_SELECTION_SETTINGS.diversityPenalty.shapeLast2;
   const patternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
-  if (patternTags.some((tag) => recentPattern3.includes(tag))) penalty += 25;
+  if (patternTags.some((tag) => recentPattern3.includes(tag))) penalty += FLOW_SELECTION_SETTINGS.diversityPenalty.patternLast3;
   return penalty;
 }
 
