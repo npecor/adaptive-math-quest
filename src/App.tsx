@@ -925,6 +925,9 @@ export default function App() {
   const runTargetTotal = run.flowTarget + run.puzzleTarget;
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
+  const puzzleSolveRate = state.totals.allTimePuzzleTries
+    ? Math.max(0, Math.min(100, Math.round((state.totals.trophiesEarned / state.totals.allTimePuzzleTries) * 100)))
+    : 0;
   const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
 
   const save = (next: AppState) => {
