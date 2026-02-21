@@ -67,6 +67,10 @@ const playerCharacters: PlayerCharacter[] = [
   { id: 'animal-jelly-jet', emoji: '🪼', name: 'Jelly Jet', vibe: 'Floaty neon jellyfish', kind: 'animal' },
   { id: 'astro-cactus-cadet', emoji: '🌵', name: 'Cactus Comet', vibe: 'Spiky + silly', kind: 'astronaut' },
   { id: 'animal-stardust-fish', emoji: '⭐', name: 'Stardust Fish', vibe: 'Sparkly star swimmer', kind: 'animal' },
+  { id: 'animal-moon-mochi', emoji: '🌙', name: 'Moon Mochi', vibe: 'Soft moon mochi in a helmet', kind: 'animal' },
+  { id: 'animal-glowing-gloop', emoji: '🟣', name: 'Glowing Gloop', vibe: 'Purple cosmic blob', kind: 'animal' },
+  { id: 'animal-alien-al', emoji: '👽', name: 'Alien Al', vibe: 'Classic space explorer', kind: 'animal' },
+  { id: 'entity-black-hole', emoji: '🕳️', name: 'Black Hole', vibe: 'Tiny singularity buddy', kind: 'animal' },
   { id: 'animal-cosmo-cat', emoji: '🐱', name: 'Cosmo Cat', vibe: 'Solar flares + mischief', kind: 'animal' }
 ];
 const defaultCharacterId = playerCharacters[0].id;
@@ -75,6 +79,10 @@ const characterPaletteById: Record<string, { base: string; accent: string; trim:
   'astro-bot': { base: '#f8fafc', accent: '#60a5fa', trim: '#e2e8f0', mark: '#0f172a' },
   'animal-axo-naut': { base: '#f9a8d4', accent: '#fb7185', trim: '#fecdd3', mark: '#3f1d2e' },
   'animal-stardust-fish': { base: '#67e8f9', accent: '#06b6d4', trim: '#bae6fd', mark: '#0f172a' },
+  'animal-moon-mochi': { base: '#f8fafc', accent: '#c084fc', trim: '#e9d5ff', mark: '#1e293b' },
+  'animal-glowing-gloop': { base: '#ff9f40', accent: '#ff3c00', trim: '#ffd8aa', mark: '#2a0000' },
+  'animal-alien-al': { base: '#a8d5ba', accent: '#3498db', trim: '#d1fae5', mark: '#2c3e50' },
+  'entity-black-hole': { base: '#0b1025', accent: '#5419e0', trim: '#00d2ff', mark: '#ffffff' },
   'animal-jelly-jet': { base: '#c4b5fd', accent: '#7c3aed', trim: '#e9d5ff', mark: '#312e81' },
   'animal-cosmo-cat': { base: '#fdba74', accent: '#f59e0b', trim: '#fde68a', mark: '#7c2d12' }
 };
@@ -83,6 +91,10 @@ const characterVariantById: Record<string, string> = {
   'astro-bot': 'astro-bot',
   'animal-axo-naut': 'axo-naut',
   'animal-stardust-fish': 'stardust-fish',
+  'animal-moon-mochi': 'moon-mochi',
+  'animal-glowing-gloop': 'glowing-gloop',
+  'animal-alien-al': 'alien-al',
+  'entity-black-hole': 'black-hole',
   'animal-jelly-jet': 'jelly-jet',
   'animal-cosmo-cat': 'cosmo-cat'
 };
@@ -753,30 +765,203 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
       return (
         <>
           <defs>
-            <radialGradient id={shellId} cx="30%" cy="26%">
-              <stop offset="0%" stopColor="#ecfeff" />
-              <stop offset="48%" stopColor="#22d3ee" />
-              <stop offset="100%" stopColor="#0e7490" />
+            <linearGradient id={shellId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#4facfe" />
+              <stop offset="58%" stopColor="#22d3ee" />
+              <stop offset="100%" stopColor="#06b6d4" />
+            </linearGradient>
+            <radialGradient id={orbId} cx="50%" cy="50%">
+              <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.42" />
+              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
             </radialGradient>
           </defs>
-          <path d="M50 10 L60 35 L86 35 L65 50 L73 76 L50 61 L27 76 L35 50 L14 35 L40 35 Z" fill={`url(#${shellId})`} />
-          <path d="M50 19 L57 37 L77 37 L61 49 L67 68 L50 56 L33 68 L39 49 L23 37 L43 37 Z" fill="none" stroke="rgba(255,255,255,0.38)" strokeWidth="1.5" />
-          <circle cx="33" cy="32" r="6" fill="#67e8f9" fillOpacity="0.26" />
-          <circle cx="67" cy="32" r="6" fill="#93c5fd" fillOpacity="0.24" />
-          <circle cx="49" cy="58" r="1.2" fill="#fff" />
-          <circle cx="56" cy="52" r="1.2" fill="#fff" />
-          <circle cx="44" cy="52" r="1.2" fill="#fff" />
-          <circle cx="42.2" cy="43" r="3.5" className="character-avatar-eye" fill="#0f172a" />
-          <circle cx="57.8" cy="43" r="3.5" className="character-avatar-eye" fill="#0f172a" />
-          <circle cx="43.3" cy="42" r="1.2" fill="#fff" />
-          <circle cx="58.9" cy="42" r="1.2" fill="#fff" />
-          <path d="M45 50 Q50 54 55 50" className="character-avatar-mouth" />
-          <circle cx="38.6" cy="48.2" r="1.7" fill="#bae6fd" />
-          <circle cx="61.4" cy="48.2" r="1.7" fill="#bae6fd" />
-          <path d="M14 51 Q50 15 86 51" fill="none" stroke="rgba(186,230,253,0.62)" strokeWidth="1.3" />
-          <circle cx="20" cy="47" r="1.15" className="character-avatar-star" />
-          <circle cx="50" cy="16" r="1.25" className="character-avatar-star" />
-          <circle cx="80" cy="47" r="1.15" className="character-avatar-star" />
+          <circle cx="50" cy="52" r="34" fill={`url(#${orbId})`} />
+          <path
+            d="M50 13 C55 13 60 27 67 32 C76 36 90 37 90 44 C90 50 76 57 73 66 C70 75 75 88 67 90 C60 93 50 78 50 78 C50 78 40 93 33 90 C25 88 30 75 27 66 C24 57 10 50 10 44 C10 37 24 36 33 32 C40 27 45 13 50 13 Z"
+            fill={`url(#${shellId})`}
+            stroke="#7dd3fc"
+            strokeWidth="2.2"
+          />
+          <path
+            d="M50 19 C54 19 58 30 64 34 C72 38 82 39 82 44 C82 49 72 55 70 62 C68 70 71 79 64 82 C58 85 50 72 50 72 C50 72 42 85 36 82 C29 79 32 70 30 62 C28 55 18 49 18 44 C18 39 28 38 36 34 C42 30 46 19 50 19 Z"
+            fill="none"
+            stroke="rgba(255,255,255,0.34)"
+            strokeWidth="1.4"
+          />
+          <g transform="translate(0, 6)">
+            <circle cx="41.5" cy="45.5" r="6.2" className="character-avatar-eye" fill="#0f172a" />
+            <circle cx="58.5" cy="45.5" r="6.2" className="character-avatar-eye" fill="#0f172a" />
+            <circle cx="43.2" cy="43.8" r="2" fill="#fff" />
+            <circle cx="60.2" cy="43.8" r="2" fill="#fff" />
+            <path d="M44.5 56.5 Q50 62 55.5 56.5" className="character-avatar-mouth" />
+          </g>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(255,255,255,0.24)" strokeWidth="1.7" />
+          <path d="M30 33 Q50 21 70 33" fill="none" stroke="rgba(255,255,255,0.32)" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="33" cy="60" r="1.25" fill="#dbeafe" />
+          <circle cx="67" cy="60" r="1.25" fill="#dbeafe" />
+          <circle cx="23" cy="29" r="1.2" className="character-avatar-star" />
+          <circle cx="77" cy="31" r="1.2" className="character-avatar-star" />
+          <circle cx="50" cy="18" r="1.3" className="character-avatar-star" />
+        </>
+      );
+    case 'moon-mochi':
+      return (
+        <>
+          <defs>
+            <linearGradient id={shellId} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#e2e8f0" />
+            </linearGradient>
+            <radialGradient id={orbId} cx="50%" cy="40%">
+              <stop offset="0%" stopColor="#a855f7" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="52" r="35" fill={`url(#${orbId})`} />
+          <ellipse cx="36" cy="33" rx="6.5" ry="13" fill="#e2e8f0" transform="rotate(-15 36 33)" />
+          <ellipse cx="64" cy="33" rx="6.5" ry="13" fill="#e2e8f0" transform="rotate(15 64 33)" />
+          <ellipse cx="36" cy="33" rx="3.3" ry="8" fill="#f3e8ff" transform="rotate(-15 36 33)" />
+          <ellipse cx="64" cy="33" rx="3.3" ry="8" fill="#f3e8ff" transform="rotate(15 64 33)" />
+          <ellipse cx="50" cy="55" rx="32" ry="27" fill={`url(#${shellId})`} />
+          <ellipse cx="50" cy="55" rx="32" ry="27" fill="none" stroke="#e2e8f0" strokeWidth="1.5" />
+          <circle cx="33" cy="49" r="3" fill="#cbd5e1" fillOpacity="0.48" />
+          <circle cx="68" cy="64" r="2.3" fill="#cbd5e1" fillOpacity="0.48" />
+          <circle cx="64" cy="44" r="3.7" fill="#cbd5e1" fillOpacity="0.48" />
+          <circle cx="43" cy="55" r="3.7" className="character-avatar-eye" fill="#1e293b" />
+          <circle cx="57" cy="55" r="3.7" className="character-avatar-eye" fill="#1e293b" />
+          <path d="M47 62 Q50 64.5 53 62" className="character-avatar-mouth" />
+          <ellipse cx="40.5" cy="61.5" rx="2.8" ry="1.8" fill="#fbcfe8" fillOpacity="0.58" />
+          <ellipse cx="59.5" cy="61.5" rx="2.8" ry="1.8" fill="#fbcfe8" fillOpacity="0.58" />
+          <path d="M31 76 Q50 85 69 76 L69 84 Q50 92 31 84 Z" fill="#94a3b8" fillOpacity="0.84" />
+          <circle cx="50" cy="50" r="37" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.7" />
+          <path d="M28 31 Q38 21 48 23" stroke="rgba(255,255,255,0.6)" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <circle cx="24" cy="27" r="1.1" className="character-avatar-star" />
+          <circle cx="76" cy="29" r="1.1" className="character-avatar-star" />
+        </>
+      );
+    case 'glowing-gloop':
+      return (
+        <>
+          <defs>
+            <radialGradient id={shellId} cx="34%" cy="30%" r="82%">
+              <stop offset="0%" stopColor="#ffdd77" />
+              <stop offset="32%" stopColor="#ff9f40" />
+              <stop offset="66%" stopColor="#ff4d1f" />
+              <stop offset="100%" stopColor="#5d0f12" />
+            </radialGradient>
+            <radialGradient id={orbId} cx="50%" cy="52%">
+              <stop offset="0%" stopColor="#ff8a3a" stopOpacity="0.42" />
+              <stop offset="58%" stopColor="#ff3c00" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#ff3c00" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id={`${idPrefix}-gloop-core`} cx="48%" cy="42%" r="60%">
+              <stop offset="0%" stopColor="#fff8d4" />
+              <stop offset="55%" stopColor="#ff9d52" />
+              <stop offset="100%" stopColor="#d94a1d" stopOpacity="0.88" />
+            </radialGradient>
+            <linearGradient id={`${idPrefix}-gloop-ray`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="rgba(255,126,56,0)" />
+              <stop offset="50%" stopColor="rgba(255,126,56,0.55)" />
+              <stop offset="100%" stopColor="rgba(255,126,56,0)" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="52" r="35" fill={`url(#${orbId})`} />
+          <line x1="50" y1="4" x2="50" y2="23" stroke={`url(#${idPrefix}-gloop-ray)`} strokeWidth="2.2" opacity="0.65" />
+          <line x1="50" y1="80" x2="50" y2="96" stroke={`url(#${idPrefix}-gloop-ray)`} strokeWidth="2.2" opacity="0.58" />
+          <line x1="11" y1="52" x2="27" y2="52" stroke={`url(#${idPrefix}-gloop-ray)`} strokeWidth="2.2" opacity="0.56" />
+          <line x1="73" y1="52" x2="89" y2="52" stroke={`url(#${idPrefix}-gloop-ray)`} strokeWidth="2.2" opacity="0.56" />
+          <path
+            d="M26 66 Q18 54 22 42 Q25 28 39 21 Q50 15 61 21 Q75 28 78 42 Q82 54 74 66 Q66 78 50 77 Q34 78 26 66 Z"
+            fill={`url(#${shellId})`}
+          />
+          <ellipse cx="50" cy="52" rx="22.5" ry="21.5" fill={`url(#${idPrefix}-gloop-core)`} opacity="0.78" />
+          <path
+            d="M26 66 Q18 54 22 42 Q25 28 39 21 Q50 15 61 21 Q75 28 78 42 Q82 54 74 66 Q66 78 50 77 Q34 78 26 66 Z"
+            fill="none"
+            stroke="#ffd0a1"
+            strokeWidth="1.4"
+            strokeOpacity="0.44"
+          />
+          <ellipse cx="50" cy="52" rx="33" ry="31" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.3" />
+          <circle cx="35" cy="37" r="3.2" fill="#ffe6c4" fillOpacity="0.32" />
+          <circle cx="66" cy="60" r="3.8" fill="#ffe6c4" fillOpacity="0.2" />
+          <circle cx="64" cy="40" r="2.2" fill="#ffe6c4" fillOpacity="0.36" />
+          <ellipse cx="42.2" cy="49" rx="4.7" ry="5.2" className="character-avatar-eye" fill="#2a0000" />
+          <ellipse cx="57.8" cy="49" rx="4.7" ry="5.2" className="character-avatar-eye" fill="#2a0000" />
+          <circle cx="43.9" cy="47.2" r="1.45" fill="#fff" />
+          <circle cx="59.5" cy="47.2" r="1.45" fill="#fff" />
+          <ellipse cx="34" cy="57.5" rx="3.3" ry="2" fill="#ff8585" fillOpacity="0.28" />
+          <ellipse cx="66" cy="57.5" rx="3.3" ry="2" fill="#ff8585" fillOpacity="0.28" />
+          <path d="M44.8 60.2 Q50 65.2 55.2 60.2" className="character-avatar-mouth" stroke="#3a0000" />
+          <path d="M35 36 Q43 27 54 29" stroke="rgba(255,255,255,0.35)" strokeWidth="2.1" fill="none" strokeLinecap="round" />
+          <circle cx="26" cy="30" r="1.1" className="character-avatar-star" />
+          <circle cx="74" cy="29" r="1.1" className="character-avatar-star" />
+          <circle cx="50" cy="18" r="1.3" className="character-avatar-star" />
+        </>
+      );
+    case 'alien-al':
+      return (
+        <>
+          <defs>
+            <radialGradient id={orbId} cx="50%" cy="50%">
+              <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#93c5fd" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="52" r="34" fill={`url(#${orbId})`} />
+          <ellipse cx="50" cy="52" rx="31" ry="28" fill="#a8d5ba" stroke="#d1fae5" strokeWidth="1.8" />
+          <ellipse cx="37" cy="51" rx="8" ry="11.4" className="character-avatar-eye" fill="#2c3e50" transform="rotate(14 37 51)" />
+          <ellipse cx="63" cy="51" rx="8" ry="11.4" className="character-avatar-eye" fill="#2c3e50" transform="rotate(-14 63 51)" />
+          <circle cx="40" cy="46.5" r="2.1" fill="#fff" opacity="0.9" />
+          <circle cx="60" cy="46.5" r="2.1" fill="#fff" opacity="0.9" />
+          <circle cx="32" cy="62" r="2.6" fill="#ffb7b2" fillOpacity="0.52" />
+          <circle cx="68" cy="62" r="2.6" fill="#ffb7b2" fillOpacity="0.52" />
+          <path d="M45.5 64.5 Q50 68.5 54.5 64.5" className="character-avatar-mouth" />
+          <line x1="50" y1="24" x2="50" y2="15" stroke="#d1fae5" strokeWidth="1.7" />
+          <circle cx="50" cy="13" r="2.3" fill="#fcd34d" />
+          <ellipse cx="50" cy="49" rx="35" ry="36" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.45" />
+          <path d="M30 31 Q38 23 47 24" fill="none" stroke="rgba(255,255,255,0.44)" strokeWidth="2" strokeLinecap="round" />
+          <rect x="34" y="72" width="32" height="10" rx="5" fill="rgba(255,255,255,0.45)" />
+          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <circle cx="24" cy="30" r="1.05" className="character-avatar-star" />
+          <circle cx="76" cy="30" r="1.05" className="character-avatar-star" />
+        </>
+      );
+    case 'black-hole':
+      return (
+        <>
+          <defs>
+            <radialGradient id={orbId} cx="50%" cy="50%">
+              <stop offset="0%" stopColor="#00d2ff" stopOpacity="0.2" />
+              <stop offset="40%" stopColor="#5419e0" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#5419e0" stopOpacity="0" />
+            </radialGradient>
+            <linearGradient id={`${idPrefix}-hole-ring`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#00d2ff" stopOpacity="0.1" />
+              <stop offset="50%" stopColor="#5419e0" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#00d2ff" stopOpacity="0.1" />
+            </linearGradient>
+            <radialGradient id={shellId} cx="50%" cy="50%">
+              <stop offset="0%" stopColor="#000000" />
+              <stop offset="68%" stopColor="#070816" />
+              <stop offset="100%" stopColor="#121d45" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="52" r="35" fill={`url(#${orbId})`} />
+          <ellipse cx="50" cy="52" rx="36" ry="18" fill="none" stroke={`url(#${idPrefix}-hole-ring)`} strokeWidth="2.8" />
+          <ellipse cx="50" cy="52" rx="27" ry="11" fill="none" stroke="rgba(84, 25, 224, 0.65)" strokeWidth="1.8" />
+          <ellipse cx="50" cy="52" rx="20.5" ry="19.5" fill={`url(#${shellId})`} stroke="#3b1f85" strokeWidth="1.6" />
+          <circle cx="50" cy="52" r="11.2" fill="#000000" />
+          <ellipse cx="42" cy="50.5" rx="3.8" ry="4.8" fill="#ffffff" />
+          <ellipse cx="58" cy="50.5" rx="3.8" ry="4.8" fill="#ffffff" />
+          <ellipse cx="42" cy="50.5" rx="1.5" ry="2.1" className="character-avatar-eye" fill="#0f172a" />
+          <ellipse cx="58" cy="50.5" rx="1.5" ry="2.1" className="character-avatar-eye" fill="#0f172a" />
+          <path d="M46 59 Q50 62.8 54 59" className="character-avatar-mouth" stroke="#ffffff" />
+          <circle cx="26" cy="32" r="1.1" className="character-avatar-star" />
+          <circle cx="74" cy="31" r="1.1" className="character-avatar-star" />
+          <circle cx="31" cy="68" r="1" fill="#00d2ff" opacity="0.9" />
+          <circle cx="69" cy="68" r="1" fill="#5419e0" opacity="0.9" />
         </>
       );
     case 'astro-bot':

@@ -757,7 +757,23 @@ p {
 }
 
 .character-sprite.stardust-fish {
-  transform: translateY(0) scale(0.91);
+  transform: translateY(0) scale(0.95);
+}
+
+.character-sprite.moon-mochi {
+  transform: translateY(0.5px) scale(0.95);
+}
+
+.character-sprite.glowing-gloop {
+  transform: translateY(0.6px) scale(0.95);
+}
+
+.character-sprite.alien-al {
+  transform: translateY(0.4px) scale(0.95);
+}
+
+.character-sprite.black-hole {
+  transform: translateY(0.4px) scale(0.95);
 }
 
 .character-sprite.jelly-jet {
@@ -790,6 +806,27 @@ p {
 
 .character-avatar.stardust-fish .character-avatar-svg {
   animation: idle-stardust-fish 4.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.35)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+}
+
+.character-avatar.moon-mochi .character-avatar-svg {
+  animation: idle-moon-mochi 4.1s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.26)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+}
+
+.character-avatar.glowing-gloop .character-avatar-svg {
+  animation: idle-gloop 3.1s ease-in-out infinite;
+  filter: drop-shadow(0 0 11px rgba(255, 60, 0, 0.35)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+}
+
+.character-avatar.alien-al .character-avatar-svg {
+  animation: idle-alien 3.7s ease-in-out infinite;
+  filter: drop-shadow(0 0 9px rgba(74, 222, 128, 0.24)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+}
+
+.character-avatar.black-hole .character-avatar-svg {
+  animation: idle-black-hole 4.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 10px rgba(84, 25, 224, 0.34)) drop-shadow(0 0 8px rgba(0, 210, 255, 0.22)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
 }
 
 .character-avatar.jelly-jet .character-avatar-svg {
@@ -814,6 +851,22 @@ p {
 
 .character-avatar.stardust-fish .character-avatar-eye {
   animation: blink-stardust-fish 3.4s steps(1, end) infinite;
+}
+
+.character-avatar.moon-mochi .character-avatar-eye {
+  animation: blink-moon-mochi 3.8s steps(1, end) infinite;
+}
+
+.character-avatar.glowing-gloop .character-avatar-eye {
+  animation: blink-gloop 3s steps(1, end) infinite;
+}
+
+.character-avatar.alien-al .character-avatar-eye {
+  animation: blink-alien 3.3s steps(1, end) infinite;
+}
+
+.character-avatar.black-hole .character-avatar-eye {
+  animation: blink-black-hole 3.5s steps(1, end) infinite;
 }
 
 .character-avatar.jelly-jet .character-avatar-eye {
@@ -850,6 +903,31 @@ p {
 @keyframes idle-stardust-fish {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-1px) scale(1.03) rotate(4deg); }
+}
+
+@keyframes idle-moon-mochi {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1.2px) rotate(-1.2deg); }
+  60% { transform: translateY(-0.4px) rotate(1deg); }
+}
+
+@keyframes idle-gloop {
+  0%, 100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  22% { transform: translateY(-0.8px) scale(1.04, 0.97) rotate(-1deg); }
+  52% { transform: translateY(0.5px) scale(0.97, 1.03) rotate(0.9deg); }
+  78% { transform: translateY(-0.4px) scale(1.02, 0.99) rotate(-0.6deg); }
+}
+
+@keyframes idle-alien {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-1.1px) rotate(-1.15deg); }
+  65% { transform: translateY(-0.4px) rotate(1.1deg); }
+}
+
+@keyframes idle-black-hole {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  30% { transform: translateY(-0.8px) rotate(-1deg) scale(1.02); }
+  65% { transform: translateY(0.4px) rotate(1deg) scale(0.99); }
 }
 
 @keyframes idle-jelly {
@@ -891,6 +969,26 @@ p {
 @keyframes blink-stardust-fish {
   0%, 52%, 56%, 100% { transform: scaleY(1); }
   54% { transform: scaleY(0.22); }
+}
+
+@keyframes blink-moon-mochi {
+  0%, 46%, 50%, 86%, 90%, 100% { transform: scaleY(1); }
+  48%, 88% { transform: scaleY(0.2); }
+}
+
+@keyframes blink-gloop {
+  0%, 35%, 39%, 72%, 76%, 100% { transform: scaleY(1); }
+  37%, 74% { transform: scaleY(0.15); }
+}
+
+@keyframes blink-alien {
+  0%, 40%, 44%, 82%, 86%, 100% { transform: scaleY(1); }
+  42%, 84% { transform: scaleY(0.2); }
+}
+
+@keyframes blink-black-hole {
+  0%, 42%, 46%, 88%, 92%, 100% { transform: scaleY(1); }
+  44%, 90% { transform: scaleY(0.18); }
 }
 
 @keyframes blink-jelly {
@@ -2359,7 +2457,7 @@ p {
 }
 
 .character-card.selected.celebrate .character-avatar {
-  animation: character-happy-flip 1.05s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
+  animation: character-happy-jump 1.05s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
 }
 
 .character-card.selected .character-avatar .character-avatar-svg {
@@ -2492,21 +2590,27 @@ p {
   }
 }
 
-@keyframes character-happy-flip {
+@keyframes character-happy-jump {
   0% {
-    transform: translate(0, 0) rotate(0deg) scale(1);
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
   }
-  20% {
-    transform: translate(0, -5px) rotate(-8deg) scale(1.06);
+  14% {
+    transform: translate(0, 3px) rotate(-4deg) scale(1.15, 0.86);
   }
-  48% {
-    transform: translate(0, -8px) rotate(190deg) scale(1.09);
+  34% {
+    transform: translate(0, -14px) rotate(4deg) scale(0.93, 1.14);
   }
-  72% {
-    transform: translate(0, -4px) rotate(342deg) scale(1.04);
+  52% {
+    transform: translate(0, -22px) rotate(-6deg) scale(1.06, 0.94);
+  }
+  70% {
+    transform: translate(0, -9px) rotate(4deg) scale(0.97, 1.1);
+  }
+  86% {
+    transform: translate(0, -2px) rotate(-2deg) scale(1.03, 0.97);
   }
   100% {
-    transform: translate(0, 0) rotate(360deg) scale(1);
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
   }
 }
 
