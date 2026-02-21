@@ -2344,10 +2344,6 @@ export default function App() {
         <h1 className="landing-title">
           Galaxy <span>Genius</span>
         </h1>
-        <p className="landing-tagline">Big Brains. Space Games.</p>
-        <p className="landing-copy">
-          Blast off with Astro Bot and friends, solve space puzzles, and grow your trophy galaxy.
-        </p>
         <div className="landing-actions">
           <button className="btn btn-primary" onClick={continueFromLanding}>
             {state.user ? `Continue as ${state.user.username}` : 'Start Mission'}
@@ -2364,7 +2360,6 @@ export default function App() {
           <BrandMark size="sm" />
           <div className="onboarding-brand-copy">
             <p className="onboarding-brand-name">Galaxy Genius</p>
-            <p className="onboarding-brand-tagline">Big Brains. Space Games.</p>
           </div>
         </div>
 
@@ -2421,7 +2416,7 @@ export default function App() {
                 {playerCharacters.map((character) => (
                   <button
                     key={character.id}
-                    className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''} ${celebratingCharacterId === character.id ? 'celebrate' : ''}`}
+                    className={`character-card jump-${characterVariantById[character.id] ?? 'astro-bot'} ${selectedCharacterId === character.id ? 'selected' : ''} ${celebratingCharacterId === character.id ? 'celebrate' : ''}`}
                     onClick={() => pickOnboardingCharacter(character.id)}
                   >
                     {selectedCharacterId === character.id && <span className="character-selected-badge">✓</span>}
@@ -3310,7 +3305,6 @@ export default function App() {
             <BrandMark size="sm" />
             <div className="app-brand-copy">
               <span className="app-brand-name">Galaxy Genius</span>
-              <span className="app-brand-tagline">Big Brains. Space Games.</span>
             </div>
           </div>
           <div className="streak-counter" title="Score">⭐ {topBarPoints}</div>

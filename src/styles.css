@@ -277,14 +277,6 @@ p {
   line-height: 1.1;
 }
 
-.app-brand-tagline {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(125, 211, 252, 0.84);
-}
-
 .brand-mark {
   position: relative;
   display: inline-block;
@@ -2771,15 +2763,6 @@ p {
   color: var(--brand-blue);
 }
 
-.landing-tagline {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--brand-cyan);
-  margin-top: -2px;
-}
-
 .landing-copy {
   max-width: 35ch;
   font-size: 15px;
@@ -2834,15 +2817,6 @@ p {
   font-size: 14px;
   color: #e0f2fe;
   line-height: 1.1;
-}
-
-.onboarding-brand-tagline {
-  margin: 0;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(125, 211, 252, 0.8);
 }
 
 .onboarding-title {
@@ -2952,6 +2926,7 @@ p {
   padding: 10px 9px 10px;
   color: var(--color-ink);
   cursor: pointer;
+  overflow: hidden;
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
@@ -2983,7 +2958,26 @@ p {
 }
 
 .character-card.selected.celebrate .character-avatar {
-  animation: character-happy-jump 1.05s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
+  animation: character-happy-jump 0.92s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
+}
+
+.character-card.jump-jelly-jet.selected.celebrate .character-avatar,
+.character-card.jump-moon-mochi.selected.celebrate .character-avatar,
+.character-card.jump-cosmo-cat.selected.celebrate .character-avatar {
+  animation: character-happy-jump-soft 0.95s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
+}
+
+.character-card.jump-glowing-gloop.selected.celebrate .character-avatar,
+.character-card.jump-black-hole.selected.celebrate .character-avatar,
+.character-card.jump-cactus-cadet.selected.celebrate .character-avatar {
+  animation: character-happy-jump-bouncy 1s cubic-bezier(0.2, 0.8, 0.24, 1) 1;
+}
+
+.character-card.jump-astro-bot.selected.celebrate .character-avatar,
+.character-card.jump-axo-naut.selected.celebrate .character-avatar,
+.character-card.jump-stardust-fish.selected.celebrate .character-avatar,
+.character-card.jump-alien-al.selected.celebrate .character-avatar {
+  animation: character-happy-jump-zig 0.98s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
 }
 
 .character-card.selected .character-avatar .character-avatar-svg {
@@ -3121,19 +3115,82 @@ p {
     transform: translate(0, 0) rotate(0deg) scale(1, 1);
   }
   14% {
-    transform: translate(0, 3px) rotate(-4deg) scale(1.15, 0.86);
+    transform: translate(0, 2px) rotate(-3deg) scale(1.12, 0.9);
   }
   34% {
-    transform: translate(0, -14px) rotate(4deg) scale(0.93, 1.14);
+    transform: translate(0, -8px) rotate(3deg) scale(0.95, 1.1);
   }
   52% {
-    transform: translate(0, -22px) rotate(-6deg) scale(1.06, 0.94);
+    transform: translate(0, -12px) rotate(-4deg) scale(1.04, 0.96);
   }
   70% {
-    transform: translate(0, -9px) rotate(4deg) scale(0.97, 1.1);
+    transform: translate(0, -6px) rotate(3deg) scale(0.98, 1.06);
   }
   86% {
-    transform: translate(0, -2px) rotate(-2deg) scale(1.03, 0.97);
+    transform: translate(0, -1px) rotate(-1deg) scale(1.02, 0.98);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+}
+
+@keyframes character-happy-jump-soft {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+  18% {
+    transform: translate(0, 1px) rotate(-2deg) scale(1.07, 0.95);
+  }
+  45% {
+    transform: translate(0, -9px) rotate(2deg) scale(0.98, 1.05);
+  }
+  68% {
+    transform: translate(0, -5px) rotate(-1.5deg) scale(1.01, 1.01);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+}
+
+@keyframes character-happy-jump-zig {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+  16% {
+    transform: translate(-1px, 2px) rotate(-2deg) scale(1.08, 0.92);
+  }
+  40% {
+    transform: translate(2px, -9px) rotate(3deg) scale(0.96, 1.08);
+  }
+  62% {
+    transform: translate(-2px, -6px) rotate(-2.5deg) scale(1.02, 0.98);
+  }
+  82% {
+    transform: translate(1px, -2px) rotate(1.2deg) scale(1.01, 0.99);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+}
+
+@keyframes character-happy-jump-bouncy {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1, 1);
+  }
+  12% {
+    transform: translate(0, 2px) rotate(-2deg) scale(1.12, 0.87);
+  }
+  34% {
+    transform: translate(0, -7px) rotate(2.5deg) scale(0.93, 1.12);
+  }
+  54% {
+    transform: translate(0, -10px) rotate(-2deg) scale(1.06, 0.94);
+  }
+  72% {
+    transform: translate(0, -5px) rotate(1.3deg) scale(0.98, 1.06);
+  }
+  88% {
+    transform: translate(0, -1px) rotate(-0.8deg) scale(1.01, 0.99);
   }
   100% {
     transform: translate(0, 0) rotate(0deg) scale(1, 1);
@@ -3548,10 +3605,6 @@ p {
     font-size: 12px;
   }
 
-  .app-brand-tagline {
-    display: none;
-  }
-
   .landing-card {
     padding: 28px 20px 24px;
     gap: 12px;
@@ -3578,11 +3631,6 @@ p {
 
   .landing-title {
     font-size: clamp(28px, 12vw, 40px);
-  }
-
-  .landing-tagline {
-    font-size: 10px;
-    letter-spacing: 0.16em;
   }
 
   .landing-copy {
