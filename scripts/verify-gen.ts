@@ -1,4 +1,12 @@
-import { FLOW_SELECTION_SETTINGS, FLOW_TARGET_DISTRIBUTION } from '../src/lib/adaptive';
+import {
+  FLOW_SELECTION_SETTINGS,
+  FLOW_TARGET_DISTRIBUTION,
+  TRAINING_EARLY_QUESTION_CAP,
+  TRAINING_START_RATING,
+  TRAINING_TARGET_DISTRIBUTION,
+  clampTrainingRating,
+  updateTrainingRating
+} from '../src/lib/adaptive';
 import { buildBonusTarget, createBonusChallenge, type BonusChallenge } from '../src/lib/bonus-generator';
 import { analyzeFlowItem, difficultyLabelFromScore, type DifficultyLabel } from '../src/lib/difficulty-tags';
 import { FLOW_TEMPLATE_CATALOG, generateAdaptiveFlowItem } from '../src/lib/flow-generator';
@@ -143,6 +151,17 @@ function printAdaptiveInputsAndFormula(): void {
     `  - diversityPenalty = +${diversity.templateLast2} template-in-last-2, +${diversity.templateLast4} template-in-last-4, +${diversity.shapeLast2} shape-in-last-2, +${diversity.patternLast3} pattern-in-last-3`
   );
   console.log(`  - Select random pick from top ${FLOW_SELECTION_SETTINGS.topPoolSize} scored candidates`);
+
+  console.log('\n  Training-mode target distribution:');
+  console.log(
+    `  - Flow profile: near ${TRAINING_TARGET_DISTRIBUTION.flow.near * 100}% | above ${TRAINING_TARGET_DISTRIBUTION.flow.above * 100}% | below ${TRAINING_TARGET_DISTRIBUTION.flow.below * 100}% (sd ${TRAINING_TARGET_DISTRIBUTION.flow.nearSd})`
+  );
+  console.log(
+    `  - Puzzle profile: near ${TRAINING_TARGET_DISTRIBUTION.puzzle.near * 100}% | above ${TRAINING_TARGET_DISTRIBUTION.puzzle.above * 100}% | below ${TRAINING_TARGET_DISTRIBUTION.puzzle.below * 100}% (sd ${TRAINING_TARGET_DISTRIBUTION.puzzle.nearSd})`
+  );
+  console.log(
+    `  - Training start rating = min(skillRating, ${TRAINING_START_RATING}); early cap window = ${TRAINING_EARLY_QUESTION_CAP} questions`
+  );
 }
 
 function runFlowDistributionAndAssertions(): { failures: string[] } {
@@ -194,6 +213,12 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
       }
       if (!Array.isArray(item.hints) || item.hints.length !== 3) {
         failures.push(`Hints length != 3 for ${item.id}`);
+      }
+      if (Array.isArray(item.hints)) {
+        const normalizedHints = item.hints.map((hint) => hint.trim().toLowerCase());
+        if (new Set(normalizedHints).size !== normalizedHints.length) {
+          failures.push(`Flow hints repeat wording for ${item.id}: ${item.hints.join(' | ')}`);
+        }
       }
       if (!hasConcreteRewriteHint(item)) {
         failures.push(`Missing concrete rewrite hint for ${item.id}: ${item.hints.join(' | ')}`);
@@ -348,6 +373,12 @@ function runPuzzleSanity(): { failures: string[] } {
     if (!Array.isArray(puzzle.hint_ladder) || puzzle.hint_ladder.length !== 3) {
       failures.push(`Puzzle hints are not 3-step: ${puzzle.id}`);
     }
+    if (Array.isArray(puzzle.hint_ladder)) {
+      const normalizedHints = puzzle.hint_ladder.map((hint) => hint.trim().toLowerCase());
+      if (new Set(normalizedHints).size !== normalizedHints.length) {
+        failures.push(`Puzzle hints repeat wording: ${puzzle.id} :: ${puzzle.hint_ladder.join(' | ')}`);
+      }
+    }
     if (!Array.isArray(puzzle.solution_steps) || puzzle.solution_steps.length !== 3) {
       failures.push(`Puzzle Teach Me steps are not 3-step: ${puzzle.id}`);
     }
@@ -408,6 +439,131 @@ function runFractionBenchmarkLabelCheck(): { failures: string[] } {
   if (label === 'Hard' || label === 'Expert' || label === 'Master') {
     failures.push(`1/2 vs 3/8 labeled above Medium (${label})`);
   }
+  return { failures };
+}
+
+function runTrainingModeSanity(): { failures: string[] } {
+  const failures: string[] = [];
+  const SIM_COUNT = isCiMode ? 8 : 20;
+  const QUESTIONS_PER_SIM = 20;
+  const SKILL_RATING = 1325;
+
+  let earlyTotal = 0;
+  let earlyEasyMedium = 0;
+  let lateTotal = 0;
+  let lateHardPlus = 0;
+  let maxObservedJump = 0;
+  let trendDeltaTotal = 0;
+  let earlyAddSubCount = 0;
+
+  for (let sim = 0; sim < SIM_COUNT; sim += 1) {
+    let trainingRating = clampTrainingRating(Math.min(SKILL_RATING, TRAINING_START_RATING), SKILL_RATING, 0);
+    let trainingQuestionsAnswered = 0;
+    let flowStreak = 0;
+    let prevDifficulty: number | undefined;
+    let recentTemplates: string[] = [];
+    let recentShapes: string[] = [];
+    let recentPatternTags: string[] = [];
+    const used = new Set<string>();
+    const firstWindow: number[] = [];
+    const lateWindow: number[] = [];
+
+    for (let i = 0; i < QUESTIONS_PER_SIM; i += 1) {
+      const earlyAllowedTemplates =
+        trainingQuestionsAnswered < 8
+          ? ['add_sub']
+          : trainingQuestionsAnswered < 12
+            ? ['add_sub', 'mult_div']
+            : undefined;
+      const earlyMaxDifficulty =
+        trainingQuestionsAnswered < 8 ? 880 : trainingQuestionsAnswered < 12 ? 950 : undefined;
+      const item = generateAdaptiveFlowItem(
+        trainingRating,
+        used,
+        prevDifficulty,
+        recentTemplates,
+        recentShapes,
+        recentPatternTags,
+        flowStreak,
+        earlyMaxDifficulty,
+        { targetProfile: 'training_flow', maxJumpFromPrev: 120, allowedTemplates: earlyAllowedTemplates }
+      );
+      const label = inferFlowLabel(item);
+      if (i < 8) {
+        earlyTotal += 1;
+        if (label === 'Easy' || label === 'Medium') earlyEasyMedium += 1;
+      }
+      if (i < 8 && item.template === 'add_sub') earlyAddSubCount += 1;
+      if (i >= 12) {
+        lateTotal += 1;
+        if (HARD_PLUS_LABELS.has(label)) lateHardPlus += 1;
+      }
+
+      if (i < 5) firstWindow.push(item.difficulty);
+      if (i >= 15) lateWindow.push(item.difficulty);
+
+      if (prevDifficulty !== undefined) {
+        const jump = Math.abs(item.difficulty - prevDifficulty);
+        maxObservedJump = Math.max(maxObservedJump, jump);
+        if (jump > 120) {
+          failures.push(`Training jump > 120 detected (sim ${sim + 1}, q ${i + 1}): ${prevDifficulty} -> ${item.difficulty}`);
+        }
+      }
+
+      const patternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
+      recentTemplates = [...recentTemplates, item.template].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+      recentShapes = [...recentShapes, item.shapeSignature].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+      recentPatternTags = [...recentPatternTags, ...patternTags].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+      prevDifficulty = item.difficulty;
+      used.add(item.id);
+      if (i % 10 === 0) used.clear();
+
+      trainingQuestionsAnswered += 1;
+      flowStreak = Math.min(flowStreak + 1, 8);
+      trainingRating = updateTrainingRating(trainingRating, SKILL_RATING, trainingQuestionsAnswered, true, flowStreak);
+    }
+
+    const firstAvg = firstWindow.reduce((sum, value) => sum + value, 0) / Math.max(1, firstWindow.length);
+    const lateAvg = lateWindow.reduce((sum, value) => sum + value, 0) / Math.max(1, lateWindow.length);
+    trendDeltaTotal += lateAvg - firstAvg;
+
+    const beforeWrong = trainingRating;
+    trainingQuestionsAnswered += 1;
+    trainingRating = updateTrainingRating(trainingRating, SKILL_RATING, trainingQuestionsAnswered, false, 0);
+    trainingQuestionsAnswered += 1;
+    trainingRating = updateTrainingRating(trainingRating, SKILL_RATING, trainingQuestionsAnswered, false, 0);
+    if (trainingRating >= beforeWrong) {
+      failures.push(`Training rating did not decrease after wrong answers (sim ${sim + 1}): ${beforeWrong} -> ${trainingRating}`);
+    }
+  }
+
+  const earlyEasyMediumRate = earlyTotal > 0 ? earlyEasyMedium / earlyTotal : 1;
+  const earlyAddSubRate = SIM_COUNT > 0 ? earlyAddSubCount / (SIM_COUNT * 8) : 1;
+  const lateHardPlusRate = lateTotal > 0 ? lateHardPlus / lateTotal : 0;
+  const avgTrendDelta = trendDeltaTotal / Math.max(1, SIM_COUNT);
+
+  console.log(`\n=== Training Mode Sanity (${SIM_COUNT} sims × ${QUESTIONS_PER_SIM} correct-first questions) ===`);
+  console.log(
+    `  Early Easy/Medium rate (first 8): ${(earlyEasyMediumRate * 100).toFixed(2)}% (${earlyEasyMedium}/${earlyTotal})`
+  );
+  console.log(`  Early add/sub-only rate (first 8): ${(earlyAddSubRate * 100).toFixed(2)}% (${earlyAddSubCount}/${SIM_COUNT * 8})`);
+  console.log(`  Late Hard+ rate (questions 13-20): ${(lateHardPlusRate * 100).toFixed(2)}% (${lateHardPlus}/${lateTotal})`);
+  console.log(`  Avg difficulty trend delta (late - early): ${avgTrendDelta.toFixed(1)}`);
+  console.log(`  Max observed consecutive difficulty jump: ${maxObservedJump}`);
+
+  if (earlyEasyMediumRate < 0.85) {
+    failures.push(`Training early cluster too hard: Easy/Medium ${(earlyEasyMediumRate * 100).toFixed(1)}%`);
+  }
+  if (earlyAddSubRate < 1) {
+    failures.push(`Training first-8 questions are not strictly add/sub: ${(earlyAddSubRate * 100).toFixed(1)}% add/sub`);
+  }
+  if (avgTrendDelta < 80) {
+    failures.push(`Training difficulty trend too flat: avg delta ${avgTrendDelta.toFixed(1)}`);
+  }
+  if (lateHardPlusRate < 0.05) {
+    failures.push(`Training late Hard+ exposure too low: ${(lateHardPlusRate * 100).toFixed(1)}%`);
+  }
+
   return { failures };
 }
 
@@ -472,12 +628,14 @@ function main(): void {
   const flowStats = runFlowDistributionAndAssertions();
   const flowSamples = printFlowSamples();
   const fractionBenchmarkCheck = runFractionBenchmarkLabelCheck();
+  const trainingStats = runTrainingModeSanity();
   const puzzleStats = runPuzzleSanity();
   const bonusStats = runBonusSanity();
   const failures = [
     ...flowStats.failures,
     ...flowSamples.failures,
     ...fractionBenchmarkCheck.failures,
+    ...trainingStats.failures,
     ...puzzleStats.failures,
     ...bonusStats.failures
   ];

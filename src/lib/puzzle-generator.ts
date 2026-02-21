@@ -1,4 +1,4 @@
-import { chooseTargetDifficulty } from './adaptive';
+import { chooseTargetDifficulty, type TargetDifficultyProfile } from './adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './difficulty-tags';
 import type { PuzzleItem } from './types';
 
@@ -802,14 +802,26 @@ const buildCandidate = (targetDifficulty: number): PuzzleItem => {
 export const generateAdaptivePuzzleItem = (
   rating: number,
   usedIds: Set<string>,
-  prevDifficulty?: number
+  prevDifficulty?: number,
+  options: {
+    targetProfile?: TargetDifficultyProfile;
+    maxDifficulty?: number;
+    allowedPuzzleTypes?: Array<NonNullable<PuzzleItem['puzzleType']>>;
+  } = {}
 ): PuzzleItem => {
-  const target = chooseTargetDifficulty(rating);
+  const target = chooseTargetDifficulty(rating, 0, options.targetProfile ?? 'default');
   const candidates = Array.from({ length: 24 }, () => buildCandidate(target));
   const fresh = candidates.filter((candidate) => !usedIds.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
+  const difficultyFiltered =
+    typeof options.maxDifficulty === 'number' ? pool.filter((item) => item.difficulty <= options.maxDifficulty!) : pool;
+  const typeFiltered =
+    options.allowedPuzzleTypes?.length
+      ? difficultyFiltered.filter((item) => options.allowedPuzzleTypes!.includes(item.puzzleType ?? 'logic'))
+      : difficultyFiltered;
+  const scoringPool = typeFiltered.length ? typeFiltered : difficultyFiltered.length ? difficultyFiltered : pool;
 
-  const scored = pool.map((item) => {
+  const scored = scoringPool.map((item) => {
     const jumpPenalty =
       prevDifficulty === undefined ? 0 : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - 110) * 2.8;
 
@@ -827,11 +839,22 @@ export const generateAdaptivePuzzleItem = (
   return pick(scored.slice(0, Math.min(6, scored.length))).item;
 };
 
-export const generateAdaptivePuzzleChoices = (rating: number, usedIds: Set<string>, count = 2): PuzzleItem[] => {
+export const generateAdaptivePuzzleChoices = (
+  rating: number,
+  usedIds: Set<string>,
+  count = 2,
+  options: {
+    targetProfile?: TargetDifficultyProfile;
+    maxDifficulty?: number;
+    allowedPuzzleTypes?: Array<NonNullable<PuzzleItem['puzzleType']>>;
+  } = {}
+): PuzzleItem[] => {
   const choices: PuzzleItem[] = [];
   const tempUsed = new Set(usedIds);
-  while (choices.length < count) {
-    const next = generateAdaptivePuzzleItem(rating, tempUsed, choices[choices.length - 1]?.difficulty);
+  let attempts = 0;
+  while (choices.length < count && attempts < count * 16) {
+    attempts += 1;
+    const next = generateAdaptivePuzzleItem(rating, tempUsed, choices[choices.length - 1]?.difficulty, options);
     tempUsed.add(next.id);
     choices.push(next);
   }

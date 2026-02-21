@@ -1,5 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { updateRating } from './lib/adaptive';
+import {
+  TRAINING_EARLY_QUESTION_CAP,
+  TRAINING_START_RATING,
+  clampTrainingRating,
+  updateRating,
+  updateTrainingRating
+} from './lib/adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
@@ -16,7 +22,7 @@ type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
-type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit';
+type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode';
 type PlayerCharacter = {
   id: string;
   emoji: string;
@@ -50,6 +56,9 @@ interface RunState {
   starsThisRound: number;
   puzzlesSolvedThisRound: number;
   puzzlesTriedThisRound: number;
+  trainingRating: number;
+  trainingQuestionsAnswered: number;
+  trainingPuzzlesSolved: number;
 }
 
 type PendingBonusFinish = {
@@ -64,6 +73,10 @@ const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
 const GLOBAL_LEADERBOARD_MIN_STARS = 21; // must be > 20 to appear globally
+const TRAINING_ADD_SUB_ONLY_QUESTIONS = 8;
+const TRAINING_ADD_SUB_MULT_DIV_QUESTIONS = 12;
+const TRAINING_EARLY_MAX_DIFFICULTY = 880;
+const TRAINING_MID_MAX_DIFFICULTY = 950;
 const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const SHOW_TROPHY_ACTIVITY_CARD = false;
@@ -110,7 +123,8 @@ const characterVariantById: Record<string, string> = {
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
   galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzles', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
-  puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 }
+  puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 },
+  training_mode: { name: 'Training Mode', icon: '🛰️', subtitle: 'Starts easy and ramps up.', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET }
 };
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
@@ -135,7 +149,10 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   bonusChallenge: undefined,
   starsThisRound: 0,
   puzzlesSolvedThisRound: 0,
-  puzzlesTriedThisRound: 0
+  puzzlesTriedThisRound: 0,
+  trainingRating: TRAINING_START_RATING,
+  trainingQuestionsAnswered: 0,
+  trainingPuzzlesSolved: 0
 });
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -1240,6 +1257,65 @@ export default function App() {
     state.totals.runsPlayed === 0 && attemptsCount < NEW_PLAYER_ONRAMP_ATTEMPTS
       ? NEW_PLAYER_FLOW_MAX_DIFFICULTY
       : undefined;
+  const isTrainingMode = (mode: GameMode) => mode === 'training_mode';
+  const getTrainingStartRating = (skillRating: number) =>
+    clampTrainingRating(Math.min(skillRating, TRAINING_START_RATING), skillRating, 0);
+  const getTrainingHardUnlock = (runState: RunState) =>
+    runState.trainingQuestionsAnswered >= 10 && runState.trainingPuzzlesSolved >= 1;
+  const getActiveTrainingRating = (runState: RunState, fallbackRating: number) =>
+    isTrainingMode(runState.gameMode) ? runState.trainingRating ?? getTrainingStartRating(fallbackRating) : fallbackRating;
+  const mergeMaxDifficultyCap = (...caps: Array<number | undefined>) => {
+    const finiteCaps = caps.filter((cap): cap is number => typeof cap === 'number');
+    return finiteCaps.length ? Math.min(...finiteCaps) : undefined;
+  };
+  const getTrainingFlowConstraints = (runState: RunState): { allowedTemplates?: string[]; maxDifficultyScore?: number } => {
+    if (runState.trainingQuestionsAnswered < TRAINING_ADD_SUB_ONLY_QUESTIONS) {
+      return { allowedTemplates: ['add_sub'], maxDifficultyScore: TRAINING_EARLY_MAX_DIFFICULTY };
+    }
+    if (runState.trainingQuestionsAnswered < TRAINING_ADD_SUB_MULT_DIV_QUESTIONS) {
+      return { allowedTemplates: ['add_sub', 'mult_div'], maxDifficultyScore: TRAINING_MID_MAX_DIFFICULTY };
+    }
+    return {};
+  };
+  const getFlowSelectionPlan = (runState: RunState, fallbackRating: number) => {
+    if (!isTrainingMode(runState.gameMode)) {
+      return {
+        rating: fallbackRating,
+        targetProfile: 'default' as const,
+        maxJumpFromPrev: undefined as number | undefined,
+        allowedTemplates: undefined as string[] | undefined,
+        maxDifficultyScore: undefined as number | undefined
+      };
+    }
+    const constraints = getTrainingFlowConstraints(runState);
+    return {
+      rating: getActiveTrainingRating(runState, fallbackRating),
+      targetProfile: 'training_flow' as const,
+      maxJumpFromPrev: 120,
+      allowedTemplates: constraints.allowedTemplates,
+      maxDifficultyScore: constraints.maxDifficultyScore
+    };
+  };
+  const getTrainingPuzzleTypes = (runState: RunState): Array<NonNullable<PuzzleItem['puzzleType']>> => {
+    if (runState.trainingQuestionsAnswered < 4) return ['word', 'pattern'];
+    if (runState.trainingQuestionsAnswered < 10) return ['word', 'pattern', 'logic'];
+    if (!getTrainingHardUnlock(runState)) return ['word', 'pattern', 'logic', 'spatial'];
+    if (runState.trainingQuestionsAnswered < 14) return ['word', 'pattern', 'logic', 'spatial'];
+    return ['word', 'pattern', 'logic', 'spatial', 'constraint'];
+  };
+  const getPuzzleSelectionPlan = (runState: RunState, fallbackRating: number) => {
+    if (!isTrainingMode(runState.gameMode)) return { rating: fallbackRating, options: {} };
+    const flowTrainingRating = getActiveTrainingRating(runState, fallbackRating);
+    const hardUnlocked = getTrainingHardUnlock(runState);
+    return {
+      rating: clamp(flowTrainingRating - 50, 800, state.skill.rating),
+      options: {
+        targetProfile: 'training_puzzle' as const,
+        maxDifficulty: hardUnlocked ? undefined : 1049,
+        allowedPuzzleTypes: getTrainingPuzzleTypes(runState)
+      }
+    };
+  };
   const activityBars = useMemo(() => {
     const bars = ACTIVITY_DAY_LABELS.map((label, index) => ({
       label,
@@ -1312,7 +1388,7 @@ export default function App() {
 
   const triggerPulse = (tone: FeedbackTone) => {
     setResultPulse(tone);
-    setTimeout(() => setResultPulse(null), 420);
+    setTimeout(() => setResultPulse(null), 220);
   };
 
   const triggerResultFlash = (tone: FeedbackTone, title: string, detail: string) => {
@@ -1510,8 +1586,10 @@ export default function App() {
     };
   }, [canJoinGlobalLeaderboard, leaderboardMode, state.totals, state.user]);
 
-  const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
-    generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
+  const getPuzzleChoices = (runState: RunState, rating: number, usedPuzzleIds: Set<string>) => {
+    const puzzlePlan = getPuzzleSelectionPlan(runState, rating);
+    return generateAdaptivePuzzleChoices(puzzlePlan.rating, usedPuzzleIds, 2, puzzlePlan.options);
+  };
 
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
     const sprint = runSnapshot.sprintScore;
@@ -1542,19 +1620,31 @@ export default function App() {
   const startRun = (mode: GameMode = selectedMode) => {
     const streaks = updateDailyStreak(state.streaks);
     const seeded = newRun(mode);
+    if (isTrainingMode(mode)) {
+      seeded.trainingRating = getTrainingStartRating(state.skill.rating);
+      seeded.trainingQuestionsAnswered = 0;
+      seeded.trainingPuzzlesSolved = 0;
+    }
     if (seeded.flowTarget > 0) {
+      const flowPlan = getFlowSelectionPlan(seeded, state.skill.rating);
+      const flowDifficultyCap = mergeMaxDifficultyCap(getNewPlayerFlowDifficultyCap(state.skill.attemptsCount), flowPlan.maxDifficultyScore);
       seeded.currentFlow = generateAdaptiveFlowItem(
-        state.skill.rating,
+        flowPlan.rating,
         seeded.usedFlowIds,
         undefined,
         seeded.recentTemplates,
         seeded.recentShapes,
         seeded.recentPatternTags,
         seeded.flowStreak,
-        getNewPlayerFlowDifficultyCap(state.skill.attemptsCount)
+        flowDifficultyCap,
+        {
+          targetProfile: flowPlan.targetProfile,
+          maxJumpFromPrev: flowPlan.maxJumpFromPrev,
+          allowedTemplates: flowPlan.allowedTemplates
+        }
       );
     }
-    else seeded.currentPuzzleChoices = getPuzzleChoices(state.skill.rating, seeded.usedPuzzleIds);
+    else seeded.currentPuzzleChoices = getPuzzleChoices(seeded, state.skill.rating, seeded.usedPuzzleIds);
 
     setPendingBonusFinish(null);
     setBonusResult(null);
@@ -1565,7 +1655,7 @@ export default function App() {
   };
 
   const setupPuzzlePick = () => {
-    const choices = getPuzzleChoices(state.skill.rating, run.usedPuzzleIds);
+    const choices = getPuzzleChoices(run, state.skill.rating, run.usedPuzzleIds);
     setRun({ ...run, phase: 'puzzle_pick', currentPuzzleChoices: choices, currentHints: 0, currentPuzzle: undefined });
     setInput('');
     setClarifyInput('');
@@ -1596,8 +1686,21 @@ export default function App() {
     const answers = [item.answer, ...(item.accept_answers ?? [])];
     const correct = isSmartAnswerMatch(input, answers);
 
+    const isTrainingRun = isTrainingMode(run.gameMode);
     const nextStreak = correct ? Math.min(run.flowStreak + 1, 8) : 0;
-    const updatedRating = updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount, nextStreak);
+    const nextTrainingQuestionsAnswered = isTrainingRun ? run.trainingQuestionsAnswered + 1 : run.trainingQuestionsAnswered;
+    const nextTrainingRating = isTrainingRun
+      ? updateTrainingRating(
+          getActiveTrainingRating(run, state.skill.rating),
+          state.skill.rating,
+          nextTrainingQuestionsAnswered,
+          correct,
+          nextStreak
+        )
+      : run.trainingRating;
+    const updatedRating = isTrainingRun
+      ? state.skill.rating
+      : updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount, nextStreak);
     const tier = getTier(item.difficulty, item.tier);
     const hintPenalty = run.currentHints * 3;
     const gain = correct ? Math.max(tier.flowPoints - hintPenalty, 4) : 0;
@@ -1616,6 +1719,18 @@ export default function App() {
     const recentPatternTags = [...run.recentPatternTags, ...currentPatternTags].slice(-6);
     const nextFlowDone = run.flowDone + 1;
     const nextRunDifficultySamples = [...run.runDifficultySamples, item.difficulty];
+    const nextSelectionRating = isTrainingRun ? nextTrainingRating : updatedRating;
+    const nextRunSeed: RunState = {
+      ...run,
+      trainingRating: nextTrainingRating,
+      trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
+      trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+      usedFlowIds,
+      recentTemplates,
+      recentShapes,
+      recentPatternTags,
+      flowStreak: nextStreak
+    };
 
     if (nextFlowDone >= run.flowTarget) {
       if (run.puzzleTarget === 0) {
@@ -1632,10 +1747,13 @@ export default function App() {
           phase: 'boss',
           bossStage: 'intro',
           runDifficultySamples: nextRunDifficultySamples,
-          bonusChallenge: createBonusChallenge(run.gameMode, 'flow', updatedRating, nextRunDifficultySamples),
+          bonusChallenge: createBonusChallenge(run.gameMode, 'flow', nextSelectionRating, nextRunDifficultySamples),
           currentHints: 0,
           currentFlow: undefined,
-          starsThisRound: run.starsThisRound + gain
+          starsThisRound: run.starsThisRound + gain,
+          trainingRating: nextTrainingRating,
+          trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
+          trainingPuzzlesSolved: run.trainingPuzzlesSolved
         });
         setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
         setFeedbackTone(correct ? 'success' : 'error');
@@ -1659,7 +1777,7 @@ export default function App() {
         sprintScore: run.sprintScore + gain,
         usedFlowIds,
         phase: 'puzzle_pick',
-        currentPuzzleChoices: getPuzzleChoices(updatedRating, run.usedPuzzleIds),
+        currentPuzzleChoices: getPuzzleChoices(nextRunSeed, nextSelectionRating, run.usedPuzzleIds),
         currentPuzzle: undefined,
         recentTemplates,
         recentShapes,
@@ -1667,7 +1785,10 @@ export default function App() {
         flowStreak: nextStreak,
         runDifficultySamples: nextRunDifficultySamples,
         currentHints: 0,
-        starsThisRound: run.starsThisRound + gain
+        starsThisRound: run.starsThisRound + gain,
+        trainingRating: nextTrainingRating,
+        trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
+        trainingPuzzlesSolved: run.trainingPuzzlesSolved
       });
       setFeedback(correct ? 'Awesome! Quick questions complete. Pick your first puzzle.' : `Nice try. ${item.solution_steps[0]}`);
       setFeedbackTone(correct ? 'success' : 'error');
@@ -1685,15 +1806,25 @@ export default function App() {
     }
 
     save(nextState);
+    const nextFlowPlan = getFlowSelectionPlan(nextRunSeed, nextSelectionRating);
+    const nextFlowDifficultyCap = mergeMaxDifficultyCap(
+      getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1),
+      nextFlowPlan.maxDifficultyScore
+    );
     const nextItem = generateAdaptiveFlowItem(
-      updatedRating,
+      nextFlowPlan.rating,
       usedFlowIds,
       item.difficulty,
       recentTemplates,
       recentShapes,
       recentPatternTags,
       nextStreak,
-      getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1)
+      nextFlowDifficultyCap,
+      {
+        targetProfile: nextFlowPlan.targetProfile,
+        maxJumpFromPrev: nextFlowPlan.maxJumpFromPrev,
+        allowedTemplates: nextFlowPlan.allowedTemplates
+      }
     );
     setRun({
       ...run,
@@ -1707,7 +1838,10 @@ export default function App() {
       flowStreak: nextStreak,
       runDifficultySamples: nextRunDifficultySamples,
       currentHints: 0,
-      starsThisRound: run.starsThisRound + gain
+      starsThisRound: run.starsThisRound + gain,
+      trainingRating: nextTrainingRating,
+      trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
+      trainingPuzzlesSolved: run.trainingPuzzlesSolved
     });
 
     setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
@@ -1727,17 +1861,21 @@ export default function App() {
   const submitPuzzle = () => {
     if (!run.currentPuzzle || !input.trim()) return;
 
+    const isTrainingRun = isTrainingMode(run.gameMode);
     const correct = isPuzzleAnswerCorrect(run.currentPuzzle, input);
     const tier = getTier(run.currentPuzzle.difficulty);
     const revealUsed = run.currentHints >= MAX_PUZZLE_HINTS;
     const hintPenalty = run.currentHints === 0 ? 0 : run.currentHints === 1 ? 8 : 16;
     const gain = correct ? Math.max(tier.puzzlePoints - hintPenalty, 10) : 0;
-    const updatedRating = updateRating(state.skill.rating, run.currentPuzzle.difficulty, correct, state.skill.attemptsCount);
+    const updatedRating = isTrainingRun
+      ? state.skill.rating
+      : updateRating(state.skill.rating, run.currentPuzzle.difficulty, correct, state.skill.attemptsCount);
 
     const usedPuzzleIds = new Set(run.usedPuzzleIds);
     usedPuzzleIds.add(run.currentPuzzle.id);
     const puzzleDone = run.puzzleDone + 1;
     const nextRunDifficultySamples = [...run.runDifficultySamples, run.currentPuzzle.difficulty];
+    const nextTrainingPuzzlesSolved = run.trainingPuzzlesSolved + (correct ? 1 : 0);
 
     const streaks = updatePuzzleStreak(state.streaks, correct && !revealUsed);
     const museum = [...state.museum];
@@ -1789,10 +1927,16 @@ export default function App() {
         starsThisRound: run.starsThisRound + gain,
         puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
         puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
+        trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
         phase: 'boss',
         bossStage: 'intro',
         runDifficultySamples: nextRunDifficultySamples,
-        bonusChallenge: createBonusChallenge(run.gameMode, 'puzzle', updatedRating, nextRunDifficultySamples),
+        bonusChallenge: createBonusChallenge(
+          run.gameMode,
+          'puzzle',
+          isTrainingRun ? getActiveTrainingRating(run, state.skill.rating) : updatedRating,
+          nextRunDifficultySamples
+        ),
         currentHints: 0,
         currentPuzzle: undefined,
         currentPuzzleChoices: []
@@ -1815,6 +1959,11 @@ export default function App() {
     }
 
     save(nextState);
+    const nextPuzzleRunSeed: RunState = {
+      ...run,
+      usedPuzzleIds,
+      trainingPuzzlesSolved: nextTrainingPuzzlesSolved
+    };
     setRun({
       ...run,
       brainScore: run.brainScore + gain,
@@ -1823,11 +1972,12 @@ export default function App() {
       starsThisRound: run.starsThisRound + gain,
       puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
       puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
+      trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
       runDifficultySamples: nextRunDifficultySamples,
       phase: 'puzzle_pick',
       currentHints: 0,
       currentPuzzle: undefined,
-      currentPuzzleChoices: getPuzzleChoices(updatedRating, usedPuzzleIds)
+      currentPuzzleChoices: getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds)
     });
 
     setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${run.currentPuzzle.core_answer}`);
@@ -2330,11 +2480,14 @@ export default function App() {
   const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
   const flowHasChoices = (run.currentFlow?.choices?.length ?? 0) > 0;
+  const puzzleInputMode = run.currentPuzzle ? getPuzzleInputMode(run.currentPuzzle) : 'short_text';
+  const puzzleHasChoices = puzzleInputMode === 'choice';
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
   const activeBonus = run.bonusChallenge ?? fallbackBonusChallenge;
   const currentBonusTutorSteps = (activeBonus.solutionSteps ?? []).map((step, index) => `Step ${index + 1}: ${step}`);
+  const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
@@ -2372,6 +2525,28 @@ export default function App() {
             rows={3}
           />
         )}
+      </div>
+    );
+  };
+
+  const renderHintStack = (hints: string[], shownCount: number) => {
+    if (shownCount <= 0 || hints.length === 0) return null;
+    const cappedCount = Math.min(shownCount, hints.length);
+    const latestHint = hints[cappedCount - 1];
+    return (
+      <div className="hint-stack">
+        {cappedCount > 1 && (
+          <div className="hint-chip-row" aria-label={`Hint progress ${cappedCount} of ${hints.length}`}>
+            {Array.from({ length: cappedCount }, (_, index) => (
+              <span key={`hint-chip-${index + 1}`} className={`hint-chip ${index === cappedCount - 1 ? 'active' : ''}`}>
+                Hint {index + 1}{index === cappedCount - 1 ? '' : ' ✓'}
+              </span>
+            ))}
+          </div>
+        )}
+        <p className="hint-box">
+          Hint {cappedCount}: {latestHint}
+        </p>
       </div>
     );
   };
@@ -2464,10 +2639,11 @@ export default function App() {
 
         {(isEditingProfile || onboardingStage === 'name') && (
           <div className="onboarding-name-block onboarding-phase-block">
-            <p className="text-label onboarding-step-label">{isEditingProfile ? 'Cadet name' : 'Choose your cadet name'}</p>
+            {isEditingProfile && <p className="text-label onboarding-step-label">Cadet name</p>}
             <input
               className="math-input"
-              placeholder="RocketRyder11"
+              placeholder="Enter cadet name"
+              aria-label="Enter cadet name"
               value={nameInput}
               onChange={(event) => setNameInput(event.target.value)}
               onKeyDown={(event) => {
@@ -2660,7 +2836,6 @@ export default function App() {
                 className="btn btn-secondary utility-btn"
                 onClick={() => {
                   setShowTutor(true);
-                  setShowClarifyDialog(false);
                   setTutorStep(0);
                 }}
               >
@@ -2680,15 +2855,7 @@ export default function App() {
                 </button>
               )}
             </div>
-            {run.currentHints > 0 && (
-              <div className="hint-stack">
-                {run.currentFlow.hints.slice(0, run.currentHints).map((hint, index) => (
-                  <p key={hint} className="hint-box">
-                    Hint {index + 1}: {hint}
-                  </p>
-                ))}
-              </div>
-            )}
+            {renderHintStack(run.currentFlow.hints, run.currentHints)}
 
             {showTutor && (
               <div className="tutor-panel">
@@ -2727,7 +2894,7 @@ export default function App() {
           <>
             <h3>Pick Puzzle Card {run.puzzleDone + 1}/{run.puzzleTarget}</h3>
             <div className="puzzle-grid">
-              {(run.currentPuzzleChoices.length ? run.currentPuzzleChoices : getPuzzleChoices(state.skill.rating, run.usedPuzzleIds)).map((puzzle) => (
+              {(run.currentPuzzleChoices.length ? run.currentPuzzleChoices : getPuzzleChoices(run, state.skill.rating, run.usedPuzzleIds)).map((puzzle) => (
                 <button key={puzzle.id} className="puzzle-card" onClick={() => selectPuzzle(puzzle)}>
                   <span className="emoji">{getPuzzleEmoji(puzzle)}</span>
                   <strong>{puzzle.title}</strong>
@@ -2744,9 +2911,11 @@ export default function App() {
             <div className="tier-row">
               <span className="tag difficulty-tag">{getTier(run.currentPuzzle.difficulty).icon} {getTier(run.currentPuzzle.difficulty).label}</span>
             </div>
-            <h3 className="puzzle-question-title">{run.currentPuzzle.title}</h3>
-            <p className="puzzle-question-prompt"><InlineMathText text={cleanPuzzlePromptDisplay(run.currentPuzzle.core_prompt)} /></p>
-            {getPuzzleInputMode(run.currentPuzzle) === 'choice' ? (
+            <div className="puzzle-prompt-shell">
+              <h3 className="puzzle-question-title">{run.currentPuzzle.title}</h3>
+              <p className="puzzle-question-prompt"><InlineMathText text={cleanPuzzlePromptDisplay(run.currentPuzzle.core_prompt)} /></p>
+            </div>
+            {puzzleHasChoices ? (
               <div className="chips">
                 {getPuzzleChoiceOptions(run.currentPuzzle).map((choice) => (
                   <button
@@ -2758,7 +2927,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            ) : getPuzzleInputMode(run.currentPuzzle) === 'long_text' ? (
+            ) : puzzleInputMode === 'long_text' ? (
               <textarea
                 className="math-input text-area-input"
                 value={input}
@@ -2790,7 +2959,6 @@ export default function App() {
                 className="btn btn-secondary utility-btn"
                 onClick={() => {
                   setShowTutor(true);
-                  setShowClarifyDialog(false);
                   setTutorStep(0);
                 }}
               >
@@ -2803,27 +2971,9 @@ export default function App() {
               >
                 <span aria-hidden="true">😉</span> Hint
               </button>
-              <button
-                className="btn btn-secondary help-circle-btn"
-                onClick={() => {
-                  setShowClarifyDialog(true);
-                  setShowTutor(false);
-                }}
-                aria-label="Help"
-                title="Help"
-              >
-                ?
-              </button>
             </div>
-            {run.currentHints > 0 && (
-              <div className="hint-stack">
-                {run.currentPuzzle.hint_ladder.slice(0, run.currentHints).map((hint, index) => (
-                  <p key={hint} className="hint-box">
-                    Hint {index + 1}: {hint}
-                  </p>
-                ))}
-              </div>
-            )}
+            <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
+            {renderHintStack(run.currentPuzzle.hint_ladder, run.currentHints)}
 
             {showTutor && (
               <div className="tutor-panel">
@@ -2854,29 +3004,6 @@ export default function App() {
               </div>
             )}
 
-            {showClarifyDialog && (
-              <div className="tutor-panel">
-                <p className="tutor-label">Question Box</p>
-                <div className="ask-help">
-                  <input
-                    className="math-input ask-input"
-                    value={clarifyInput}
-                    onChange={(event) => setClarifyInput(event.target.value)}
-                    placeholder="Clarify the question"
-                  />
-                  <button className="btn btn-primary" onClick={askPuzzleClarifyingQuestion} disabled={!clarifyInput.trim()}>
-                    Ask
-                  </button>
-                </div>
-                {clarifyReply && <p className="tutor-step ask-reply">Mission Coach: {clarifyReply}</p>}
-                <button className="text-cta" onClick={() => setShowClarifyDialog(false)}>
-                  Close
-                </button>
-              </div>
-            )}
-
-            <button className="text-cta" onClick={setupPuzzlePick}>Pick a different puzzle</button>
-
             {renderScratchpad('puzzle')}
           </>
         )}
@@ -2900,7 +3027,7 @@ export default function App() {
                 <h3>Bonus Round: Mini Boss</h3>
                 <p className="muted">{activeBonus.title} • {activeBonus.label}</p>
                 <p className="puzzle-question-prompt"><InlineMathText text={activeBonus.prompt} /></p>
-                {getBonusInputMode(activeBonus) === 'choice' ? (
+                {bonusInputMode === 'choice' ? (
                   <div className="chips">
                     {bonusChoiceOptions.map((choice) => (
                       <button
@@ -2912,7 +3039,7 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                ) : getBonusInputMode(activeBonus) === 'long_text' ? (
+                ) : bonusInputMode === 'long_text' ? (
                   <textarea
                     className="math-input text-area-input"
                     value={input}
@@ -2959,15 +3086,7 @@ export default function App() {
                     <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
                   </button>
                 </div>
-                {run.currentHints > 0 && (
-                  <div className="hint-stack">
-                    {activeBonus.hintLadder.slice(0, run.currentHints).map((hint, index) => (
-                      <p key={hint} className="hint-box">
-                        Hint {index + 1}: {hint}
-                      </p>
-                    ))}
-                  </div>
-                )}
+                {renderHintStack(activeBonus.hintLadder, run.currentHints)}
 
                 {showTutor && (
                   <div className="tutor-panel">
@@ -3366,24 +3485,29 @@ export default function App() {
           </div>
         </header>
 
+        {screen === 'run' && (
+          <section className="run-progress-inline" aria-label="Orbit progress">
+            <div className="flow-progress-head compact">
+              <p className="text-label">Question {Math.min(runDoneTotal + 1, runTargetTotal)}/{runTargetTotal}</p>
+              <span className="tag compact-tag">{phaseLabel(run.phase)}</span>
+            </div>
+            <div className="flow-meter-wrap compact">
+              <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
+            </div>
+            {run.gameMode === 'training_mode' && (
+              <p className="training-ramp-note">
+                Training: ramping up • Leveling {Math.min(run.trainingQuestionsAnswered, TRAINING_EARLY_QUESTION_CAP)}/{TRAINING_EARLY_QUESTION_CAP}
+              </p>
+            )}
+          </section>
+        )}
+
         {screen === 'home' && home}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
         {screen === 'scores' && scores}
         {screen === 'museum' && museum}
       </div>
-
-      {screen === 'run' && (
-        <section className={`run-progress-dock ${hideBottomNav ? 'nav-hidden' : ''}`}>
-          <div className="flow-progress-head">
-            <p className="text-label">Orbit Progress</p>
-            <span className="tag">{phaseLabel(run.phase)}</span>
-          </div>
-          <div className="flow-meter-wrap">
-            <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
-          </div>
-        </section>
-      )}
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
         <button className={`nav-item ${screen === 'home' ? 'active' : ''}`} onClick={() => setScreen('home')} aria-label="Home">

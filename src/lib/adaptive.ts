@@ -2,6 +2,15 @@ import type { FlowItem } from './types';
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
+export type TargetDifficultyProfile = 'default' | 'training_flow' | 'training_puzzle';
+export const TRAINING_RATING_MIN = 800;
+export const TRAINING_START_RATING = 850;
+export const TRAINING_EARLY_QUESTION_CAP = 8;
+export const TRAINING_EARLY_BUFFER = 40;
+export const TRAINING_BASE_UP = 10;
+export const TRAINING_STREAK_BONUS = 6;
+export const TRAINING_DOWN = 18;
+
 export const FLOW_TARGET_DISTRIBUTION = {
   base: {
     near: 0.6,
@@ -21,6 +30,27 @@ export const FLOW_TARGET_DISTRIBUTION = {
     nearSd: 45,
     aboveRange: [50, 140] as const,
     belowRange: [-120, -50] as const
+  }
+} as const;
+
+export const TRAINING_TARGET_DISTRIBUTION = {
+  flow: {
+    near: 0.8,
+    above: 0.15,
+    below: 0.05,
+    centerShift: 0,
+    nearSd: 35,
+    aboveRange: [20, 60] as const,
+    belowRange: [-60, -20] as const
+  },
+  puzzle: {
+    near: 0.82,
+    above: 0.13,
+    below: 0.05,
+    centerShift: 0,
+    nearSd: 30,
+    aboveRange: [15, 45] as const,
+    belowRange: [-45, -15] as const
   }
 } as const;
 
@@ -66,7 +96,22 @@ const gaussian = (mean: number, sd: number) => {
   return mean + z * sd;
 };
 
-export function chooseTargetDifficulty(rating: number, correctStreak = 0): number {
+export function chooseTargetDifficulty(
+  rating: number,
+  correctStreak = 0,
+  profile: TargetDifficultyProfile = 'default'
+): number {
+  if (profile === 'training_flow' || profile === 'training_puzzle') {
+    const config = profile === 'training_flow' ? TRAINING_TARGET_DISTRIBUTION.flow : TRAINING_TARGET_DISTRIBUTION.puzzle;
+    const center = rating + config.centerShift;
+    const roll = Math.random();
+    if (roll < config.near) return gaussian(center, config.nearSd);
+    if (roll < config.near + config.above) {
+      return randomBetween(center + config.aboveRange[0], center + config.aboveRange[1]);
+    }
+    return randomBetween(center + config.belowRange[0], center + config.belowRange[1]);
+  }
+
   const streaking = correctStreak >= FLOW_TARGET_DISTRIBUTION.streak.trigger;
   const config = streaking ? FLOW_TARGET_DISTRIBUTION.streak : FLOW_TARGET_DISTRIBUTION.base;
   const center = rating + config.centerShift;
@@ -81,6 +126,28 @@ export function chooseTargetDifficulty(rating: number, correctStreak = 0): numbe
   }
   return randomBetween(center + config.belowRange[0], center + config.belowRange[1]);
 }
+
+const getTrainingUpperCap = (skillRating: number, questionsAnswered: number) => {
+  if (questionsAnswered < TRAINING_EARLY_QUESTION_CAP && skillRating > TRAINING_RATING_MIN + TRAINING_EARLY_BUFFER) {
+    return skillRating - TRAINING_EARLY_BUFFER;
+  }
+  return skillRating;
+};
+
+export const clampTrainingRating = (value: number, skillRating: number, questionsAnswered: number) =>
+  clamp(value, TRAINING_RATING_MIN, getTrainingUpperCap(skillRating, questionsAnswered));
+
+export const updateTrainingRating = (
+  currentTrainingRating: number,
+  skillRating: number,
+  questionsAnswered: number,
+  correct: boolean,
+  flowStreak: number
+) => {
+  const up = TRAINING_BASE_UP + (flowStreak >= 5 ? TRAINING_STREAK_BONUS : 0);
+  const nextRaw = correct ? currentTrainingRating + up : currentTrainingRating - TRAINING_DOWN;
+  return clampTrainingRating(nextRaw, skillRating, questionsAnswered);
+};
 
 export const trimRecentHistory = (history: string[], max = FLOW_SELECTION_SETTINGS.recentHistorySize) => history.slice(-max);
 

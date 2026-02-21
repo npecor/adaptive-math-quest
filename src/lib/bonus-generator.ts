@@ -2,7 +2,7 @@ import { difficultyLabelFromScore, type DifficultyLabel } from './difficulty-tag
 import { generateBonusPuzzle } from './puzzle-generator';
 import type { PuzzleItem } from './types';
 
-export type BonusGameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit';
+export type BonusGameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode';
 export type BonusLastSegment = 'flow' | 'puzzle';
 
 export type BonusChallenge = {

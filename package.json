@@ -11,6 +11,7 @@
     "test": "vitest run",
     "verify:flow": "tsx scripts/verify-flow.ts",
     "verify:puzzles": "tsx scripts/verify-puzzles.ts",
+    "verify:ui": "tsx scripts/verify-ui.ts",
     "verify:gen": "tsx scripts/verify-gen.ts",
     "verify:gen:ci": "tsx scripts/verify-gen.ts --ci",
     "preview": "vite preview"
