@@ -916,6 +916,7 @@ export default function App() {
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false
   );
+  const [isTextEntryFocused, setIsTextEntryFocused] = useState(false);
   const [homeNavRevealed, setHomeNavRevealed] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
@@ -1092,6 +1093,36 @@ export default function App() {
     lastScrollYRef.current = y;
     setHomeNavRevealed(false);
   }, [screen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const isTypingField = (node: EventTarget | null) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const tag = node.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable;
+    };
+
+    const syncFocusState = () => {
+      const active = document.activeElement;
+      setIsTextEntryFocused(isTypingField(active));
+    };
+
+    const onFocusIn = (event: FocusEvent) => {
+      setIsTextEntryFocused(isTypingField(event.target));
+    };
+    const onFocusOut = () => {
+      // Wait one tick so focus can move to the next field first.
+      window.setTimeout(syncFocusState, 0);
+    };
+
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    syncFocusState();
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     resetScrollToTop();
@@ -1523,8 +1554,44 @@ export default function App() {
     if (!input.trim()) return;
     const challenge = run.bonusChallenge ?? fallbackBonusChallenge;
     const correct = isSmartAnswerMatch(input, [challenge.answer, ...(challenge.acceptAnswers ?? [])]);
+    const bonusPuzzleId = challenge.id.startsWith('bonus-') ? challenge.id.slice('bonus-'.length) : challenge.id;
+
+    const museum = [...state.museum];
+    const idx = museum.findIndex((entry) => entry.puzzleId === bonusPuzzleId);
+    const previousEntry = idx >= 0 ? museum[idx] : undefined;
+    const solved = Boolean(previousEntry?.solved) || correct;
+    const bonusEntry = {
+      puzzleId: bonusPuzzleId,
+      title: challenge.title,
+      promptSnapshot: challenge.prompt,
+      hintsSnapshot: challenge.hintLadder.slice(0, 3),
+      solved,
+      extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, correct ? 1 : 0),
+      methodsFound: solved ? ['core-solved', 'bonus-solved'] : previousEntry?.methodsFound ?? []
+    };
+
+    if (idx >= 0) museum[idx] = { ...museum[idx], ...bonusEntry };
+    else museum.push(bonusEntry);
+
+    const solvedPuzzleIds = upsertSolvedPuzzleIds(state.solvedPuzzleIds, bonusPuzzleId, solved);
+    const totals = recalcTotals(
+      {
+        ...state.totals,
+        allTimePuzzleCorrect: state.totals.allTimePuzzleCorrect + (correct ? 1 : 0),
+        allTimePuzzleTries: state.totals.allTimePuzzleTries + 1
+      },
+      solvedPuzzleIds,
+      museum
+    );
+    const baseState: AppState = {
+      ...state,
+      museum,
+      solvedPuzzleIds,
+      totals
+    };
+
     const snapshot: RunState = { ...run, bossStage: 'question' };
-    finishRun(correct, snapshot);
+    finishRun(correct, snapshot, baseState);
   };
 
   const askPuzzleClarifyingQuestion = () => {
@@ -1854,7 +1921,9 @@ export default function App() {
   );
 
   const runInProgress = screen === 'run' || run.flowDone > 0 || run.puzzleDone > 0 || run.phase !== 'flow' || Boolean(run.currentFlow);
-  const hideBottomNav = isMobileViewport && (screen === 'home' || screen === 'run') && !homeNavRevealed;
+  const hideBottomNav =
+    isMobileViewport &&
+    (screen === 'run' || (screen === 'home' && !homeNavRevealed) || isTextEntryFocused);
   const showGamePhasesPanel = false;
   const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
