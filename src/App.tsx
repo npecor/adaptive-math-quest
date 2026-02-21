@@ -2189,7 +2189,7 @@ export default function App() {
                 ref={scratchpadRef}
                 id={`${scratchpadFieldId}-flow`}
                 className="math-input text-area-input scratchpad-input"
-                inputMode="numeric"
+                inputMode="text"
                 value={scratchpad}
                 onChange={onScratchpadChange}
                 placeholder={scratchpadPlaceholder}
@@ -2359,7 +2359,7 @@ export default function App() {
                 ref={scratchpadRef}
                 id={`${scratchpadFieldId}-puzzle`}
                 className="math-input text-area-input scratchpad-input"
-                inputMode="numeric"
+                inputMode="text"
                 value={scratchpad}
                 onChange={onScratchpadChange}
                 placeholder={scratchpadPlaceholder}
@@ -2493,7 +2493,7 @@ export default function App() {
                     ref={scratchpadRef}
                     id={`${scratchpadFieldId}-boss`}
                     className="math-input text-area-input scratchpad-input"
-                    inputMode="numeric"
+                    inputMode="text"
                     value={scratchpad}
                     onChange={onScratchpadChange}
                     placeholder={scratchpadPlaceholder}
