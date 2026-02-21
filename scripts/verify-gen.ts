@@ -1,5 +1,6 @@
 import { FLOW_SELECTION_SETTINGS, FLOW_TARGET_DISTRIBUTION } from '../src/lib/adaptive';
-import { difficultyLabelFromScore, type DifficultyLabel } from '../src/lib/difficulty-tags';
+import { buildBonusTarget, createBonusChallenge, type BonusChallenge } from '../src/lib/bonus-generator';
+import { analyzeFlowItem, difficultyLabelFromScore, type DifficultyLabel } from '../src/lib/difficulty-tags';
 import { FLOW_TEMPLATE_CATALOG, generateAdaptiveFlowItem } from '../src/lib/flow-generator';
 import { generateAdaptivePuzzleItem } from '../src/lib/puzzle-generator';
 import type { FlowItem, PuzzleItem } from '../src/lib/types';
@@ -22,6 +23,14 @@ const startsWithTemplate = (id: string, template: string) => id.startsWith(`${te
 const percent = (n: number, total: number) => ((n / total) * 100).toFixed(2);
 const REWRITE_PATTERN = /(=\s*[0-9() +×x*\-/]+[+\-]\s*[0-9() +×x*\-/]+)|(\(\d+\s*[+\-]\s*\d+\))|(\bdouble\b)/i;
 const BREAK_WORD_PATTERN = /\b(split|break)\b/i;
+const HARD_PLUS_LABELS = new Set<DifficultyLabel>(['Hard', 'Expert', 'Master']);
+const gcdNumber = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcdNumber(b, a % b));
+const FAST_MATH_STYLE_PUZZLE = [
+  /which is (bigger|greater).*\d+\/\d+/i,
+  /x\s*[+\-*/÷×]\s*\d+\s*=\s*-?\d+/i,
+  /which is closest to/i,
+  /^\s*(solve|what is)\s*:\s*\d+\s*[+\-×x÷]\s*\d+/i
+];
 
 const toSortedEntries = (counts: Record<string, number>) =>
   Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -329,6 +338,9 @@ function runPuzzleSanity(): { failures: string[] } {
     if (textFields.some((field) => bannedAlgebra.test(field))) {
       failures.push(`Banned algebra token detected: ${puzzle.id} :: ${puzzle.core_prompt}`);
     }
+    if (FAST_MATH_STYLE_PUZZLE.some((pattern) => pattern.test(puzzle.core_prompt))) {
+      failures.push(`Fast-math style puzzle detected: ${puzzle.id} :: ${puzzle.core_prompt}`);
+    }
 
     if (startsWithTemplate(puzzle.id, 'area_yn')) {
       const yesNo = puzzle.core_answer.toLowerCase();
@@ -361,6 +373,93 @@ function runPuzzleSanity(): { failures: string[] } {
   return { failures };
 }
 
+function runFractionBenchmarkLabelCheck(): { failures: string[] } {
+  const raw: FlowItem = {
+    id: 'verify-frac-benchmark',
+    type: 'flow',
+    difficulty: 0,
+    template: 'fraction_compare',
+    shapeSignature: 'frac_compare_pair',
+    tags: ['fractions'],
+    format: 'multiple_choice',
+    prompt: 'Which fraction is greater? 1/2 or 3/8',
+    answer: '1/2',
+    choices: ['1/2', '3/8'],
+    hints: ['Use a common denominator.', '1/2 = 4/8.', '4/8 is greater than 3/8.'],
+    solution_steps: ['Convert 1/2 to 4/8.', 'Compare 4/8 and 3/8.', 'Answer: 1/2.']
+  };
+  const analyzed = analyzeFlowItem(raw);
+  const label = analyzed.difficultyLabel;
+  console.log(`\n=== Fraction Benchmark Label Check ===`);
+  console.log(`  Prompt: ${raw.prompt}`);
+  console.log(`  Computed score/label: ${analyzed.difficultyScore} / ${label}`);
+  const failures: string[] = [];
+  if (label === 'Hard' || label === 'Expert' || label === 'Master') {
+    failures.push(`1/2 vs 3/8 labeled above Medium (${label})`);
+  }
+  return { failures };
+}
+
+function runBonusSanity(): { failures: string[] } {
+  const failures: string[] = [];
+  const BONUS_COUNT = 100;
+  const labelCounts: Record<string, number> = {};
+  const templateCounts: Record<string, number> = {};
+  let hardPlusCount = 0;
+  let aboveMedianCount = 0;
+  let hardPlusOrAboveCount = 0;
+
+  for (let i = 0; i < BONUS_COUNT; i += 1) {
+    const tier = TIERS[i % TIERS.length];
+    const mode = i % 3 === 0 ? 'rocket_rush' : i % 3 === 1 ? 'puzzle_orbit' : 'galaxy_mix';
+    const lastSegment = i % 2 === 0 ? 'flow' : 'puzzle';
+    const runDifficulties = Array.from({ length: 8 }, (_, j) => tier.rating - 80 + j * 20);
+    const { runMedianDifficulty, bonusTargetDifficulty } = buildBonusTarget(tier.rating, runDifficulties);
+    const challenge: BonusChallenge = createBonusChallenge(mode, lastSegment, tier.rating, runDifficulties);
+
+    labelCounts[challenge.label] = (labelCounts[challenge.label] ?? 0) + 1;
+    templateCounts[challenge.templateKey] = (templateCounts[challenge.templateKey] ?? 0) + 1;
+    if (HARD_PLUS_LABELS.has(challenge.label)) hardPlusCount += 1;
+    if (challenge.difficulty >= runMedianDifficulty + 70) aboveMedianCount += 1;
+    if (HARD_PLUS_LABELS.has(challenge.label) || challenge.difficulty >= runMedianDifficulty + 70) {
+      hardPlusOrAboveCount += 1;
+    }
+
+    if (challenge.templateKey === 'fraction_compare') {
+      const prompt = challenge.prompt;
+      const match = prompt.match(/(\d+)\/(\d+)\s+or\s+(\d+)\/(\d+)/i);
+      if (!match) failures.push(`Fraction bonus prompt format mismatch: ${challenge.id} :: ${prompt}`);
+      else {
+        const d1 = Number(match[2]);
+        const d2 = Number(match[4]);
+        const sharedLcm = Math.abs(d1 * d2) / Math.max(1, gcdNumber(d1, d2));
+        if (sharedLcm <= 24) failures.push(`Fraction bonus LCM too small (${sharedLcm}) for ${challenge.id}`);
+        if (d1 % d2 === 0 || d2 % d1 === 0) failures.push(`Fraction bonus denominators are multiples (${d1}, ${d2}) for ${challenge.id}`);
+      }
+    }
+  }
+
+  console.log(`\n=== Bonus Sanity (${BONUS_COUNT} generated bonuses) ===`);
+  printDistributionTable('Bonus label distribution', labelCounts, BONUS_COUNT);
+  printDistributionTable('Bonus template distribution', templateCounts, BONUS_COUNT);
+  console.log(`\n  Hard+ rate: ${percent(hardPlusCount, BONUS_COUNT)}% (${hardPlusCount}/${BONUS_COUNT})`);
+  console.log(
+    `  Above run-median+70 rate: ${percent(aboveMedianCount, BONUS_COUNT)}% (${aboveMedianCount}/${BONUS_COUNT})`
+  );
+  console.log(
+    `  Hard+ OR above-median+70 rate: ${percent(hardPlusOrAboveCount, BONUS_COUNT)}% (${hardPlusOrAboveCount}/${BONUS_COUNT})`
+  );
+
+  if (hardPlusCount < BONUS_COUNT * 0.8) {
+    failures.push(`Bonus Hard+ rate below threshold: ${hardPlusCount}/${BONUS_COUNT}`);
+  }
+  if (hardPlusOrAboveCount < BONUS_COUNT * 0.8) {
+    failures.push(`Bonus Hard+/above-median combined rate below threshold: ${hardPlusOrAboveCount}/${BONUS_COUNT}`);
+  }
+
+  return { failures };
+}
+
 function main(): void {
   console.log(`verify:gen mode = ${isCiMode ? 'ci' : 'full'}`);
   printFlowTemplateCatalog();
@@ -368,8 +467,16 @@ function main(): void {
 
   const flowStats = runFlowDistributionAndAssertions();
   const flowSamples = printFlowSamples();
+  const fractionBenchmarkCheck = runFractionBenchmarkLabelCheck();
   const puzzleStats = runPuzzleSanity();
-  const failures = [...flowStats.failures, ...flowSamples.failures, ...puzzleStats.failures];
+  const bonusStats = runBonusSanity();
+  const failures = [
+    ...flowStats.failures,
+    ...flowSamples.failures,
+    ...fractionBenchmarkCheck.failures,
+    ...puzzleStats.failures,
+    ...bonusStats.failures
+  ];
 
   if (failures.length > 0) {
     console.error('\n=== Verification Failures ===');

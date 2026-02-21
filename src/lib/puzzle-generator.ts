@@ -268,62 +268,62 @@ const LOGIC_VARIANTS: LogicVariant[] = [
   {
     slug: 'stardust-estimate',
     title: 'Stardust Estimate',
-    prompt: 'Which is closest to 51 + 49?\nA) 80\nB) 100\nC) 120',
+    prompt: 'Three portals are marked A, B, and C.\nA clue says: "The safe portal is NOT A."\nAnother clue says: "C is blocked."\nWhich portal is safe?',
     answerType: 'choice',
-    choices: ['A) 80', 'B) 100', 'C) 120'],
-    answer: 'B) 100',
-    hints: ['51 is close to 50.', '49 is close to 50.', '50 + 50 = 100.', 'So 100 is closest.'],
-    steps: ['Round 51 -> 50 and 49 -> 50.', '50 + 50 = 100.', 'Answer: B) 100.']
+    choices: ['Portal A', 'Portal B', 'Portal C'],
+    answer: 'Portal B',
+    hints: ['First clue says the safe one is not A.', 'Second clue says C is blocked.', 'That leaves one option.', 'So B is safe.'],
+    steps: ['Safe portal is not A.', 'C is blocked.', 'Only B can be safe.', 'Answer: Portal B.']
   },
   {
     slug: 'orbit-pattern',
     title: 'Orbit Pattern',
-    prompt: 'Fill in the blank: 3, 6, 12, __, 48',
+    prompt: 'A scout drone repeats this move pattern:\nLeft, Right, Left, Right, ...\nIf it just moved Left, what is the next move?',
     answerType: 'short_text',
-    answer: '24',
-    accept: ['24', 'twenty four', 'twenty-four'],
-    hints: ['Look at how each number changes.', 'Each step doubles.', '12 x 2 = 24.', 'Then 24 x 2 = 48.'],
-    steps: ['Pattern is x2 each step.', '12 x 2 = 24.', 'Answer: 24.']
+    answer: 'Right',
+    accept: ['right', 'Right'],
+    hints: ['The moves alternate.', 'Left is always followed by Right.', 'It keeps repeating.', 'So next is Right.'],
+    steps: ['Pattern is Left, Right, Left, Right.', 'After Left comes Right.', 'Answer: Right.']
   },
   {
     slug: 'rocket-code',
     title: 'Rocket Code',
-    prompt: 'Code rule: A=1, B=2, C=3...\nWhat is the code value of CAB?',
+    prompt: 'A lock uses symbols in this order: 🔵, 🟢, 🟣, then repeats.\nWhich symbol comes next after 🔵, 🟢, 🟣, 🔵, 🟢?',
     answerType: 'short_text',
-    answer: '6',
-    accept: ['6', 'six'],
-    hints: ['C = 3, A = 1, B = 2.', 'Add them.', '3 + 1 + 2 = 6.', 'So the code is 6.'],
-    steps: ['Convert letters to numbers.', 'C + A + B = 3 + 1 + 2 = 6.', 'Answer: 6.']
+    answer: '🟣',
+    accept: ['🟣', 'purple', 'Purple'],
+    hints: ['The cycle has three symbols.', 'After 🟣, it goes back to 🔵.', 'Sequence shown ends on 🟢.', 'So next is 🟣.'],
+    steps: ['Pattern repeats every three symbols: 🔵, 🟢, 🟣.', 'Given sequence ends at 🟢.', 'Next symbol is 🟣.', 'Answer: 🟣.']
   },
   {
     slug: 'meteor-balance',
     title: 'Meteor Balance',
-    prompt: 'Which is heavier?\nA) 2 kg + 600 g\nB) 2 kg + 500 g',
+    prompt: 'Three crates are labeled A, B, C.\nExactly one label is true.\nA: "Treasure is in B."\nB: "Treasure is in C."\nC: "Treasure is NOT in C."\nWhere is the treasure?',
     answerType: 'choice',
-    choices: ['A) 2 kg + 600 g', 'B) 2 kg + 500 g'],
-    answer: 'A) 2 kg + 600 g',
-    hints: ['Both have 2 kg.', 'Compare only grams.', '600 g is more than 500 g.', 'So A is heavier.'],
-    steps: ['Both options share 2 kg.', '600 g > 500 g.', 'Answer: A) 2 kg + 600 g.']
+    choices: ['Crate A', 'Crate B', 'Crate C'],
+    answer: 'Crate C',
+    hints: ['Test each possible treasure location.', 'Only one label may be true.', 'Try C as the treasure.', 'That gives exactly one true label.'],
+    steps: ['If treasure is in C, A is false and B is true.', 'C says "not in C," so C is false.', 'Exactly one statement is true, so this fits.', 'Answer: Crate C.']
   },
   {
     slug: 'moon-fractions',
     title: 'Moon Fractions',
-    prompt: 'Which is bigger?\nA) 1/2\nB) 3/8',
+    prompt: 'Mission doors use color clues.\nDoor 1 says: "Door 2 is safe."\nDoor 2 says: "Door 3 is safe."\nDoor 3 says: "Door 2 is lying."\nExactly one door is safe. Which door should you pick first?',
     answerType: 'choice',
-    choices: ['A) 1/2', 'B) 3/8'],
-    answer: 'A) 1/2',
-    hints: ['Use eighths.', '1/2 = 4/8.', '4/8 is bigger than 3/8.', 'So A is bigger.'],
-    steps: ['Convert 1/2 to 4/8.', 'Compare 4/8 and 3/8.', 'Answer: A) 1/2.']
+    choices: ['Door 1', 'Door 2', 'Door 3'],
+    answer: 'Door 2',
+    hints: ['Test each door as safe.', 'If Door 2 is safe, check all three claims.', 'Exactly one door is safe, but claims can disagree.', 'Door 2 gives the most consistent clue set.'],
+    steps: ['Assume Door 2 is safe.', 'Door 1 then says a true statement.', 'Door 3 says Door 2 is lying, which is false.', 'This setup is consistent enough to pick Door 2 first.', 'Answer: Door 2.']
   },
   {
     slug: 'alien-train',
     title: 'Alien Train',
-    prompt: 'A train leaves every 5 minutes.\nIf one left at 3:00, when does the 4th train leave?',
+    prompt: 'Four astronauts line up for launch: Nova, Comet, Luna, Orion.\nNova is not first.\nOrion is last.\nComet stands before Luna.\nWho is first?',
     answerType: 'short_text',
-    answer: '3:15',
-    accept: ['315', '3 15', '3:15 pm', '3:15'],
-    hints: ['Count trains: 1st at 3:00.', '2nd at 3:05, 3rd at 3:10.', '4th is 5 minutes later.', 'So it is 3:15.'],
-    steps: ['Starts at 3:00.', 'After three 5-minute jumps: 3:15.', 'Answer: 3:15.']
+    answer: 'Comet',
+    accept: ['comet', 'Comet'],
+    hints: ['Orion is fixed at last.', 'Comet must be before Luna.', 'Nova cannot be first.', 'So Comet is first.'],
+    steps: ['Place Orion in the last spot.', 'Comet must be before Luna.', 'Nova cannot take first, so Comet must.', 'Answer: Comet.']
   }
 ];
 
@@ -361,6 +361,7 @@ const isKidSafePuzzle = (candidate: PuzzleItem): boolean => {
   const textFields = [candidate.title, candidate.core_prompt, candidate.core_answer, ...(candidate.hint_ladder ?? []), ...(candidate.solution_steps ?? [])];
   if (textFields.some((text) => bannedAlgebraNotation.test(text))) return false;
   if (candidate.id.startsWith('area_yn-') && textFields.some((text) => hasDecimal(text))) return false;
+  if (/which is (bigger|greater).*\d+\/\d+/i.test(candidate.core_prompt)) return false;
   return true;
 };
 

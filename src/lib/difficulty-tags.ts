@@ -7,6 +7,8 @@ type Breakdown = Record<string, number>;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const unique = (tags: string[]) => [...new Set(tags)];
 const countDigits = (value: number) => String(Math.abs(value)).length;
+const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
+const lcm = (a: number, b: number): number => Math.abs(a * b) / Math.max(1, gcd(a, b));
 
 const addTag = (tags: string[], tag: string) => {
   if (!tags.includes(tag)) tags.push(tag);
@@ -185,6 +187,30 @@ export const analyzeFlowItem = (
 
         addScore(breakdown, 'denominator_size', Math.round(((d1 + d2) / 2) * 7));
         if (Math.abs(v1 - v2) < 0.1) addScore(breakdown, 'close_values', 90);
+        const nearOneA = d1 - n1 <= 3;
+        const nearOneB = d2 - n2 <= 3;
+        const hasHalfBenchmark = (n1 === 1 && d1 === 2) || (n2 === 1 && d2 === 2);
+        const denomMultiple = d1 % d2 === 0 || d2 % d1 === 0;
+        const sharedLcm = lcm(d1, d2);
+        if (!denomMultiple && nearOneA && nearOneB) {
+          addTag(tags, 'frac:near-1');
+          addTag(tags, 'frac:non-multiple-denominators');
+          addScore(breakdown, 'hard:near_one_pair', 140);
+        }
+        if (denomMultiple) {
+          addTag(tags, 'frac:denom-multiple');
+          addScore(breakdown, 'easier:denom-multiple', -80);
+        }
+        if (hasHalfBenchmark) {
+          addTag(tags, 'frac:benchmark-half');
+          addScore(breakdown, 'medium:benchmark_half', -55);
+        }
+        if (sharedLcm <= 24) {
+          addTag(tags, 'frac:small-lcm');
+          addScore(breakdown, 'easier:small_lcm', -75);
+        } else if (sharedLcm >= 90) {
+          addScore(breakdown, 'hard:large_lcm', 60);
+        }
         if (d1 === d2) {
           addTag(tags, 'frac:same-denominator');
           addScore(breakdown, 'easy:same-denominator', -170);

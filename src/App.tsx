@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
+import { bonusPointsTarget, createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
@@ -43,6 +44,8 @@ interface RunState {
   recentShapes: string[];
   recentPatternTags: string[];
   flowStreak: number;
+  runDifficultySamples: number[];
+  bonusChallenge?: BonusChallenge;
   starsThisRound: number;
   puzzlesSolvedThisRound: number;
   puzzlesTriedThisRound: number;
@@ -83,14 +86,6 @@ const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: strin
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
   puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 }
 };
-
-const bonusRound = {
-  title: 'Fraction Fox',
-  prompt: 'Which fraction is greater: 3/4 or 2/3?',
-  choices: ['3/4', '2/3', 'Equal'],
-  answer: '3/4',
-  hint: 'Try twelfths: 3/4 = 9/12 and 2/3 = 8/12.'
-};
 const CAPTAIN_EDIT_TIP_KEY = 'gg_tip_edit_captain_v1';
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
@@ -111,6 +106,8 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   recentShapes: [],
   recentPatternTags: [],
   flowStreak: 0,
+  runDifficultySamples: [],
+  bonusChallenge: undefined,
   starsThisRound: 0,
   puzzlesSolvedThisRound: 0,
   puzzlesTriedThisRound: 0
@@ -1152,21 +1149,24 @@ export default function App() {
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
 
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
-    const brain = bossAttempted ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
-    const total = runSnapshot.sprintScore + brain;
+    const challenge = runSnapshot.bonusChallenge ?? fallbackBonusChallenge;
+    const doublesFastMath = bonusPointsTarget(challenge, runSnapshot.gameMode) === 'fast_math';
+    const sprint = bossAttempted && doublesFastMath ? runSnapshot.sprintScore * 2 : runSnapshot.sprintScore;
+    const brain = bossAttempted && !doublesFastMath ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
+    const total = sprint + brain;
     const bonusDelta = total - runSnapshot.starsThisRound;
     const finalRunStars = runSnapshot.starsThisRound + Math.max(0, bonusDelta);
 
     const highs = {
       bestTotal: Math.max(baseState.highs.bestTotal, total),
-      bestSprint: Math.max(baseState.highs.bestSprint, runSnapshot.sprintScore),
+      bestSprint: Math.max(baseState.highs.bestSprint, sprint),
       bestBrain: Math.max(baseState.highs.bestBrain, brain)
     };
 
     const totals = completeRunTotals(baseState.totals, runSnapshot.starsThisRound, bonusDelta);
 
     save({ ...baseState, highs, totals });
-    setRun({ ...runSnapshot, brainScore: brain, starsThisRound: finalRunStars });
+    setRun({ ...runSnapshot, sprintScore: sprint, brainScore: brain, starsThisRound: finalRunStars });
     setFeedback(bossAttempted ? 'Bonus round played. Final score updated!' : 'Game complete. Great work!');
     setFeedbackTone('info');
     triggerPulse('info');
@@ -1246,10 +1246,12 @@ export default function App() {
     const currentPatternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
     const recentPatternTags = [...run.recentPatternTags, ...currentPatternTags].slice(-6);
     const nextFlowDone = run.flowDone + 1;
+    const nextRunDifficultySamples = [...run.runDifficultySamples, item.difficulty];
 
     if (nextFlowDone >= run.flowTarget) {
       if (run.puzzleTarget === 0) {
-        const quickOnlyDone = {
+        save(nextState);
+        setRun({
           ...run,
           flowDone: nextFlowDone,
           sprintScore: run.sprintScore + gain,
@@ -1257,11 +1259,27 @@ export default function App() {
           recentTemplates,
           recentShapes,
           recentPatternTags,
+          flowStreak: nextStreak,
+          phase: 'boss',
+          bossStage: 'intro',
+          runDifficultySamples: nextRunDifficultySamples,
+          bonusChallenge: createBonusChallenge(run.gameMode, 'flow', updatedRating, nextRunDifficultySamples),
           currentHints: 0,
           currentFlow: undefined,
           starsThisRound: run.starsThisRound + gain
-        };
-        finishRun(false, quickOnlyDone, nextState);
+        });
+        setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
+        setFeedbackTone(correct ? 'success' : 'error');
+        triggerPulse(correct ? 'success' : 'error');
+        triggerResultFlash(
+          correct ? 'success' : 'error',
+          'Bonus unlocked!',
+          correct ? `+${gain} points` : `Answer: ${item.answer}`
+        );
+        setInput('');
+        setShowTutor(false);
+        setShowClarifyDialog(false);
+        setTutorStep(0);
         return;
       }
 
@@ -1278,6 +1296,7 @@ export default function App() {
         recentShapes,
         recentPatternTags,
         flowStreak: nextStreak,
+        runDifficultySamples: nextRunDifficultySamples,
         currentHints: 0,
         starsThisRound: run.starsThisRound + gain
       });
@@ -1316,6 +1335,7 @@ export default function App() {
       recentPatternTags,
       currentFlow: nextItem,
       flowStreak: nextStreak,
+      runDifficultySamples: nextRunDifficultySamples,
       currentHints: 0,
       starsThisRound: run.starsThisRound + gain
     });
@@ -1347,6 +1367,7 @@ export default function App() {
     const usedPuzzleIds = new Set(run.usedPuzzleIds);
     usedPuzzleIds.add(run.currentPuzzle.id);
     const puzzleDone = run.puzzleDone + 1;
+    const nextRunDifficultySamples = [...run.runDifficultySamples, run.currentPuzzle.difficulty];
 
     const streaks = updatePuzzleStreak(state.streaks, correct && !revealUsed);
     const museum = [...state.museum];
@@ -1386,23 +1407,6 @@ export default function App() {
     };
 
     if (puzzleDone >= run.puzzleTarget) {
-      if (run.gameMode !== 'galaxy_mix') {
-        const puzzleOnlyDone = {
-          ...run,
-          brainScore: run.brainScore + gain,
-          puzzleDone,
-          usedPuzzleIds,
-          starsThisRound: run.starsThisRound + gain,
-          puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
-          puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
-          currentHints: 0,
-          currentPuzzle: undefined,
-          currentPuzzleChoices: []
-        };
-        finishRun(false, puzzleOnlyDone, nextState);
-        return;
-      }
-
       save(nextState);
       setRun({
         ...run,
@@ -1414,6 +1418,8 @@ export default function App() {
         puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
         phase: 'boss',
         bossStage: 'intro',
+        runDifficultySamples: nextRunDifficultySamples,
+        bonusChallenge: createBonusChallenge(run.gameMode, 'puzzle', updatedRating, nextRunDifficultySamples),
         currentHints: 0,
         currentPuzzle: undefined,
         currentPuzzleChoices: []
@@ -1444,6 +1450,7 @@ export default function App() {
       starsThisRound: run.starsThisRound + gain,
       puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
       puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
+      runDifficultySamples: nextRunDifficultySamples,
       phase: 'puzzle_pick',
       currentHints: 0,
       currentPuzzle: undefined,
@@ -1467,15 +1474,18 @@ export default function App() {
   };
 
   const startBonusRound = () => {
+    const challenge = run.bonusChallenge ?? fallbackBonusChallenge;
+    const targetLabel = bonusPointsTarget(challenge, run.gameMode) === 'fast_math' ? 'fast-math' : 'puzzle';
     setRun({ ...run, bossStage: 'question' as const });
     setInput('');
-    setFeedback('Bonus challenge unlocked. Solve it to double puzzle points!');
+    setFeedback(`Bonus challenge unlocked. Solve it to double your ${targetLabel} points!`);
     setFeedbackTone('info');
   };
 
   const submitBonusRound = () => {
     if (!input.trim()) return;
-    const correct = isSmartAnswerMatch(input, [bonusRound.answer]);
+    const challenge = run.bonusChallenge ?? fallbackBonusChallenge;
+    const correct = isSmartAnswerMatch(input, [challenge.answer]);
     const snapshot: RunState = { ...run, bossStage: 'question' };
     finishRun(correct, snapshot);
   };
@@ -1822,6 +1832,11 @@ export default function App() {
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
+  const activeBonus = run.bonusChallenge ?? fallbackBonusChallenge;
+  const bonusDoublesFastMath = bonusPointsTarget(activeBonus, run.gameMode) === 'fast_math';
+  const bonusBefore = bonusDoublesFastMath ? run.sprintScore : run.brainScore;
+  const bonusAfter = bonusBefore * 2;
+  const bonusTargetCopy = bonusDoublesFastMath ? 'fast-math' : 'puzzle';
   const navToRun = () => {
     if (runInProgress) {
       setScreen('run');
@@ -2293,20 +2308,20 @@ export default function App() {
           <>
             {run.bossStage === 'intro' ? (
               <>
-                <h3>Bonus Round: {bonusRound.title}</h3>
-                <p>Try it to double your puzzle points this game.</p>
+                <h3>Bonus Round: {activeBonus.title}</h3>
+                <p>Try it to double your {bonusTargetCopy} points this game.</p>
                 <div className="btn-row">
                   <button className="btn btn-primary" onClick={startBonusRound}>Play Bonus Round</button>
                   <button className="btn btn-secondary" onClick={() => finishRun(false)}>Finish Game</button>
                 </div>
-                <p className="muted">Bonus preview: {run.brainScore} → {run.brainScore * 2}</p>
+                <p className="muted">Bonus preview: {bonusBefore} → {bonusAfter}</p>
               </>
             ) : (
               <>
-                <h3>Bonus Round: {bonusRound.title}</h3>
-                <p className="puzzle-question-prompt"><InlineMathText text={bonusRound.prompt} /></p>
+                <h3>Bonus Round: {activeBonus.title}</h3>
+                <p className="puzzle-question-prompt"><InlineMathText text={activeBonus.prompt} /></p>
                 <div className="chips">
-                  {bonusRound.choices.map((choice) => (
+                  {activeBonus.choices.map((choice) => (
                     <button
                       key={choice}
                       className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
@@ -2333,7 +2348,7 @@ export default function App() {
                     Skip Bonus
                   </button>
                 </div>
-                <p className="muted">{bonusRound.hint}</p>
+                <p className="muted">{activeBonus.hint}</p>
               </>
             )}
           </>
