@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'avatarId is required' });
     }
 
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const resolvedUserId = resolveUserId(body?.userId);
     const existing = await getPlayerById(supabase, resolvedUserId);
     const { username, usernameKey, deduped } = await dedupeUsername(supabase, usernameRaw, resolvedUserId);

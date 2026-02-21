@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+type SupabaseClient = any;
 
 export type LeaderboardMode = 'all_time' | 'best_run' | 'trophies';
 
@@ -57,6 +57,7 @@ const DEFAULT_BOTS: Array<Omit<DbPlayer, 'username_key' | 'created_at' | 'update
 ];
 
 let supabaseClient: SupabaseClient | null = null;
+let supabaseCreateClient: ((url: string, key: string, options?: any) => SupabaseClient) | null = null;
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -64,11 +65,15 @@ const required = (name: string): string => {
   return value;
 };
 
-export const getSupabase = (): SupabaseClient => {
+export const getSupabase = async (): Promise<SupabaseClient> => {
   if (supabaseClient) return supabaseClient;
+  if (!supabaseCreateClient) {
+    const supabaseModule = await import('@supabase/supabase-js');
+    supabaseCreateClient = supabaseModule.createClient;
+  }
   const url = required('SUPABASE_URL');
   const serviceRoleKey = required('SUPABASE_SERVICE_ROLE_KEY');
-  supabaseClient = createClient(url, serviceRoleKey, {
+  supabaseClient = supabaseCreateClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
   return supabaseClient;

@@ -49,7 +49,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'payload must include score or all-time fields' });
     }
 
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const existing = await getPlayerById(supabase, userId);
     const { username, usernameKey } = await dedupeUsername(supabase, usernameRaw, userId);
     const now = new Date().toISOString();

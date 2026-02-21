@@ -19,7 +19,7 @@ export default async function handler(req: any, res: any) {
     const mode = parseMode(req.query?.mode);
     const limit = parseLimit(req.query?.limit, 50);
 
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     await ensureBots(supabase);
     const { data, error } = await buildSortQuery(supabase, mode, limit);
     if (error) throw error;
