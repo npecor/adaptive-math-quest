@@ -266,6 +266,20 @@ p {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.22);
 }
 
+.app-brand-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-brand-button:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.8);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
 .app-brand-copy {
   display: grid;
   gap: 1px;
@@ -275,6 +289,20 @@ p {
   font-size: 14px;
   letter-spacing: 0.02em;
   line-height: 1.1;
+}
+
+.app-brand-tagline {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(125, 211, 252, 0.82);
+}
+
+.top-bar-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand-mark {
@@ -1305,6 +1333,20 @@ p {
   -webkit-text-fill-color: transparent;
 }
 
+.math-display-split {
+  display: grid;
+  gap: 8px;
+}
+
+.math-display-line {
+  display: block;
+}
+
+.math-display-detail {
+  font-size: clamp(18px, 4vw, 26px);
+  letter-spacing: 0.02em;
+}
+
 .fraction-inline {
   display: inline-flex;
   flex-direction: column;
@@ -1379,12 +1421,32 @@ p {
   opacity: 0.76;
 }
 
+.scratchpad-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
 .scratchpad-label {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #cbd5e1;
+}
+
+.scratchpad-toggle-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(186, 230, 253, 0.9);
 }
 
 .scratchpad-input {
@@ -1405,6 +1467,14 @@ p {
 
 .scratchpad-wrap:focus-within {
   opacity: 0.92;
+}
+
+.scratchpad-wrap.collapsed {
+  opacity: 0.84;
+}
+
+.scratchpad-wrap.collapsed .scratchpad-toggle {
+  padding: 4px 0;
 }
 
 .btn-row {
@@ -2703,6 +2773,18 @@ p {
   gap: 12px;
 }
 
+.landing-top-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.landing-top-row-solo {
+  justify-content: flex-end;
+}
+
 .landing-pill {
   font-size: 11px;
   font-weight: 800;
@@ -2710,6 +2792,26 @@ p {
   text-transform: uppercase;
   color: var(--brand-cyan);
   opacity: 0.92;
+}
+
+.brand-toggle-btn {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.45);
+  color: #dbeafe;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.brand-toggle-btn.compact {
+  padding: 5px 9px;
+  font-size: 9px;
+  letter-spacing: 0.03em;
 }
 
 .landing-logo-lockup {
@@ -2729,25 +2831,59 @@ p {
   display: inline-grid;
   place-items: center;
   filter: drop-shadow(0 8px 14px rgba(2, 6, 23, 0.4));
+  animation: landing-character-drift 7.8s ease-in-out infinite;
 }
 
 .landing-character .character-avatar .character-avatar-svg {
-  animation-duration: 4.8s;
+  animation-duration: 5.6s;
 }
 
 .landing-character-astro {
   top: 18px;
   right: 14%;
+  animation-delay: -1.6s;
+}
+
+.landing-character-axo {
+  top: 18px;
+  right: 14%;
+  animation-delay: -1.6s;
 }
 
 .landing-character-jelly {
   left: 15%;
   bottom: 8px;
+  animation-name: landing-character-drift-alt;
+  animation-duration: 8.8s;
+  animation-delay: -0.8s;
+}
+
+.landing-character-blob {
+  right: 18%;
+  bottom: 2px;
+  animation-name: landing-character-drift-soft;
+  animation-duration: 9.4s;
+  animation-delay: -2.1s;
 }
 
 .landing-character-mochi {
   right: 18%;
   bottom: 2px;
+  animation-name: landing-character-drift-soft;
+  animation-duration: 9.2s;
+  animation-delay: -2s;
+}
+
+.landing-classic .landing-logo-lockup {
+  min-height: 130px;
+}
+
+.landing-classic .landing-title span {
+  color: #fff;
+}
+
+.landing-classic .landing-card {
+  background: linear-gradient(160deg, rgba(7, 18, 48, 0.9), rgba(9, 28, 65, 0.78));
 }
 
 .landing-title {
@@ -2763,11 +2899,38 @@ p {
   color: var(--brand-blue);
 }
 
+.landing-tagline {
+  margin-top: -4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(75, 207, 250, 0.92);
+}
+
 .landing-copy {
   max-width: 35ch;
   font-size: 15px;
   line-height: 1.56;
   color: rgba(226, 232, 240, 0.88);
+}
+
+@keyframes landing-character-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-1deg); }
+  30% { transform: translate3d(3px, -6px, 0) rotate(1deg); }
+  65% { transform: translate3d(-2px, -3px, 0) rotate(-0.8deg); }
+}
+
+@keyframes landing-character-drift-alt {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0.9deg); }
+  35% { transform: translate3d(-4px, -5px, 0) rotate(-1deg); }
+  70% { transform: translate3d(2px, -2px, 0) rotate(0.6deg); }
+}
+
+@keyframes landing-character-drift-soft {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  40% { transform: translate3d(2px, -4px, 0) rotate(0.8deg) scale(1.01); }
+  75% { transform: translate3d(-1px, -2px, 0) rotate(-0.6deg) scale(0.995); }
 }
 
 .landing-actions {
@@ -2817,6 +2980,15 @@ p {
   font-size: 14px;
   color: #e0f2fe;
   line-height: 1.1;
+}
+
+.onboarding-brand-tagline {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(125, 211, 252, 0.82);
 }
 
 .onboarding-title {
@@ -3605,9 +3777,27 @@ p {
     font-size: 12px;
   }
 
+  .app-brand-tagline {
+    display: none;
+  }
+
+  .top-bar-tools {
+    gap: 6px;
+  }
+
+  .brand-toggle-btn.compact {
+    padding: 4px 8px;
+    font-size: 8px;
+  }
+
   .landing-card {
     padding: 28px 20px 24px;
     gap: 12px;
+  }
+
+  .landing-top-row {
+    align-items: start;
+    flex-wrap: wrap;
   }
 
   .landing-logo-lockup {
@@ -3619,9 +3809,19 @@ p {
     top: 16px;
   }
 
+  .landing-character-axo {
+    right: 8%;
+    top: 16px;
+  }
+
   .landing-character-jelly {
     left: 7%;
     bottom: 8px;
+  }
+
+  .landing-character-blob {
+    right: 10%;
+    bottom: 6px;
   }
 
   .landing-character-mochi {
@@ -3631,6 +3831,11 @@ p {
 
   .landing-title {
     font-size: clamp(28px, 12vw, 40px);
+  }
+
+  .landing-tagline {
+    font-size: 10px;
+    letter-spacing: 0.13em;
   }
 
   .landing-copy {

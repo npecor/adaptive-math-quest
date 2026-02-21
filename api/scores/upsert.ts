@@ -10,6 +10,7 @@ import {
 
 export const config = { runtime: 'nodejs' };
 const MAX_REASONABLE_RUN_STARS = 660;
+const GLOBAL_LEADERBOARD_MIN_STARS = 21; // must be > 20
 
 export default async function handler(req: any, res: any) {
   setCors(res);
@@ -59,6 +60,10 @@ export default async function handler(req: any, res: any) {
     const incomingBestRun = Math.max(0, Math.floor(hasNewPayload ? numericBestRunStars : legacyScore));
     const incomingTrophies = Math.max(0, Math.floor(hasNewPayload ? numericTrophiesEarned : 0));
     const incomingExtensions = Math.max(0, Math.floor(hasNewPayload ? numericExtensionsSolved : 0));
+
+    if (!existing && incomingAllTime < GLOBAL_LEADERBOARD_MIN_STARS) {
+      return res.status(200).json({ ok: true, skipped: true, reason: 'below_global_threshold' });
+    }
 
     const resolvedAllTimeStars = Math.max(existing?.all_time_stars ?? existing?.high_score ?? 0, incomingAllTime);
     // For the new payload, trust client best-run as source-of-truth (clamped),

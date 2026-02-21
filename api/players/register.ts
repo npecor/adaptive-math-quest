@@ -37,6 +37,18 @@ export default async function handler(req: any, res: any) {
     const trophies = Math.max(0, Math.floor(Number(existing?.trophies_earned ?? 0)));
     const extensions = Math.max(0, Math.floor(Number(existing?.extensions_solved ?? 0)));
 
+    // New players should stay local-only until they actually earn enough stars.
+    if (!existing) {
+      return res.status(200).json({
+        userId: resolvedUserId,
+        username,
+        avatarId: avatarIdRaw.trim(),
+        createdAt: now,
+        updatedAt: now,
+        deduped
+      });
+    }
+
     const nextRow = {
       user_id: resolvedUserId,
       username,

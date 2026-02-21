@@ -12,6 +12,7 @@ import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
 type Screen = 'landing' | 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
+type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
@@ -62,6 +63,7 @@ const PUZZLE_TARGET = 3;
 const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
+const GLOBAL_LEADERBOARD_MIN_STARS = 21; // must be > 20 to appear globally
 const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const SHOW_TROPHY_ACTIVITY_CARD = false;
@@ -1157,6 +1159,7 @@ const BrandMark = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState());
+  const [brandVariant] = useState<BrandVariant>('simplified');
   const [screen, setScreen] = useState<Screen>(() => {
     const bootState = loadState();
     if (typeof window !== 'undefined') {
@@ -1169,6 +1172,9 @@ export default function App() {
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
   const [input, setInput] = useState('');
   const [scratchpad, setScratchpad] = useState('');
+  const [scratchpadExpanded, setScratchpadExpanded] = useState(() =>
+    typeof window !== 'undefined' ? !window.matchMedia('(max-width: 700px)').matches : true
+  );
   const [feedback, setFeedback] = useState('');
   const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>('info');
   const [resultPulse, setResultPulse] = useState<FeedbackTone | null>(null);
@@ -1222,6 +1228,7 @@ export default function App() {
   const runTargetTotal = run.flowTarget + run.puzzleTarget;
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
+  const canJoinGlobalLeaderboard = state.totals.allTimeStars >= GLOBAL_LEADERBOARD_MIN_STARS;
   const puzzleSolveRate = state.totals.allTimePuzzleTries
     ? Math.max(
         0,
@@ -1340,7 +1347,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     autoResizeScratchpad(scratchpadRef.current);
-  }, [scratchpad, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
+  }, [scratchpad, scratchpadExpanded, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
 
   useEffect(() => {
     if (screen !== 'run') {
@@ -1362,6 +1369,14 @@ export default function App() {
       setScratchpad('');
     }
   }, [screen, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
+
+  useEffect(() => {
+    if (screen !== 'run') {
+      setScratchpadExpanded(true);
+      return;
+    }
+    setScratchpadExpanded(!isMobileViewport);
+  }, [screen, isMobileViewport, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1461,7 +1476,7 @@ export default function App() {
   }, [state.user?.userId]);
 
   useEffect(() => {
-    if (!state.user?.userId) return;
+    if (!state.user?.userId || !canJoinGlobalLeaderboard) return;
     const payload = {
       allTimeStars: state.totals.allTimeStars,
       bestRunStars: state.totals.bestRunStars,
@@ -1493,7 +1508,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [leaderboardMode, state.totals, state.user]);
+  }, [canJoinGlobalLeaderboard, leaderboardMode, state.totals, state.user]);
 
   const getPuzzleChoices = (rating: number, usedPuzzleIds: Set<string>) =>
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
@@ -1924,6 +1939,16 @@ export default function App() {
     return 'Take it one small step at a time.';
   };
 
+  const getFlowPromptLines = (item: FlowItem): { lead: string; detail?: string } => {
+    if (item.template === 'fraction_compare') {
+      const match = item.prompt.match(/^(\d+\s*\/\s*\d+)\s+or\s+(\d+\s*\/\s*\d+)\s*:\s*larger\??$/i);
+      if (match) {
+        return { lead: 'Which is larger?', detail: `${match[1]} or ${match[2]}` };
+      }
+    }
+    return { lead: item.prompt };
+  };
+
   const getFlowTutorSteps = (item: FlowItem) => {
     if (item.template === 'lcm') {
       const match =
@@ -2108,45 +2133,47 @@ export default function App() {
     const chosenAvatarId = getCharacterById(selectedCharacterId)?.id ?? state.user?.avatarId;
     if (!username || !chosenAvatarId || isRegisteringPlayer) return;
 
-    setIsRegisteringPlayer(true);
-    try {
-      const registered = await registerPlayer({
-        userId: state.user?.userId,
-        username,
-        avatarId: chosenAvatarId
-      });
+    const localId =
+      state.user?.userId ??
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `local-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
+    const createdAt = state.user?.createdAt ?? new Date().toISOString();
 
+    const saveLocalProfile = (nextUsername: string, nextUserId = localId, nextCreatedAt = createdAt) => {
       const nextState: AppState = {
         ...state,
         user: {
-          userId: registered.userId,
-          username: registered.username,
+          userId: nextUserId,
+          username: nextUsername,
           avatarId: chosenAvatarId,
-          createdAt: registered.createdAt
+          createdAt: nextCreatedAt
         }
       };
       save(nextState);
-      setNameInput(registered.username);
-      setLeaderboardStatus('online');
+      setNameInput(nextUsername);
       setScreen('home');
+    };
+
+    if (!canJoinGlobalLeaderboard) {
+      // Keep new players local-only until they pass the global leaderboard threshold.
+      saveLocalProfile(username);
+      return;
+    }
+
+    setIsRegisteringPlayer(true);
+    try {
+      const registered = await registerPlayer({
+        userId: localId,
+        username,
+        avatarId: chosenAvatarId
+      });
+      saveLocalProfile(registered.username, registered.userId, registered.createdAt);
+      setLeaderboardStatus('online');
     } catch {
       // Fallback to local save if backend is unavailable.
-      const localId =
-        state.user?.userId ??
-        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `local-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
-      save({
-        ...state,
-        user: {
-          userId: localId,
-          username,
-          avatarId: chosenAvatarId,
-          createdAt: state.user?.createdAt ?? new Date().toISOString()
-        }
-      });
+      saveLocalProfile(username);
       setLeaderboardStatus('offline');
-      setScreen('home');
     } finally {
       setIsRegisteringPlayer(false);
     }
@@ -2250,6 +2277,7 @@ export default function App() {
 
   const pinnedYouRow = useMemo(() => {
     if (!state.user) return null;
+    if (!canJoinGlobalLeaderboard) return null;
     if (leaderboard.some((entry) => entry.isYou)) return null;
 
     const userId = state.user.userId ?? `local-${state.user.username.toLowerCase().replace(/\s+/g, '-')}`;
@@ -2285,7 +2313,7 @@ export default function App() {
       isBot: found.isBot,
       isYou: true
     };
-  }, [leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
+  }, [canJoinGlobalLeaderboard, leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
 
   const podiumLeaders = useMemo(
     () =>
@@ -2300,6 +2328,8 @@ export default function App() {
     (screen === 'run' || (screen === 'home' && !homeNavRevealed) || isTextEntryFocused);
   const showGamePhasesPanel = false;
   const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
+  const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
+  const flowHasChoices = (run.currentFlow?.choices?.length ?? 0) > 0;
   const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
@@ -2315,6 +2345,37 @@ export default function App() {
     setScreen('onboarding');
   };
 
+  const renderScratchpad = (idSuffix: string) => {
+    const fieldId = `${scratchpadFieldId}-${idSuffix}`;
+    const shouldShowInput = !isMobileViewport || scratchpadExpanded;
+    return (
+      <div className={`scratchpad-wrap ${isMobileViewport && !scratchpadExpanded ? 'collapsed' : ''}`}>
+        <button
+          type="button"
+          className="scratchpad-toggle"
+          onClick={() => setScratchpadExpanded((open) => !open)}
+          aria-expanded={shouldShowInput}
+          aria-controls={fieldId}
+        >
+          <span className="scratchpad-label">Scratchpad</span>
+          {isMobileViewport && <span className="scratchpad-toggle-text">{shouldShowInput ? 'Hide' : 'Show'}</span>}
+        </button>
+        {shouldShowInput && (
+          <textarea
+            ref={scratchpadRef}
+            id={fieldId}
+            className="math-input text-area-input scratchpad-input"
+            inputMode="text"
+            value={scratchpad}
+            onChange={onScratchpadChange}
+            placeholder={scratchpadPlaceholder}
+            rows={3}
+          />
+        )}
+      </div>
+    );
+  };
+
   const continueFromLanding = () => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(LANDING_SEEN_STORAGE_KEY, '1');
@@ -2323,30 +2384,46 @@ export default function App() {
   };
 
   const landing = (
-    <div className="landing-shell">
+    <div className={`landing-shell landing-${brandVariant}`}>
       <div className="landing-stars" aria-hidden="true" />
       <section className="landing-card">
-        <p className="landing-pill">Kids Learning Adventure</p>
         <div className="landing-logo-lockup">
           <div className="landing-brand">
             <BrandMark size="lg" />
           </div>
-          <span className="landing-character landing-character-astro">
-            <CharacterAvatar characterId="astro-bot" size="md" />
-          </span>
-          <span className="landing-character landing-character-jelly">
-            <CharacterAvatar characterId="animal-jelly-jet" size="md" />
-          </span>
-          <span className="landing-character landing-character-mochi">
-            <CharacterAvatar characterId="animal-moon-mochi" size="md" />
-          </span>
+          {brandVariant === 'simplified' ? (
+            <>
+              <span className="landing-character landing-character-astro">
+                <CharacterAvatar characterId="astro-bot" size="md" />
+              </span>
+              <span className="landing-character landing-character-jelly">
+                <CharacterAvatar characterId="animal-jelly-jet" size="md" />
+              </span>
+              <span className="landing-character landing-character-mochi">
+                <CharacterAvatar characterId="animal-moon-mochi" size="md" />
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="landing-character landing-character-axo">
+                <CharacterAvatar characterId="animal-axo-naut" size="md" />
+              </span>
+              <span className="landing-character landing-character-jelly">
+                <CharacterAvatar characterId="animal-jelly-jet" size="md" />
+              </span>
+              <span className="landing-character landing-character-blob">
+                <CharacterAvatar characterId="animal-glowing-gloop" size="md" />
+              </span>
+            </>
+          )}
         </div>
         <h1 className="landing-title">
-          Galaxy <span>Genius</span>
+          Galaxy {brandVariant === 'simplified' ? <span>Genius</span> : 'Genius'}
         </h1>
+        {brandVariant === 'classic' && <p className="landing-tagline">Big Brains. Space Games.</p>}
         <div className="landing-actions">
           <button className="btn btn-primary" onClick={continueFromLanding}>
-            {state.user ? `Continue as ${state.user.username}` : 'Start Mission'}
+            {state.user ? `Continue as ${state.user.username}` : brandVariant === 'simplified' ? 'Start Mission' : 'Start Playing'}
           </button>
         </div>
       </section>
@@ -2360,6 +2437,7 @@ export default function App() {
           <BrandMark size="sm" />
           <div className="onboarding-brand-copy">
             <p className="onboarding-brand-name">Galaxy Genius</p>
+            {brandVariant === 'classic' && <p className="onboarding-brand-tagline">Big Brains. Space Games.</p>}
           </div>
         </div>
 
@@ -2539,11 +2617,14 @@ export default function App() {
             <div className="tier-row">
               <span className="tag difficulty-tag">{getTier(run.currentFlow.difficulty, run.currentFlow.tier).icon} {getTier(run.currentFlow.difficulty, run.currentFlow.tier).label}</span>
             </div>
-            <h3 className="math-display"><InlineMathText text={run.currentFlow.prompt} /></h3>
+            <h3 className={`math-display ${flowPromptLines?.detail ? 'math-display-split' : ''}`}>
+              <span className="math-display-line"><InlineMathText text={flowPromptLines?.lead ?? run.currentFlow.prompt} /></span>
+              {flowPromptLines?.detail && <span className="math-display-line math-display-detail"><InlineMathText text={flowPromptLines.detail} /></span>}
+            </h3>
 
-            {run.currentFlow.choices && (
+            {flowHasChoices && (
               <div className="chips">
-                {run.currentFlow.choices.map((choice) => (
+                {run.currentFlow.choices!.map((choice) => (
                   <button
                     key={choice}
                     className={`btn btn-secondary chip-btn ${input === choice ? 'selected' : ''}`}
@@ -2555,17 +2636,19 @@ export default function App() {
               </div>
             )}
 
-            <input
-              className="math-input"
-              inputMode={run.currentFlow.format === 'numeric_input' ? 'numeric' : 'text'}
-              pattern={run.currentFlow.format === 'numeric_input' ? '[0-9]*' : undefined}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Answer"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') onSubmitFlow();
-              }}
-            />
+            {!flowHasChoices && (
+              <input
+                className="math-input"
+                inputMode={run.currentFlow.format === 'numeric_input' ? 'numeric' : 'text'}
+                pattern={run.currentFlow.format === 'numeric_input' ? '[0-9]*' : undefined}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Answer"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') onSubmitFlow();
+                }}
+              />
+            )}
 
             <div className="btn-row">
               <button className="btn btn-primary btn-primary-main" onClick={onSubmitFlow} disabled={!input.trim()}>
@@ -2636,19 +2719,7 @@ export default function App() {
               </div>
             )}
 
-            <div className="scratchpad-wrap">
-              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-flow`}>Scratchpad</label>
-              <textarea
-                ref={scratchpadRef}
-                id={`${scratchpadFieldId}-flow`}
-                className="math-input text-area-input scratchpad-input"
-                inputMode="text"
-                value={scratchpad}
-                onChange={onScratchpadChange}
-                placeholder={scratchpadPlaceholder}
-                rows={3}
-              />
-            </div>
+            {renderScratchpad('flow')}
           </>
         )}
 
@@ -2806,19 +2877,7 @@ export default function App() {
 
             <button className="btn btn-secondary" onClick={setupPuzzlePick}>Pick a Different Puzzle</button>
 
-            <div className="scratchpad-wrap">
-              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-puzzle`}>Scratchpad</label>
-              <textarea
-                ref={scratchpadRef}
-                id={`${scratchpadFieldId}-puzzle`}
-                className="math-input text-area-input scratchpad-input"
-                inputMode="text"
-                value={scratchpad}
-                onChange={onScratchpadChange}
-                placeholder={scratchpadPlaceholder}
-                rows={3}
-              />
-            </div>
+            {renderScratchpad('puzzle')}
           </>
         )}
 
@@ -2940,19 +2999,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="scratchpad-wrap">
-                  <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-boss`}>Scratchpad</label>
-                  <textarea
-                    ref={scratchpadRef}
-                    id={`${scratchpadFieldId}-boss`}
-                    className="math-input text-area-input scratchpad-input"
-                    inputMode="text"
-                    value={scratchpad}
-                    onChange={onScratchpadChange}
-                    placeholder={scratchpadPlaceholder}
-                    rows={3}
-                  />
-                </div>
+                {renderScratchpad('boss')}
               </>
             ) : (
               <div className="bonus-result-modal" role="dialog" aria-modal="true" aria-label="Bonus complete">
@@ -3284,7 +3331,7 @@ export default function App() {
   }
 
   return (
-    <div className="cosmic-root">
+    <div className={`cosmic-root brand-${brandVariant}`}>
       <div className="parallax-bg bg-one" />
       {resultFlash && (
         <div className={`result-flash ${resultFlash.tone}`}>
@@ -3301,13 +3348,22 @@ export default function App() {
 
       <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
-          <div className="app-brand-inline" aria-label="Galaxy Genius">
+          <button
+            type="button"
+            className="app-brand-inline app-brand-button"
+            onClick={() => setScreen('home')}
+            aria-label="Go to Home"
+            title="Go to Home"
+          >
             <BrandMark size="sm" />
             <div className="app-brand-copy">
               <span className="app-brand-name">Galaxy Genius</span>
+              {brandVariant === 'classic' && <span className="app-brand-tagline">Big Brains. Space Games.</span>}
             </div>
+          </button>
+          <div className="top-bar-tools">
+            <div className="streak-counter" title="Score">⭐ {topBarPoints}</div>
           </div>
-          <div className="streak-counter" title="Score">⭐ {topBarPoints}</div>
         </header>
 
         {screen === 'home' && home}
