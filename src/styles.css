@@ -1848,7 +1848,7 @@ p {
 .row-name-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1867,10 +1867,10 @@ p {
 }
 
 .you-chip {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  padding: 3px 7px;
+  padding: 2px 6px;
   border-radius: 999px;
   color: #dbeafe;
   background: rgba(56, 189, 248, 0.18);
@@ -1880,7 +1880,7 @@ p {
 .row-score {
   font-family: var(--font-display);
   color: var(--color-accent-pink);
-  min-width: 110px;
+  min-width: 72px;
   text-align: right;
   justify-self: end;
   font-variant-numeric: tabular-nums;
@@ -1918,9 +1918,46 @@ p {
   gap: 12px;
 }
 
+.artifact-row.trophy-entry {
+  display: block;
+  padding: 0;
+}
+
 .collection-card {
   position: relative;
   overflow: hidden;
+}
+
+.collection-card.expanded {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.trophy-card-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.trophy-card-button:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.7);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+.trophy-open-indicator {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.9);
 }
 
 .collection-card::after {
@@ -1964,6 +2001,46 @@ p {
   align-items: center;
   gap: 2px;
   font-size: 13px;
+}
+
+.trophy-detail {
+  position: relative;
+  z-index: 1;
+  margin: 0 16px 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.64);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  display: grid;
+  gap: 8px;
+}
+
+.trophy-detail-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.trophy-detail-question {
+  margin: 0;
+  color: #e2e8f0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.trophy-hint-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #cbd5e1;
+}
+
+.trophy-detail-empty {
+  margin: 0;
 }
 
 .trophy-star {
@@ -2781,6 +2858,30 @@ p {
     margin-right: 12px;
     padding-left: 0;
     padding-right: 0;
+  }
+
+  .rank-row {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .rank-row-left {
+    gap: 8px;
+  }
+
+  .row-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .row-score {
+    min-width: 60px;
+    font-size: 26px;
+  }
+
+  .you-chip {
+    font-size: 9px;
+    padding: 2px 5px;
   }
 }
 

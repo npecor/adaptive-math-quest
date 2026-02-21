@@ -208,6 +208,16 @@ const getBonusInputMode = (bonus: BonusChallenge): 'choice' | 'short_text' | 'lo
   return 'short_text';
 };
 
+const getBonusChoiceOptions = (bonus: BonusChallenge): string[] => {
+  const deduped = Array.from(new Set(bonus.choices));
+  if (deduped.length <= 3) return deduped;
+
+  const answerIdx = deduped.findIndex((choice) => normalize(choice) === normalize(bonus.answer));
+  const answerChoice = answerIdx >= 0 ? deduped[answerIdx] : deduped[0];
+  const distractors = deduped.filter((choice) => normalize(choice) !== normalize(answerChoice));
+  return [answerChoice, ...distractors.slice(0, 2)];
+};
+
 const getPuzzlePlainLanguage = (puzzle: PuzzleItem): string => {
   const prompt = puzzle.core_prompt;
   const normalized = normalize(prompt);
@@ -920,6 +930,7 @@ export default function App() {
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
+  const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
   const [showCaptainEditTip, setShowCaptainEditTip] = useState(false);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const scratchpadFieldId = useId();
@@ -1414,6 +1425,8 @@ export default function App() {
     const entry = {
       puzzleId: run.currentPuzzle.id,
       title: run.currentPuzzle.title,
+      promptSnapshot: run.currentPuzzle.core_prompt,
+      hintsSnapshot: run.currentPuzzle.hint_ladder.slice(0, 3),
       solved,
       extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, extensionGain),
       methodsFound: solved ? ['core-solved'] : []
@@ -1797,6 +1810,14 @@ export default function App() {
     setOnboardingStage(state.user ? 'character' : 'name');
   }, [screen, state.user?.userId]);
 
+  useEffect(() => {
+    if (screen !== 'museum') setExpandedMuseumPuzzleId(null);
+  }, [screen]);
+
+  useEffect(() => {
+    setExpandedMuseumPuzzleId(null);
+  }, [showAttemptedPuzzles]);
+
   const museumRows = useMemo(
     () =>
       state.museum.map((entry) => ({ ...entry, title: toFriendlyPuzzleTitle(entry.title, entry.puzzleId) })),
@@ -1852,6 +1873,7 @@ export default function App() {
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
   const activeBonus = run.bonusChallenge ?? fallbackBonusChallenge;
   const currentBonusTutorSteps = (activeBonus.solutionSteps ?? []).map((step, index) => `Step ${index + 1}: ${step}`);
+  const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
   const navToRun = () => {
@@ -2122,20 +2144,6 @@ export default function App() {
                 </button>
               )}
             </div>
-            <div className="scratchpad-wrap">
-              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-flow`}>Scratchpad</label>
-              <textarea
-                ref={scratchpadRef}
-                id={`${scratchpadFieldId}-flow`}
-                className="math-input text-area-input scratchpad-input"
-                inputMode="numeric"
-                value={scratchpad}
-                onChange={onScratchpadChange}
-                placeholder={scratchpadPlaceholder}
-                rows={3}
-              />
-            </div>
-
             {run.currentHints > 0 && (
               <div className="hint-stack">
                 {run.currentFlow.hints.slice(0, run.currentHints).map((hint, index) => (
@@ -2174,6 +2182,20 @@ export default function App() {
                 </button>
               </div>
             )}
+
+            <div className="scratchpad-wrap">
+              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-flow`}>Scratchpad</label>
+              <textarea
+                ref={scratchpadRef}
+                id={`${scratchpadFieldId}-flow`}
+                className="math-input text-area-input scratchpad-input"
+                inputMode="numeric"
+                value={scratchpad}
+                onChange={onScratchpadChange}
+                placeholder={scratchpadPlaceholder}
+                rows={3}
+              />
+            </div>
           </>
         )}
 
@@ -2269,20 +2291,6 @@ export default function App() {
                 ?
               </button>
             </div>
-            <div className="scratchpad-wrap">
-              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-puzzle`}>Scratchpad</label>
-              <textarea
-                ref={scratchpadRef}
-                id={`${scratchpadFieldId}-puzzle`}
-                className="math-input text-area-input scratchpad-input"
-                inputMode="numeric"
-                value={scratchpad}
-                onChange={onScratchpadChange}
-                placeholder={scratchpadPlaceholder}
-                rows={3}
-              />
-            </div>
-
             {run.currentHints > 0 && (
               <div className="hint-stack">
                 {run.currentPuzzle.hint_ladder.slice(0, run.currentHints).map((hint, index) => (
@@ -2344,6 +2352,20 @@ export default function App() {
             )}
 
             <button className="btn btn-secondary" onClick={setupPuzzlePick}>Pick a Different Puzzle</button>
+
+            <div className="scratchpad-wrap">
+              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-puzzle`}>Scratchpad</label>
+              <textarea
+                ref={scratchpadRef}
+                id={`${scratchpadFieldId}-puzzle`}
+                className="math-input text-area-input scratchpad-input"
+                inputMode="numeric"
+                value={scratchpad}
+                onChange={onScratchpadChange}
+                placeholder={scratchpadPlaceholder}
+                rows={3}
+              />
+            </div>
           </>
         )}
 
@@ -2368,7 +2390,7 @@ export default function App() {
                 <p className="puzzle-question-prompt"><InlineMathText text={activeBonus.prompt} /></p>
                 {getBonusInputMode(activeBonus) === 'choice' ? (
                   <div className="chips">
-                    {activeBonus.choices.map((choice) => (
+                    {bonusChoiceOptions.map((choice) => (
                       <button
                         key={choice}
                         className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
@@ -2425,20 +2447,6 @@ export default function App() {
                     <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
                   </button>
                 </div>
-                <div className="scratchpad-wrap">
-                  <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-boss`}>Scratchpad</label>
-                  <textarea
-                    ref={scratchpadRef}
-                    id={`${scratchpadFieldId}-boss`}
-                    className="math-input text-area-input scratchpad-input"
-                    inputMode="numeric"
-                    value={scratchpad}
-                    onChange={onScratchpadChange}
-                    placeholder={scratchpadPlaceholder}
-                    rows={3}
-                  />
-                </div>
-
                 {run.currentHints > 0 && (
                   <div className="hint-stack">
                     {activeBonus.hintLadder.slice(0, run.currentHints).map((hint, index) => (
@@ -2478,6 +2486,20 @@ export default function App() {
                     </button>
                   </div>
                 )}
+
+                <div className="scratchpad-wrap">
+                  <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-boss`}>Scratchpad</label>
+                  <textarea
+                    ref={scratchpadRef}
+                    id={`${scratchpadFieldId}-boss`}
+                    className="math-input text-area-input scratchpad-input"
+                    inputMode="numeric"
+                    value={scratchpad}
+                    onChange={onScratchpadChange}
+                    placeholder={scratchpadPlaceholder}
+                    rows={3}
+                  />
+                </div>
               </>
             )}
           </>
@@ -2550,7 +2572,7 @@ export default function App() {
         </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>Play Again</button>
-          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>Star Board</button>
+          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>📊 Leaderboard</button>
         </div>
       </section>
     </>
@@ -2670,26 +2692,64 @@ export default function App() {
         {collectionRows.length === 0 && showAttemptedPuzzles && (
           <div className="empty-state">No puzzle attempts yet. Start a game and pick a puzzle card.</div>
         )}
-        {collectionRows.map((entry) => (
-          <div key={entry.puzzleId} className={`artifact-row collection-card ${entry.solved ? 'solved' : 'attempted'}`}>
-            <div>
-              <strong>{getPuzzleEmoji({ id: entry.puzzleId, title: entry.title })} {entry.title}</strong>
-            </div>
-            <div className="artifact-meta trophy-visual">
-              <span className="trophy-icon" aria-hidden="true">{entry.solved ? '🏆' : '🛰️'}</span>
-              <div className="trophy-stars" aria-label={`Star progress ${entry.solved ? Math.min(3, 1 + entry.extensionsCompleted) : 0} of 3`}>
-                {Array.from({ length: 3 }).map((_, index) => {
-                  const filled = entry.solved && index < Math.min(3, 1 + entry.extensionsCompleted);
-                  return (
-                    <span key={`${entry.puzzleId}-star-${index}`} className={`trophy-star ${filled ? 'filled' : ''}`} aria-hidden="true">
-                      {filled ? '⭐' : '✩'}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ))}
+        {collectionRows.map((entry) => {
+          const isExpanded = expandedMuseumPuzzleId === entry.puzzleId;
+          const detailQuestion = entry.promptSnapshot
+            ? cleanPuzzlePromptDisplay(entry.promptSnapshot)
+            : 'No saved question yet. Solve this puzzle again to store its exact prompt.';
+          const detailHints = entry.hintsSnapshot?.length ? entry.hintsSnapshot : [];
+
+          return (
+            <article
+              key={entry.puzzleId}
+              className={`artifact-row trophy-entry collection-card ${entry.solved ? 'solved' : 'attempted'} ${isExpanded ? 'expanded' : ''}`}
+            >
+              <button
+                type="button"
+                className="trophy-card-button"
+                onClick={() => setExpandedMuseumPuzzleId((prev) => (prev === entry.puzzleId ? null : entry.puzzleId))}
+                aria-expanded={isExpanded}
+                aria-controls={`trophy-detail-${entry.puzzleId}`}
+                aria-label={`View ${entry.title} puzzle question and hints`}
+              >
+                <div>
+                  <strong>{getPuzzleEmoji({ id: entry.puzzleId, title: entry.title })} {entry.title}</strong>
+                </div>
+                <div className="artifact-meta trophy-visual">
+                  <span className="trophy-icon" aria-hidden="true">{entry.solved ? '🏆' : '🛰️'}</span>
+                  <div className="trophy-stars" aria-label={`Star progress ${entry.solved ? Math.min(3, 1 + entry.extensionsCompleted) : 0} of 3`}>
+                    {Array.from({ length: 3 }).map((_, index) => {
+                      const filled = entry.solved && index < Math.min(3, 1 + entry.extensionsCompleted);
+                      return (
+                        <span key={`${entry.puzzleId}-star-${index}`} className={`trophy-star ${filled ? 'filled' : ''}`} aria-hidden="true">
+                          {filled ? '⭐' : '✩'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span className="trophy-open-indicator" aria-hidden="true">{isExpanded ? '▴' : '▾'}</span>
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div id={`trophy-detail-${entry.puzzleId}`} className="trophy-detail">
+                  <p className="trophy-detail-title">Puzzle Question</p>
+                  <p className="trophy-detail-question">{detailQuestion}</p>
+                  <p className="trophy-detail-title">Hints</p>
+                  {detailHints.length > 0 ? (
+                    <ol className="trophy-hint-list">
+                      {detailHints.map((hint, index) => (
+                        <li key={`${entry.puzzleId}-hint-${index}`}>{hint}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="muted trophy-detail-empty">No hints saved yet for this puzzle.</p>
+                  )}
+                </div>
+              )}
+            </article>
+          );
+        })}
       </section>
     </>
   );

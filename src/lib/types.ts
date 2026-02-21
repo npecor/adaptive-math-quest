@@ -71,6 +71,8 @@ export interface HighScores {
 export interface MuseumEntry {
   puzzleId: string;
   title?: string;
+  promptSnapshot?: string;
+  hintsSnapshot?: string[];
   solved: boolean;
   extensionsCompleted: number;
   methodsFound: string[];
