@@ -891,6 +891,7 @@ export default function App() {
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
   const [input, setInput] = useState('');
+  const [scratchpad, setScratchpad] = useState('');
   const [feedback, setFeedback] = useState('');
   const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>('info');
   const [resultPulse, setResultPulse] = useState<FeedbackTone | null>(null);
@@ -898,6 +899,7 @@ export default function App() {
   const resultFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [clarifyInput, setClarifyInput] = useState('');
   const [clarifyReply, setClarifyReply] = useState('');
+  const scratchpadRef = useRef<HTMLTextAreaElement | null>(null);
   const [showTutor, setShowTutor] = useState(false);
   const [showClarifyDialog, setShowClarifyDialog] = useState(false);
   const [tutorStep, setTutorStep] = useState(0);
@@ -920,6 +922,8 @@ export default function App() {
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [showCaptainEditTip, setShowCaptainEditTip] = useState(false);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
+  const scratchpadFieldId = useId();
+  const scratchpadPlaceholder = 'You can work through the problem here. This will not be used for scoring.';
   const explorerLevel = Math.floor(state.totals.allTimeStars / 250) + 1;
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = Boolean(state.user);
@@ -956,6 +960,7 @@ export default function App() {
 
   const resetInputAndFeedback = () => {
     setInput('');
+    setScratchpad('');
     setClarifyInput('');
     setClarifyReply('');
     setShowTutor(false);
@@ -969,6 +974,17 @@ export default function App() {
       clearTimeout(resultFlashTimeoutRef.current);
       resultFlashTimeoutRef.current = null;
     }
+  };
+
+  const autoResizeScratchpad = (target: HTMLTextAreaElement | null) => {
+    if (!target) return;
+    target.style.height = '0px';
+    target.style.height = `${Math.max(target.scrollHeight, 96)}px`;
+  };
+
+  const onScratchpadChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setScratchpad(event.target.value);
+    autoResizeScratchpad(event.target);
   };
 
   const triggerPulse = (tone: FeedbackTone) => {
@@ -1004,6 +1020,31 @@ export default function App() {
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
   }, []);
+
+  useLayoutEffect(() => {
+    autoResizeScratchpad(scratchpadRef.current);
+  }, [scratchpad, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
+
+  useEffect(() => {
+    if (screen !== 'run') {
+      setScratchpad('');
+      return;
+    }
+
+    if (run.phase === 'flow' && run.currentFlow?.id) {
+      setScratchpad('');
+      return;
+    }
+
+    if (run.phase === 'puzzle' && run.currentPuzzle?.id) {
+      setScratchpad('');
+      return;
+    }
+
+    if (run.phase === 'boss' && run.bossStage === 'question') {
+      setScratchpad('');
+    }
+  }, [screen, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -2081,6 +2122,19 @@ export default function App() {
                 </button>
               )}
             </div>
+            <div className="scratchpad-wrap">
+              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-flow`}>Scratchpad</label>
+              <textarea
+                ref={scratchpadRef}
+                id={`${scratchpadFieldId}-flow`}
+                className="math-input text-area-input scratchpad-input"
+                inputMode="numeric"
+                value={scratchpad}
+                onChange={onScratchpadChange}
+                placeholder={scratchpadPlaceholder}
+                rows={3}
+              />
+            </div>
 
             {run.currentHints > 0 && (
               <div className="hint-stack">
@@ -2214,6 +2268,19 @@ export default function App() {
               >
                 ?
               </button>
+            </div>
+            <div className="scratchpad-wrap">
+              <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-puzzle`}>Scratchpad</label>
+              <textarea
+                ref={scratchpadRef}
+                id={`${scratchpadFieldId}-puzzle`}
+                className="math-input text-area-input scratchpad-input"
+                inputMode="numeric"
+                value={scratchpad}
+                onChange={onScratchpadChange}
+                placeholder={scratchpadPlaceholder}
+                rows={3}
+              />
             </div>
 
             {run.currentHints > 0 && (
@@ -2357,6 +2424,19 @@ export default function App() {
                   >
                     <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
                   </button>
+                </div>
+                <div className="scratchpad-wrap">
+                  <label className="scratchpad-label" htmlFor={`${scratchpadFieldId}-boss`}>Scratchpad</label>
+                  <textarea
+                    ref={scratchpadRef}
+                    id={`${scratchpadFieldId}-boss`}
+                    className="math-input text-area-input scratchpad-input"
+                    inputMode="numeric"
+                    value={scratchpad}
+                    onChange={onScratchpadChange}
+                    placeholder={scratchpadPlaceholder}
+                    rows={3}
+                  />
                 </div>
 
                 {run.currentHints > 0 && (
