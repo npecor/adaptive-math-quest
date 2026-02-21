@@ -689,8 +689,8 @@ const templates: PuzzleTemplate[] = [
     puzzleType: 'spatial',
     minDifficulty: 930,
     maxDifficulty: 1600,
-    baseDifficulty: 1130,
-    weight: 8,
+    baseDifficulty: 1180,
+    weight: 5,
     build: () => yesNoAreaPuzzle()
   },
   {
@@ -698,35 +698,35 @@ const templates: PuzzleTemplate[] = [
     puzzleType: 'spatial',
     minDifficulty: 980,
     maxDifficulty: 1650,
-    baseDifficulty: 1220,
-    weight: 7,
+    baseDifficulty: 1260,
+    weight: 4,
     build: () => perimeterSurprisePuzzle()
   },
   {
     key: 'constraint_switch',
     puzzleType: 'constraint',
-    minDifficulty: 1160,
+    minDifficulty: 980,
     maxDifficulty: 1700,
-    baseDifficulty: 1370,
-    weight: 3.5,
+    baseDifficulty: 1260,
+    weight: 4,
     build: () => constraintSwitchPuzzle()
   },
   {
     key: 'constraint_airlock',
     puzzleType: 'constraint',
-    minDifficulty: 1140,
+    minDifficulty: 980,
     maxDifficulty: 1700,
-    baseDifficulty: 1340,
-    weight: 3.3,
+    baseDifficulty: 1240,
+    weight: 3.5,
     build: () => constraintAirlockQuestionPuzzle()
   },
   {
     key: 'constraint_rocks',
     puzzleType: 'constraint',
-    minDifficulty: 1080,
+    minDifficulty: 960,
     maxDifficulty: 1680,
-    baseDifficulty: 1300,
-    weight: 3.2,
+    baseDifficulty: 1220,
+    weight: 3.5,
     build: () => constraintNineRocksPuzzle()
   }
 ];
