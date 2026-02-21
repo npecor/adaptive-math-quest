@@ -1903,6 +1903,7 @@ p {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   display: grid;
+  grid-template-rows: auto auto minmax(18px, auto) auto;
   gap: 4px;
 }
 
@@ -1918,10 +1919,14 @@ p {
   padding: 0 2px;
 }
 
-.podium-item small {
+.podium-score {
+  display: block;
+  min-height: 22px;
   font-size: 18px;
   font-weight: 800;
   color: var(--color-accent-pink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .podium-item.rank-1 {
@@ -1986,6 +1991,10 @@ p {
   border-color: rgba(14, 165, 233, 0.4);
 }
 
+.rank-row.pinned {
+  margin-top: 2px;
+}
+
 .rank-number {
   color: var(--color-ink-muted);
   font-weight: 800;
@@ -2020,7 +2029,7 @@ p {
 .row-main {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .row-subtle {
@@ -2028,7 +2037,8 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 .you-chip {
@@ -2044,7 +2054,7 @@ p {
 
 .row-score {
   font-family: var(--font-display);
-  color: var(--color-accent-pink);
+  color: rgba(217, 70, 239, 0.72);
   min-width: 72px;
   text-align: right;
   justify-self: end;
@@ -2057,10 +2067,27 @@ p {
   gap: 6px;
 }
 
+.rank-row.top .row-score,
+.rank-row.me .row-score {
+  color: var(--color-accent-pink);
+  text-shadow: 0 0 10px rgba(217, 70, 239, 0.35);
+}
+
 .row-score-icon {
   font-size: 18px;
   line-height: 1;
   opacity: 0.9;
+}
+
+.scoreboard-subtitle {
+  margin: 4px 0 0;
+}
+
+.pinned-you-label {
+  margin: 2px 2px -2px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .profile-hero {
@@ -2341,6 +2368,9 @@ p {
 
 .view-toggle .chip-btn {
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .plan-list {
@@ -3223,6 +3253,11 @@ p {
   .row-score {
     min-width: 60px;
     font-size: 26px;
+  }
+
+  .view-toggle .chip-btn {
+    font-size: 13px;
+    padding: 8px 8px;
   }
 
   .you-chip {

@@ -5,7 +5,7 @@ import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } fro
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
-import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, upsertSolvedPuzzleIds } from './lib/progress';
+import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, sortLeaderboardRows, upsertSolvedPuzzleIds } from './lib/progress';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
@@ -383,7 +383,7 @@ const getPuzzleEmoji = (puzzle: { id?: string; title?: string; tags?: string[]; 
   if (tags.includes('logic') || puzzle.answer_type === 'long_text') return pickBySeed(['🔦', '🧪', '🛰️', '🛸'], seed);
   if (title.includes('switch') || title.includes('lamp')) return pickBySeed(['💡', '🔌', '🔦'], seed);
 
-  return pickBySeed(['🛸', '🪐', '🌌', '☄️', '👾'], seed);
+  return pickBySeed(['🛸', '🪐', '🌌', '💫', '👾'], seed);
 };
 
 const formatCoachNumber = (value: number) => {
@@ -952,8 +952,8 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
           <circle cx="50" cy="52" r="35" fill={`url(#${orbId})`} />
           <ellipse cx="50" cy="52" rx="36" ry="18" fill="none" stroke={`url(#${idPrefix}-hole-ring)`} strokeWidth="2.8" />
           <ellipse cx="50" cy="52" rx="27" ry="11" fill="none" stroke="rgba(84, 25, 224, 0.65)" strokeWidth="1.8" />
-          <ellipse cx="50" cy="52" rx="20.5" ry="19.5" fill={`url(#${shellId})`} stroke="#3b1f85" strokeWidth="1.6" />
-          <circle cx="50" cy="52" r="11.2" fill="#000000" />
+          <ellipse cx="50" cy="52" rx="22.8" ry="21.6" fill={`url(#${shellId})`} stroke="#3b1f85" strokeWidth="1.6" />
+          <circle cx="50" cy="52" r="13.9" fill="#000000" />
           <ellipse cx="42" cy="50.5" rx="3.8" ry="4.8" fill="#ffffff" />
           <ellipse cx="58" cy="50.5" rx="3.8" ry="4.8" fill="#ffffff" />
           <ellipse cx="42" cy="50.5" rx="1.5" ry="2.1" className="character-avatar-eye" fill="#0f172a" />
@@ -2191,7 +2191,17 @@ export default function App() {
   const uniqueTriedCount = museumRows.length;
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
-  const leaderboard = useMemo(() => {
+  const leaderboardMetricIcon = leaderboardMode === 'all_time' ? '☄️' : leaderboardMode === 'best_run' ? '🚀' : '🏆';
+  const getLeaderboardSecondaryStat = (
+    entry: { allTimeStars: number; bestRunStars: number; trophiesEarned: number },
+    mode: LeaderboardMode
+  ) => {
+    if (mode === 'all_time') return `🏆 ${entry.trophiesEarned}`;
+    if (mode === 'best_run') return `⭐ ${entry.allTimeStars}`;
+    return `🚀 ${entry.bestRunStars}`;
+  };
+
+  const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
     const fallbackRows = buildLeaderboardEntries(
@@ -2206,14 +2216,20 @@ export default function App() {
         extensionsSolved: state.totals.extensionsSolved
       }
     );
-    const rows = networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
+    return networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
+  }, [leaderboardMode, networkLeaderboardRows, state.totals, state.user]);
 
-    return rows.map((entry) => ({
+  const leaderboard = useMemo(() => {
+    const youUserId = state.user?.userId;
+    const youUsername = state.user?.username;
+
+    return leaderboardSourceRows.map((entry) => ({
       rank: entry.rank,
       userId: entry.userId,
       name: entry.username,
       avatarId: entry.avatarId,
       primaryValue: getLeaderboardPrimaryValue(entry, leaderboardMode),
+      secondaryStat: getLeaderboardSecondaryStat(entry, leaderboardMode),
       allTimeStars: entry.allTimeStars,
       bestRunStars: entry.bestRunStars,
       trophiesEarned: entry.trophiesEarned,
@@ -2221,7 +2237,48 @@ export default function App() {
       isBot: entry.isBot,
       isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
     }));
-  }, [leaderboardMode, networkLeaderboardRows, state.totals, state.user]);
+  }, [leaderboardMode, leaderboardSourceRows, state.user]);
+
+  const pinnedYouRow = useMemo(() => {
+    if (!state.user) return null;
+    if (leaderboard.some((entry) => entry.isYou)) return null;
+
+    const userId = state.user.userId ?? `local-${state.user.username.toLowerCase().replace(/\s+/g, '-')}`;
+    const userRow: LeaderboardRow = {
+      rank: 0,
+      userId,
+      username: state.user.username,
+      avatarId: state.user.avatarId ?? defaultCharacterId,
+      allTimeStars: state.totals.allTimeStars,
+      bestRunStars: state.totals.bestRunStars,
+      trophiesEarned: state.totals.trophiesEarned,
+      extensionsSolved: state.totals.extensionsSolved,
+      updatedAt: state.user.createdAt ?? new Date().toISOString()
+    };
+
+    const ranked = sortLeaderboardRows([...leaderboardSourceRows, userRow], leaderboardMode).map((entry, index) => ({
+      ...entry,
+      rank: index + 1
+    }));
+    const found = ranked.find((entry) => entry.userId === userId || entry.username === state.user?.username);
+    if (!found) return null;
+
+    return {
+      rank: found.rank,
+      userId: found.userId,
+      name: found.username,
+      avatarId: found.avatarId,
+      primaryValue: getLeaderboardPrimaryValue(found, leaderboardMode),
+      secondaryStat: getLeaderboardSecondaryStat(found, leaderboardMode),
+      allTimeStars: found.allTimeStars,
+      bestRunStars: found.bestRunStars,
+      trophiesEarned: found.trophiesEarned,
+      extensionsSolved: found.extensionsSolved,
+      isBot: found.isBot,
+      isYou: true
+    };
+  }, [leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
+
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
@@ -2936,7 +2993,7 @@ export default function App() {
         </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>Play Again</button>
-          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>☄️ Stars</button>
+          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>💫 Stars</button>
         </div>
       </section>
     </>
@@ -2945,7 +3002,8 @@ export default function App() {
   const scores = (
     <>
       <section className="section-header">
-        <h2 className="text-title">☄️ Star Board</h2>
+        <h2 className="text-title">💫 Star Board</h2>
+        <p className="muted scoreboard-subtitle">See who is leading the galaxy!</p>
       </section>
       <section className="list-container">
         <div className="view-toggle">
@@ -2965,7 +3023,7 @@ export default function App() {
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'trophies' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('trophies')}
           >
-            🏆 Trophies Earned
+            🏆 Trophies
           </button>
         </div>
       </section>
@@ -2976,28 +3034,47 @@ export default function App() {
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
             <span className="podium-name" title={entry.name}>{entry.name}</span>
-            <small>{entry.primaryValue}</small>
+            <small className="podium-score">{entry.primaryValue}</small>
           </div>
         ))}
       </section>
 
       <section className="list-container">
         {leaderboard.map((entry) => (
-          <div key={entry.userId} className={`rank-row ${entry.isYou ? 'me' : ''}`}>
+          <div key={entry.userId} className={`rank-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
             <div className="rank-row-left">
               <span className="rank-number">#{entry.rank}</span>
               <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
               <span className="row-main">
                 <span className="row-name-line">
                   <span className="row-name" title={entry.name}>{entry.name}</span>
-                  {entry.isYou && <span className="you-chip">You</span>}
+                  {entry.isYou && <span className="you-chip">YOU</span>}
                 </span>
-                <small className="muted row-subtle">⭐ {entry.allTimeStars} • 🏆 {entry.trophiesEarned}</small>
+                <small className="muted row-subtle">{entry.secondaryStat}</small>
               </span>
             </div>
             <span className="row-score">{entry.primaryValue}</span>
           </div>
         ))}
+        {pinnedYouRow && (
+          <>
+            <p className="muted pinned-you-label">Your rank</p>
+            <div className="rank-row me pinned">
+              <div className="rank-row-left">
+                <span className="rank-number">#{pinnedYouRow.rank}</span>
+                <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
+                <span className="row-main">
+                  <span className="row-name-line">
+                    <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
+                    <span className="you-chip">YOU</span>
+                  </span>
+                  <small className="muted row-subtle">{pinnedYouRow.secondaryStat}</small>
+                </span>
+              </div>
+              <span className="row-score">{pinnedYouRow.primaryValue}</span>
+            </div>
+          </>
+        )}
       </section>
     </>
   );
@@ -3205,7 +3282,7 @@ export default function App() {
           <span className="nav-label">Trophies</span>
         </button>
         <button className={`nav-item ${screen === 'scores' ? 'active' : ''}`} onClick={() => setScreen('scores')} aria-label="Stars">
-          <span className="nav-icon">☄️</span>
+          <span className="nav-icon">💫</span>
           <span className="nav-label">Stars</span>
         </button>
       </nav>
