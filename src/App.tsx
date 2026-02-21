@@ -2875,7 +2875,7 @@ export default function App() {
               </div>
             )}
 
-            <button className="btn btn-secondary" onClick={setupPuzzlePick}>Pick a Different Puzzle</button>
+            <button className="text-cta" onClick={setupPuzzlePick}>Pick a different puzzle</button>
 
             {renderScratchpad('puzzle')}
           </>
