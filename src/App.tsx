@@ -2193,6 +2193,7 @@ export default function App() {
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
   const leaderboardMetricIcon = leaderboardMode === 'all_time' ? '☄️' : leaderboardMode === 'best_run' ? '🚀' : '🏆';
+  const leaderboardMetricLabel = leaderboardMode === 'all_time' ? 'Stars' : leaderboardMode === 'best_run' ? 'Best Run' : 'Trophies';
   const getLeaderboardSecondaryStat = (
     entry: { allTimeStars: number; bestRunStars: number; trophiesEarned: number },
     mode: LeaderboardMode
@@ -3002,26 +3003,26 @@ export default function App() {
 
   const scores = (
     <>
-      <section className="section-header">
+      <section className="section-header scoreboard-header">
         <h2 className="text-title">💫 Star Board</h2>
         <p className="muted scoreboard-subtitle">See who is leading the galaxy!</p>
       </section>
       <section className="list-container">
-        <div className="view-toggle">
+        <div className="leaderboard-tabs">
           <button
-            className={`btn btn-secondary chip-btn ${leaderboardMode === 'all_time' ? 'selected' : ''}`}
+            className={`leaderboard-tab ${leaderboardMode === 'all_time' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('all_time')}
           >
             ☄️ Stars
           </button>
           <button
-            className={`btn btn-secondary chip-btn ${leaderboardMode === 'best_run' ? 'selected' : ''}`}
+            className={`leaderboard-tab ${leaderboardMode === 'best_run' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('best_run')}
           >
             🚀 Best Run
           </button>
           <button
-            className={`btn btn-secondary chip-btn ${leaderboardMode === 'trophies' ? 'selected' : ''}`}
+            className={`leaderboard-tab ${leaderboardMode === 'trophies' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('trophies')}
           >
             🏆 Trophies
@@ -3029,20 +3030,25 @@ export default function App() {
         </div>
       </section>
 
-      <section className="card podium-wrap">
+      <section className="card podium-wrap leaderboard-podium">
         {podiumLeaders.map((entry) => (
           <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
             <span className="podium-name" title={entry.name}>{entry.name}</span>
             <small className="podium-score">{entry.primaryValue}</small>
+            <div className="podium-bar" aria-hidden="true" />
           </div>
         ))}
       </section>
 
-      <section className="list-container">
+      <section className="list-container scoreboard-list">
+        <div className="leaderboard-list-head">
+          <span>Rank &amp; Player</span>
+          <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
+        </div>
         {leaderboard.map((entry) => (
-          <div key={entry.userId} className={`rank-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
+          <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
             <div className="rank-row-left">
               <span className="rank-number">#{entry.rank}</span>
               <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
@@ -3060,7 +3066,7 @@ export default function App() {
         {pinnedYouRow && (
           <>
             <p className="muted pinned-you-label">Your rank</p>
-            <div className="rank-row me pinned">
+            <div className="rank-row scoreboard-row me pinned">
               <div className="rank-row-left">
                 <span className="rank-number">#{pinnedYouRow.rank}</span>
                 <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
