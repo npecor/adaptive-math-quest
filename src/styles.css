@@ -2358,6 +2358,10 @@ p {
   filter: drop-shadow(0 8px 10px rgba(2, 6, 23, 0.32));
 }
 
+.character-card.selected.celebrate .character-avatar {
+  animation: character-happy-flip 1.05s cubic-bezier(0.22, 0.72, 0.24, 1) 1;
+}
+
 .character-card.selected .character-avatar .character-avatar-svg {
   animation: none;
 }
@@ -2408,8 +2412,16 @@ p {
   animation: footer-expression 3.5s ease-in-out infinite;
 }
 
+.character-card.selected.celebrate .character-avatar-mouth {
+  animation: character-laugh-mouth 1.05s ease-in-out 1;
+}
+
 .character-card.selected .character-avatar-eye {
   animation: character-blink 2.2s steps(1, end) infinite;
+}
+
+.character-card.selected.celebrate .character-avatar-eye {
+  animation: character-laugh-eyes 1.05s steps(1, end) 1;
 }
 
 .character-card.selected .character-avatar-foot {
@@ -2477,6 +2489,58 @@ p {
   }
   88% {
     transform: translate(-2px, -2px) rotateZ(-2deg) scale(1.02);
+  }
+}
+
+@keyframes character-happy-flip {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translate(0, -5px) rotate(-8deg) scale(1.06);
+  }
+  48% {
+    transform: translate(0, -8px) rotate(190deg) scale(1.09);
+  }
+  72% {
+    transform: translate(0, -4px) rotate(342deg) scale(1.04);
+  }
+  100% {
+    transform: translate(0, 0) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes character-laugh-mouth {
+  0%,
+  100% {
+    transform: translateY(0) scaleX(1);
+  }
+  15%,
+  45%,
+  75% {
+    transform: translateY(-0.8px) scaleX(1.35) scaleY(0.74);
+  }
+  30%,
+  60% {
+    transform: translateY(0.6px) scaleX(0.8) scaleY(1.24);
+  }
+}
+
+@keyframes character-laugh-eyes {
+  0%,
+  12%,
+  32%,
+  52%,
+  72%,
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  18%,
+  38%,
+  58% {
+    transform: scaleY(0.25);
+    opacity: 0.92;
   }
 }
 

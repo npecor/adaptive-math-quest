@@ -940,6 +940,8 @@ export default function App() {
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
   const [pendingBonusFinish, setPendingBonusFinish] = useState<PendingBonusFinish | null>(null);
   const [bonusResult, setBonusResult] = useState<{ correct: boolean; answer: string } | null>(null);
+  const [celebratingCharacterId, setCelebratingCharacterId] = useState<string | null>(null);
+  const celebrateCharacterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const scratchpadFieldId = useId();
   const scratchpadPlaceholder = 'You can work through the problem here. This will not be used for scoring.';
@@ -1028,6 +1030,7 @@ export default function App() {
   useEffect(() => {
     return () => {
       if (resultFlashTimeoutRef.current) clearTimeout(resultFlashTimeoutRef.current);
+      if (celebrateCharacterTimeoutRef.current) clearTimeout(celebrateCharacterTimeoutRef.current);
     };
   }, []);
 
@@ -1857,6 +1860,20 @@ export default function App() {
 
   const pickOnboardingCharacter = (characterId: string) => {
     setSelectedCharacterId(characterId);
+    if (celebrateCharacterTimeoutRef.current) {
+      clearTimeout(celebrateCharacterTimeoutRef.current);
+      celebrateCharacterTimeoutRef.current = null;
+    }
+    setCelebratingCharacterId(null);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => setCelebratingCharacterId(characterId));
+    } else {
+      setCelebratingCharacterId(characterId);
+    }
+    celebrateCharacterTimeoutRef.current = setTimeout(() => {
+      setCelebratingCharacterId((activeId) => (activeId === characterId ? null : activeId));
+      celebrateCharacterTimeoutRef.current = null;
+    }, 1150);
   };
 
   const onOnboardingPrimaryAction = () => {
@@ -2013,7 +2030,7 @@ export default function App() {
                 {playerCharacters.map((character) => (
                   <button
                     key={character.id}
-                    className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''}`}
+                    className={`character-card ${selectedCharacterId === character.id ? 'selected' : ''} ${celebratingCharacterId === character.id ? 'celebrate' : ''}`}
                     onClick={() => pickOnboardingCharacter(character.id)}
                   >
                     {selectedCharacterId === character.id && <span className="character-selected-badge">✓</span>}
