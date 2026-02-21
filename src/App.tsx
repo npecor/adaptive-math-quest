@@ -2210,14 +2210,6 @@ export default function App() {
 
   const leaderboardMetricIcon = leaderboardMode === 'all_time' ? '☄️' : leaderboardMode === 'best_run' ? '🚀' : '🏆';
   const leaderboardMetricLabel = leaderboardMode === 'all_time' ? 'Stars' : leaderboardMode === 'best_run' ? 'Best Run' : 'Trophies';
-  const getLeaderboardSecondaryStat = (
-    entry: { allTimeStars: number; bestRunStars: number; trophiesEarned: number },
-    mode: LeaderboardMode
-  ) => {
-    if (mode === 'all_time') return `🏆 ${entry.trophiesEarned}`;
-    if (mode === 'best_run') return `⭐ ${entry.allTimeStars}`;
-    return `🚀 ${entry.bestRunStars}`;
-  };
 
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
@@ -2247,7 +2239,6 @@ export default function App() {
       name: entry.username,
       avatarId: entry.avatarId,
       primaryValue: getLeaderboardPrimaryValue(entry, leaderboardMode),
-      secondaryStat: getLeaderboardSecondaryStat(entry, leaderboardMode),
       allTimeStars: entry.allTimeStars,
       bestRunStars: entry.bestRunStars,
       trophiesEarned: entry.trophiesEarned,
@@ -2287,7 +2278,6 @@ export default function App() {
       name: found.username,
       avatarId: found.avatarId,
       primaryValue: getLeaderboardPrimaryValue(found, leaderboardMode),
-      secondaryStat: getLeaderboardSecondaryStat(found, leaderboardMode),
       allTimeStars: found.allTimeStars,
       bestRunStars: found.bestRunStars,
       trophiesEarned: found.trophiesEarned,
@@ -2336,17 +2326,31 @@ export default function App() {
     <div className="landing-shell">
       <div className="landing-stars" aria-hidden="true" />
       <section className="landing-card">
-        <div className="landing-brand">
-          <BrandMark size="lg" />
+        <p className="landing-pill">Kids Learning Adventure</p>
+        <div className="landing-logo-lockup">
+          <div className="landing-brand">
+            <BrandMark size="lg" />
+          </div>
+          <span className="landing-character landing-character-astro">
+            <CharacterAvatar characterId="astro-bot" size="md" />
+          </span>
+          <span className="landing-character landing-character-jelly">
+            <CharacterAvatar characterId="animal-jelly-jet" size="md" />
+          </span>
+          <span className="landing-character landing-character-mochi">
+            <CharacterAvatar characterId="animal-moon-mochi" size="md" />
+          </span>
         </div>
-        <h1 className="landing-title">Galaxy Genius</h1>
+        <h1 className="landing-title">
+          Galaxy <span>Genius</span>
+        </h1>
         <p className="landing-tagline">Big Brains. Space Games.</p>
         <p className="landing-copy">
-          Blast through fast math, solve cartoon brain teasers, and build your cosmic trophy shelf.
+          Blast off with Astro Bot and friends, solve space puzzles, and grow your trophy galaxy.
         </p>
         <div className="landing-actions">
           <button className="btn btn-primary" onClick={continueFromLanding}>
-            {state.user ? `Continue as ${state.user.username}` : 'Start Playing'}
+            {state.user ? `Continue as ${state.user.username}` : 'Start Mission'}
           </button>
         </div>
       </section>
@@ -3097,16 +3101,15 @@ export default function App() {
             <div className="rank-row-left">
               <span className="rank-number">#{entry.rank}</span>
               <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-              <span className="row-main">
-                <span className="row-name-line">
-                  <span className="row-name" title={entry.name}>{entry.name}</span>
-                  {entry.isYou && <span className="you-chip">YOU</span>}
+                <span className="row-main">
+                  <span className="row-name-line">
+                    <span className="row-name" title={entry.name}>{entry.name}</span>
+                    {entry.isYou && <span className="you-chip">YOU</span>}
+                  </span>
                 </span>
-                <small className="muted row-subtle">{entry.secondaryStat}</small>
-              </span>
+              </div>
+              <span className="row-score">{entry.primaryValue}</span>
             </div>
-            <span className="row-score">{entry.primaryValue}</span>
-          </div>
         ))}
         {pinnedYouRow && (
           <>
@@ -3120,7 +3123,6 @@ export default function App() {
                     <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
                     <span className="you-chip">YOU</span>
                   </span>
-                  <small className="muted row-subtle">{pinnedYouRow.secondaryStat}</small>
                 </span>
               </div>
               <span className="row-score">{pinnedYouRow.primaryValue}</span>
