@@ -63,6 +63,7 @@ const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
+const SHOW_TROPHY_ACTIVITY_CARD = false;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const playerCharacters: PlayerCharacter[] = [
@@ -3092,32 +3093,34 @@ export default function App() {
         <p className="muted">This is your trophy shelf. Every solved puzzle earns a new space trophy.</p>
       </section>
 
-      <section className="card activity-card">
-        <div className="activity-head">
-          <h3>Activity</h3>
-          <span>Last 7 days</span>
-        </div>
-        <div className="activity-bars">
-          {activityBars.map((bar, index) => (
-            <div key={`activity-${bar.label}-${index}`} className="activity-col">
-              <div className="activity-track">
-                <div className={`activity-fill ${bar.isToday ? 'today' : ''}`} style={{ height: `${bar.height}%` }} />
+      {SHOW_TROPHY_ACTIVITY_CARD && (
+        <section className="card activity-card">
+          <div className="activity-head">
+            <h3>Activity</h3>
+            <span>Last 7 days</span>
+          </div>
+          <div className="activity-bars">
+            {activityBars.map((bar, index) => (
+              <div key={`activity-${bar.label}-${index}`} className="activity-col">
+                <div className="activity-track">
+                  <div className={`activity-fill ${bar.isToday ? 'today' : ''}`} style={{ height: `${bar.height}%` }} />
+                </div>
+                <span className={`activity-day ${bar.isToday ? 'today' : ''}`}>{bar.label}</span>
               </div>
-              <span className={`activity-day ${bar.isToday ? 'today' : ''}`}>{bar.label}</span>
+            ))}
+          </div>
+          <div className="activity-footer">
+            <div>
+              <p className="activity-meta-label">Total points</p>
+              <p className="activity-meta-value">{state.totals.allTimeStars.toLocaleString()}</p>
             </div>
-          ))}
-        </div>
-        <div className="activity-footer">
-          <div>
-            <p className="activity-meta-label">Total points</p>
-            <p className="activity-meta-value">{state.totals.allTimeStars.toLocaleString()}</p>
+            <div className="activity-meta-right">
+              <p className="activity-meta-label">Avg/session</p>
+              <p className="activity-meta-value accent">{avgSessionPoints.toLocaleString()}</p>
+            </div>
           </div>
-          <div className="activity-meta-right">
-            <p className="activity-meta-label">Avg/session</p>
-            <p className="activity-meta-value accent">{avgSessionPoints.toLocaleString()}</p>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="stats-grid">
         <div className="stat-card">
