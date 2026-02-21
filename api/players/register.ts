@@ -6,7 +6,7 @@ import {
   parseBody,
   resolveUserId,
   setCors
-} from '../_lib/leaderboard';
+} from '../_lib/leaderboard.js';
 
 export const config = { runtime: 'nodejs' };
 

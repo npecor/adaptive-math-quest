@@ -1,4 +1,4 @@
-import { setCors } from './_lib/leaderboard';
+import { setCors } from './_lib/leaderboard.js';
 
 export const config = { runtime: 'nodejs' };
 
