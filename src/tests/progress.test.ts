@@ -57,6 +57,7 @@ describe('progress logic', () => {
       puzzleId: 'logic-two-airlocks',
       title: 'Two Airlocks',
       solved: true,
+      attempts: 1,
       extensionsCompleted: 1,
       methodsFound: ['core-solved']
     });

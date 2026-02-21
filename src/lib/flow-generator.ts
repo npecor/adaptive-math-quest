@@ -1009,14 +1009,18 @@ export const generateAdaptiveFlowItem = (
   recentTemplates: string[] = [],
   recentShapes: string[] = [],
   recentPatternTags: string[] = [],
-  correctStreak = 0
+  correctStreak = 0,
+  maxDifficultyScore?: number
 ): FlowItem => {
   const target = chooseTargetDifficulty(rating, correctStreak);
   const candidates = Array.from({ length: FLOW_SELECTION_SETTINGS.candidateCount }, () => buildCandidate(target, rating));
   const fresh = candidates.filter((candidate) => !usedSignatures.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
+  const cappedPool =
+    typeof maxDifficultyScore === 'number' ? pool.filter((item) => item.difficulty <= maxDifficultyScore) : pool;
+  const scoringPool = cappedPool.length ? cappedPool : pool;
 
-  const scored = pool.map((item) => {
+  const scored = scoringPool.map((item) => {
     const jumpPenalty =
       prevDifficulty === undefined
         ? 0

@@ -29,7 +29,10 @@ const toSafeInt = (value: unknown, fallback = 0) => {
 
 const normalizeState = (raw: unknown): AppState => {
   const parsed = (raw && typeof raw === 'object' ? raw : {}) as Partial<AppState>;
-  const museum = Array.isArray(parsed.museum) ? parsed.museum : defaultState.museum;
+  const museum = (Array.isArray(parsed.museum) ? parsed.museum : defaultState.museum).map((entry) => ({
+    ...entry,
+    attempts: Math.max(1, toSafeInt((entry as { attempts?: unknown })?.attempts, 1))
+  }));
   const solvedFromMuseum = museum.filter((entry) => entry?.solved).map((entry) => entry.puzzleId);
   const solvedPuzzleIds = unique([...(Array.isArray(parsed.solvedPuzzleIds) ? parsed.solvedPuzzleIds : []), ...solvedFromMuseum]);
   const extensionsSolved = museum.reduce((sum, entry) => sum + (entry?.solved ? entry.extensionsCompleted ?? 0 : 0), 0);

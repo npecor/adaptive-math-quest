@@ -74,6 +74,7 @@ export interface MuseumEntry {
   promptSnapshot?: string;
   hintsSnapshot?: string[];
   solved: boolean;
+  attempts: number;
   extensionsCompleted: number;
   methodsFound: string[];
 }

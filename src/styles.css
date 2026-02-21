@@ -773,7 +773,7 @@ p {
 }
 
 .character-sprite.black-hole {
-  transform: translateY(0.4px) scale(0.95);
+  transform: translateY(0.2px) scale(1.03);
 }
 
 .character-sprite.jelly-jet {
@@ -830,7 +830,35 @@ p {
 }
 
 .character-avatar.jelly-jet .character-avatar-svg {
-  animation: idle-jelly 2.9s cubic-bezier(0.34, 0.74, 0.22, 1.08) infinite;
+  animation: idle-jelly 4.4s cubic-bezier(0.35, 0.03, 0.24, 1) infinite;
+  filter: drop-shadow(0 0 10px rgba(124, 58, 237, 0.35)) drop-shadow(0 5px 9px rgba(2, 6, 23, 0.33));
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle-1 {
+  animation: jelly-tentacle-sway-a 3.1s ease-in-out infinite;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle-2 {
+  animation: jelly-tentacle-sway-b 3.6s ease-in-out infinite;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle-3 {
+  animation: jelly-tentacle-sway-c 3.8s ease-in-out infinite;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle-4 {
+  animation: jelly-tentacle-sway-b 3.4s ease-in-out infinite reverse;
+}
+
+.character-avatar.jelly-jet .jelly-tentacle-5 {
+  animation: jelly-tentacle-sway-a 4.2s ease-in-out infinite;
 }
 
 .character-avatar.cosmo-cat .character-avatar-svg {
@@ -931,9 +959,25 @@ p {
 }
 
 @keyframes idle-jelly {
-  0%, 100% { transform: translateY(0) scaleY(1); }
-  35% { transform: translateY(-1.8px) scaleY(1.03); }
-  70% { transform: translateY(0.8px) scaleY(0.97); }
+  0%, 100% { transform: translateY(0) scale(1); }
+  24% { transform: translateY(-2.8px) scale(1.02, 0.985); }
+  50% { transform: translateY(-4px) scale(1.03, 0.97); }
+  72% { transform: translateY(-1.6px) scale(1.012, 0.992); }
+}
+
+@keyframes jelly-tentacle-sway-a {
+  0%, 100% { transform: rotate(-4deg) scaleY(1); }
+  50% { transform: rotate(4deg) scaleY(0.95); }
+}
+
+@keyframes jelly-tentacle-sway-b {
+  0%, 100% { transform: rotate(3deg) scaleY(1); }
+  50% { transform: rotate(-3deg) scaleY(0.97); }
+}
+
+@keyframes jelly-tentacle-sway-c {
+  0%, 100% { transform: rotate(-2deg) scaleY(1); }
+  50% { transform: rotate(2deg) scaleY(0.96); }
 }
 
 @keyframes idle-cat {
@@ -1017,6 +1061,7 @@ p {
   .character-avatar-star,
   .character-avatar-mouth,
   .character-avatar-foot,
+  .jelly-tentacle,
   .character-avatar {
     animation: none !important;
   }
@@ -2027,6 +2072,107 @@ p {
   background: rgba(15, 23, 42, 0.64);
 }
 
+.activity-card {
+  gap: 14px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.76), rgba(30, 41, 59, 0.66));
+}
+
+.activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activity-head h3 {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 16px;
+}
+
+.activity-head span {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.activity-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.activity-col {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.activity-track {
+  width: 100%;
+  height: 108px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.activity-fill {
+  width: 100%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #6366f1 0%, #0ea5e9 100%);
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.28);
+  transition: height 220ms ease;
+}
+
+.activity-fill.today {
+  background: linear-gradient(180deg, #d946ef 0%, #a855f7 100%);
+  box-shadow: 0 0 16px rgba(217, 70, 239, 0.34);
+}
+
+.activity-day {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+}
+
+.activity-day.today {
+  color: #e879f9;
+}
+
+.activity-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-meta-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.activity-meta-value {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.activity-meta-right {
+  text-align: right;
+}
+
 .pet-float {
   font-size: 34px;
 }
@@ -2078,6 +2224,12 @@ p {
 .trophy-open-indicator {
   font-size: 12px;
   color: rgba(148, 163, 184, 0.9);
+}
+
+.trophy-attempt-count {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .collection-card::after {

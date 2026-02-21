@@ -60,6 +60,10 @@ type PendingBonusFinish = {
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
 const MAX_PUZZLE_HINTS = 3;
+const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
+const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
+const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const playerCharacters: PlayerCharacter[] = [
   { id: 'astro-bot', emoji: '🤖', name: 'Astro Bot', vibe: 'Cheerful robot astronaut', kind: 'astronaut' },
@@ -919,11 +923,8 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
           <path d="M45.5 64.5 Q50 68.5 54.5 64.5" className="character-avatar-mouth" />
           <line x1="50" y1="24" x2="50" y2="15" stroke="#d1fae5" strokeWidth="1.7" />
           <circle cx="50" cy="13" r="2.3" fill="#fcd34d" />
-          <ellipse cx="50" cy="49" rx="35" ry="36" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.45" />
-          <path d="M30 31 Q38 23 47 24" fill="none" stroke="rgba(255,255,255,0.44)" strokeWidth="2" strokeLinecap="round" />
-          <rect x="34" y="72" width="32" height="10" rx="5" fill="rgba(255,255,255,0.45)" />
-          <ellipse cx="42" cy="90" rx="7" ry="3" className="character-avatar-foot" />
-          <ellipse cx="58" cy="90" rx="7" ry="3" className="character-avatar-foot" />
+          <path d="M31 34 Q39 26 47 27" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M35 73 Q50 81 65 73" fill="none" stroke="rgba(44, 62, 80, 0.42)" strokeWidth="1.4" strokeLinecap="round" />
           <circle cx="24" cy="30" r="1.05" className="character-avatar-star" />
           <circle cx="76" cy="30" r="1.05" className="character-avatar-star" />
         </>
@@ -995,24 +996,83 @@ const renderCharacterSprite = (variant: string, idPrefix: string) => {
       return (
         <>
           <defs>
-            <radialGradient id={orbId} cx="34%" cy="30%">
-              <stop offset="0%" stopColor="#ddd6fe" />
-              <stop offset="45%" stopColor="#a78bfa" />
-              <stop offset="100%" stopColor="#7c3aed" />
+            <linearGradient id={orbId} x1="50%" y1="14%" x2="50%" y2="82%">
+              <stop offset="0%" stopColor="#c4b5fd" />
+              <stop offset="55%" stopColor="#8b5cf6" />
+              <stop offset="100%" stopColor="#6d28d9" />
+            </linearGradient>
+            <linearGradient id={`${idPrefix}-jelly-tentacle`} x1="50%" y1="50%" x2="50%" y2="100%">
+              <stop offset="0%" stopColor="#a78bfa" />
+              <stop offset="100%" stopColor="#6d28d9" stopOpacity="0.5" />
+            </linearGradient>
+            <radialGradient id={`${idPrefix}-jelly-gleam`} cx="50%" cy="24%" r="56%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.38" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </radialGradient>
           </defs>
-          <path d="M24 46 Q50 18 76 46 V62 Q50 76 24 62 Z" fill={`url(#${orbId})`} />
-          <path d="M34 63 V84 M44 65 V88 M56 65 V88 M66 63 V84" stroke="#a78bfa" strokeWidth="4" strokeLinecap="round" />
-          <circle cx="41" cy="47" r="6.4" fill="#f8fafc" />
-          <circle cx="59" cy="47" r="6.4" fill="#f8fafc" />
-          <circle cx="41" cy="47" r="2.5" className="character-avatar-eye" fill="#312e81" />
-          <circle cx="59" cy="47" r="2.5" className="character-avatar-eye" fill="#312e81" />
-          <path d="M45 57 Q50 62 55 57" className="character-avatar-mouth" />
-          <circle cx="31" cy="39" r="2.2" fill="#e9d5ff" />
-          <circle cx="69" cy="39" r="2.2" fill="#e9d5ff" />
-          <circle cx="22" cy="31" r="1.1" className="character-avatar-star" />
-          <circle cx="78" cy="33" r="1.1" className="character-avatar-star" />
-          <polygon points="50,22 51.5,26 55.5,26 52.2,28.5 53.5,32.5 50,30.1 46.5,32.5 47.8,28.5 44.5,26 48.5,26" className="character-avatar-star" />
+          <circle cx="26" cy="34" r="1.2" className="character-avatar-star" />
+          <circle cx="74" cy="33" r="1.2" className="character-avatar-star" />
+          <circle cx="82" cy="48" r="1.1" className="character-avatar-star" />
+          <circle cx="18" cy="50" r="1.1" className="character-avatar-star" />
+          <polygon points="50,18 51.5,21.8 55.6,21.8 52.4,24.3 53.7,28.2 50,26 46.3,28.2 47.6,24.3 44.4,21.8 48.5,21.8" className="character-avatar-star" />
+          <g className="jelly-tentacles-back">
+            <path
+              className="jelly-tentacle jelly-tentacle-3"
+              d="M35 63 C35 76, 28 84, 34 95"
+              stroke={`url(#${idPrefix}-jelly-tentacle)`}
+              strokeWidth="4.9"
+              strokeLinecap="round"
+              fill="none"
+              opacity="0.8"
+            />
+            <path
+              className="jelly-tentacle jelly-tentacle-4"
+              d="M65 63 C65 76, 72 84, 66 95"
+              stroke={`url(#${idPrefix}-jelly-tentacle)`}
+              strokeWidth="4.9"
+              strokeLinecap="round"
+              fill="none"
+              opacity="0.8"
+            />
+          </g>
+          <g className="jelly-tentacles-front">
+            <path
+              className="jelly-tentacle jelly-tentacle-1"
+              d="M42 64 C42 80, 37 88, 44 97"
+              stroke={`url(#${idPrefix}-jelly-tentacle)`}
+              strokeWidth="5.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <path
+              className="jelly-tentacle jelly-tentacle-2"
+              d="M58 64 C58 80, 63 88, 56 97"
+              stroke={`url(#${idPrefix}-jelly-tentacle)`}
+              strokeWidth="5.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <path
+              className="jelly-tentacle jelly-tentacle-5"
+              d="M50 64 C50 81, 53 90, 50 100"
+              stroke={`url(#${idPrefix}-jelly-tentacle)`}
+              strokeWidth="5.2"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </g>
+          <path d="M24 62 L24 55 C24 42 35 30 50 30 C65 30 76 42 76 55 L76 62 Q69 68 63 62 Q56 68 50 62 Q44 68 37 62 Q31 68 24 62 Z" fill={`url(#${orbId})`} />
+          <path d="M24 62 Q31 68 37 62 Q44 68 50 62 Q56 68 63 62 Q69 68 76 62" fill="#7c3aed" opacity="0.34" />
+          <ellipse cx="50" cy="49" rx="24" ry="17" fill={`url(#${idPrefix}-jelly-gleam)`} />
+          <circle cx="41" cy="49.5" r="7" className="character-avatar-eye" fill="#ffffff" />
+          <circle cx="59" cy="49.5" r="7" className="character-avatar-eye" fill="#ffffff" />
+          <circle cx="42.6" cy="49.8" r="2.2" fill="#312e81" />
+          <circle cx="57.4" cy="49.8" r="2.2" fill="#312e81" />
+          <circle cx="35.6" cy="56" r="2.3" fill="#f472b6" opacity="0.5" />
+          <circle cx="64.4" cy="56" r="2.3" fill="#f472b6" opacity="0.5" />
+          <path d="M45.5 58.7 Q50 62.5 54.5 58.7" className="character-avatar-mouth" />
+          <circle cx="32" cy="40" r="1.7" fill="#e9d5ff" opacity="0.92" />
+          <circle cx="68" cy="40.5" r="1.7" fill="#e9d5ff" opacity="0.92" />
         </>
       );
     case 'cosmo-cat':
@@ -1136,6 +1196,9 @@ export default function App() {
   const onboardingCadetName = nameInput.trim() || 'Cadet';
   const homeCadetName = state.user?.username ?? onboardingCadetName;
   const homeCharacterId = selectedCharacter?.id ?? state.user?.avatarId ?? defaultCharacterId;
+  const avgSessionPoints = state.totals.runsPlayed ? Math.round(state.totals.allTimeStars / state.totals.runsPlayed) : 0;
+  const todayWeekday = new Date().getDay();
+  const todayBarIndex = (todayWeekday + 6) % 7;
 
   const totalScore = run.sprintScore + run.brainScore;
   const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.totals.allTimeStars;
@@ -1149,6 +1212,36 @@ export default function App() {
       )
     : 0;
   const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
+  const getNewPlayerFlowDifficultyCap = (attemptsCount: number) =>
+    state.totals.runsPlayed === 0 && attemptsCount < NEW_PLAYER_ONRAMP_ATTEMPTS
+      ? NEW_PLAYER_FLOW_MAX_DIFFICULTY
+      : undefined;
+  const activityBars = useMemo(() => {
+    const bars = ACTIVITY_DAY_LABELS.map((label, index) => ({
+      label,
+      isToday: index === todayBarIndex,
+      height: 12
+    }));
+
+    if (state.totals.runsPlayed <= 0) return bars;
+
+    const streakDays = Math.min(7, Math.max(0, state.streaks.dailyStreak));
+    const paceBoost = Math.min(18, Math.round(avgSessionPoints / 28));
+
+    if (streakDays === 0) {
+      bars[todayBarIndex].height = clamp(32 + paceBoost, 22, 76);
+      return bars;
+    }
+
+    for (let offset = 0; offset < streakDays; offset += 1) {
+      const dayIndex = (todayBarIndex - offset + 7) % 7;
+      const intensity = Math.max(0, streakDays - offset - 1);
+      bars[dayIndex].height = clamp(44 + intensity * 7 + paceBoost, 30, 92);
+    }
+
+    const baselineLift = Math.min(14, Math.round(state.totals.runsPlayed / 2));
+    return bars.map((bar) => (bar.height > 12 ? bar : { ...bar, height: clamp(12 + baselineLift, 12, 30) }));
+  }, [avgSessionPoints, state.streaks.dailyStreak, state.totals.runsPlayed, todayBarIndex]);
 
   const save = (next: AppState) => {
     setState(next);
@@ -1425,7 +1518,8 @@ export default function App() {
         seeded.recentTemplates,
         seeded.recentShapes,
         seeded.recentPatternTags,
-        seeded.flowStreak
+        seeded.flowStreak,
+        getNewPlayerFlowDifficultyCap(state.skill.attemptsCount)
       );
     }
     else seeded.currentPuzzleChoices = getPuzzleChoices(state.skill.rating, seeded.usedPuzzleIds);
@@ -1566,7 +1660,8 @@ export default function App() {
       recentTemplates,
       recentShapes,
       recentPatternTags,
-      nextStreak
+      nextStreak,
+      getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1)
     );
     setRun({
       ...run,
@@ -1624,6 +1719,7 @@ export default function App() {
       promptSnapshot: run.currentPuzzle.core_prompt,
       hintsSnapshot: run.currentPuzzle.hint_ladder.slice(0, 3),
       solved,
+      attempts: (previousEntry?.attempts ?? 0) + 1,
       extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, extensionGain),
       methodsFound: solved ? ['core-solved'] : []
     };
@@ -1743,6 +1839,7 @@ export default function App() {
       promptSnapshot: challenge.prompt,
       hintsSnapshot: challenge.hintLadder.slice(0, 3),
       solved,
+      attempts: (previousEntry?.attempts ?? 0) + 1,
       extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, correct ? 1 : 0),
       methodsFound: solved ? ['core-solved', 'bonus-solved'] : previousEntry?.methodsFound ?? []
     };
@@ -2091,6 +2188,7 @@ export default function App() {
     [state.museum]
   );
   const solvedRows = useMemo(() => museumRows.filter((entry) => entry.solved), [museumRows]);
+  const uniqueTriedCount = museumRows.length;
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
   const leaderboard = useMemo(() => {
@@ -2917,13 +3015,40 @@ export default function App() {
         <p className="muted">This is your trophy shelf. Every solved puzzle earns a new space trophy.</p>
       </section>
 
+      <section className="card activity-card">
+        <div className="activity-head">
+          <h3>Activity</h3>
+          <span>Last 7 days</span>
+        </div>
+        <div className="activity-bars">
+          {activityBars.map((bar, index) => (
+            <div key={`activity-${bar.label}-${index}`} className="activity-col">
+              <div className="activity-track">
+                <div className={`activity-fill ${bar.isToday ? 'today' : ''}`} style={{ height: `${bar.height}%` }} />
+              </div>
+              <span className={`activity-day ${bar.isToday ? 'today' : ''}`}>{bar.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="activity-footer">
+          <div>
+            <p className="activity-meta-label">Total points</p>
+            <p className="activity-meta-value">{state.totals.allTimeStars.toLocaleString()}</p>
+          </div>
+          <div className="activity-meta-right">
+            <p className="activity-meta-label">Avg/session</p>
+            <p className="activity-meta-value accent">{avgSessionPoints.toLocaleString()}</p>
+          </div>
+        </div>
+      </section>
+
       <section className="stats-grid">
         <div className="stat-card">
           <span className="stat-value">{state.totals.trophiesEarned}</span>
           <span className="stat-label">Trophies</span>
         </div>
         <div className="stat-card">
-          <span className="stat-value accent">{state.totals.allTimePuzzleTries}</span>
+          <span className="stat-value accent">{uniqueTriedCount}</span>
           <span className="stat-label">Tries</span>
         </div>
       </section>
@@ -2977,6 +3102,11 @@ export default function App() {
               >
                 <div>
                   <strong>{getPuzzleEmoji({ id: entry.puzzleId, title: entry.title })} {entry.title}</strong>
+                  {showAttemptedPuzzles && (
+                    <p className="muted trophy-attempt-count">
+                      {entry.attempts} {entry.attempts === 1 ? 'try' : 'tries'}
+                    </p>
+                  )}
                 </div>
                 <div className="artifact-meta trophy-visual">
                   <span className="trophy-icon" aria-hidden="true">{entry.solved ? '🏆' : '🛰️'}</span>
