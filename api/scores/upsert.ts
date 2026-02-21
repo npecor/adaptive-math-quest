@@ -9,6 +9,7 @@ import {
 } from '../_lib/leaderboard.js';
 
 export const config = { runtime: 'nodejs' };
+const MAX_REASONABLE_RUN_STARS = 700;
 
 export default async function handler(req: any, res: any) {
   setCors(res);
@@ -60,7 +61,18 @@ export default async function handler(req: any, res: any) {
     const incomingExtensions = Math.max(0, Math.floor(hasNewPayload ? numericExtensionsSolved : 0));
 
     const resolvedAllTimeStars = Math.max(existing?.all_time_stars ?? existing?.high_score ?? 0, incomingAllTime);
-    const resolvedBestRunStars = Math.max(existing?.best_run_stars ?? existing?.high_score ?? 0, incomingBestRun);
+    // For the new payload, trust client best-run as source-of-truth (clamped),
+    // so legacy inflated values can be corrected downward.
+    const resolvedBestRunStars = hasNewPayload
+      ? Math.max(0, Math.min(incomingBestRun, resolvedAllTimeStars, MAX_REASONABLE_RUN_STARS))
+      : Math.max(
+          0,
+          Math.min(
+            Math.max(existing?.best_run_stars ?? existing?.high_score ?? 0, incomingBestRun),
+            resolvedAllTimeStars,
+            MAX_REASONABLE_RUN_STARS
+          )
+        );
     const resolvedTrophiesEarned = Math.max(existing?.trophies_earned ?? 0, incomingTrophies);
     const resolvedExtensionsSolved = Math.max(existing?.extensions_solved ?? 0, incomingExtensions);
 

@@ -26,7 +26,7 @@ type PlayerCharacter = {
 
 interface RunState {
   phase: 'flow' | 'puzzle_pick' | 'puzzle' | 'boss';
-  bossStage: 'intro' | 'question';
+  bossStage: 'intro' | 'question' | 'result';
   gameMode: GameMode;
   flowTarget: number;
   puzzleTarget: number;
@@ -50,6 +50,12 @@ interface RunState {
   puzzlesSolvedThisRound: number;
   puzzlesTriedThisRound: number;
 }
+
+type PendingBonusFinish = {
+  bossAttempted: boolean;
+  runSnapshot: RunState;
+  baseState: AppState;
+};
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
@@ -86,7 +92,6 @@ const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: strin
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
   puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 }
 };
-const CAPTAIN_EDIT_TIP_KEY = 'gg_tip_edit_captain_v1';
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
@@ -933,7 +938,8 @@ export default function App() {
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
-  const [showCaptainEditTip, setShowCaptainEditTip] = useState(false);
+  const [pendingBonusFinish, setPendingBonusFinish] = useState<PendingBonusFinish | null>(null);
+  const [bonusResult, setBonusResult] = useState<{ correct: boolean; answer: string } | null>(null);
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const scratchpadFieldId = useId();
   const scratchpadPlaceholder = 'You can work through the problem here. This will not be used for scoring.';
@@ -1131,28 +1137,6 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-    if (screen !== 'home' || !state.user) {
-      setShowCaptainEditTip(false);
-      return undefined;
-    }
-
-    const seen = window.localStorage.getItem(CAPTAIN_EDIT_TIP_KEY) === '1';
-    if (seen) {
-      setShowCaptainEditTip(false);
-      return undefined;
-    }
-
-    setShowCaptainEditTip(true);
-    const timeout = window.setTimeout(() => {
-      setShowCaptainEditTip(false);
-      window.localStorage.setItem(CAPTAIN_EDIT_TIP_KEY, '1');
-    }, 4400);
-
-    return () => window.clearTimeout(timeout);
-  }, [screen, state.user?.userId]);
-
-  useEffect(() => {
     if (screen !== 'scores') return;
     let active = true;
     const loadLeaderboardRows = async () => {
@@ -1218,9 +1202,10 @@ export default function App() {
 
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
     const sprint = runSnapshot.sprintScore;
-    const brain = bossAttempted ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
+    const baseBrain = runSnapshot.brainScore;
+    const bonusDelta = bossAttempted ? baseBrain : 0;
+    const brain = baseBrain + bonusDelta;
     const total = sprint + brain;
-    const bonusDelta = total - runSnapshot.starsThisRound;
     const finalRunStars = runSnapshot.starsThisRound + Math.max(0, bonusDelta);
 
     const highs = {
@@ -1233,6 +1218,8 @@ export default function App() {
 
     save({ ...baseState, highs, totals });
     setRun({ ...runSnapshot, sprintScore: sprint, brainScore: brain, starsThisRound: finalRunStars });
+    setPendingBonusFinish(null);
+    setBonusResult(null);
     setFeedback(bossAttempted ? 'Bonus round played. Final score updated!' : 'Game complete. Great work!');
     setFeedbackTone('info');
     triggerPulse('info');
@@ -1255,6 +1242,8 @@ export default function App() {
     }
     else seeded.currentPuzzleChoices = getPuzzleChoices(state.skill.rating, seeded.usedPuzzleIds);
 
+    setPendingBonusFinish(null);
+    setBonusResult(null);
     setRun(seeded);
     save({ ...state, streaks });
     setScreen('run');
@@ -1590,8 +1579,29 @@ export default function App() {
       totals
     };
 
-    const snapshot: RunState = { ...run, bossStage: 'question' };
-    finishRun(correct, snapshot, baseState);
+    const snapshot: RunState = { ...run, bossStage: 'result', currentHints: 0 };
+    setRun(snapshot);
+    setPendingBonusFinish({ bossAttempted: correct, runSnapshot: snapshot, baseState });
+    setBonusResult({ correct, answer: challenge.answer });
+    setFeedback(correct ? 'Mini Boss cleared! Nice work.' : `Mini Boss complete. Answer: ${challenge.answer}`);
+    setFeedbackTone(correct ? 'success' : 'info');
+    triggerPulse(correct ? 'success' : 'info');
+    triggerResultFlash(
+      correct ? 'success' : 'info',
+      correct ? 'Mini Boss complete!' : 'Mini Boss finished',
+      correct ? 'Bonus score applied.' : `Answer: ${challenge.answer}`
+    );
+    setInput('');
+    setShowTutor(false);
+    setTutorStep(0);
+  };
+
+  const continueFromBonusResult = () => {
+    if (!pendingBonusFinish) {
+      finishRun(Boolean(bonusResult?.correct));
+      return;
+    }
+    finishRun(pendingBonusFinish.bossAttempted, pendingBonusFinish.runSnapshot, pendingBonusFinish.baseState);
   };
 
   const askPuzzleClarifyingQuestion = () => {
@@ -1920,7 +1930,6 @@ export default function App() {
     [leaderboard]
   );
 
-  const runInProgress = screen === 'run' || run.flowDone > 0 || run.puzzleDone > 0 || run.phase !== 'flow' || Boolean(run.currentFlow);
   const hideBottomNav =
     isMobileViewport &&
     (screen === 'run' || (screen === 'home' && !homeNavRevealed) || isTextEntryFocused);
@@ -1934,19 +1943,8 @@ export default function App() {
   const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
-  const navToRun = () => {
-    if (runInProgress) {
-      setScreen('run');
-      return;
-    }
-
-    startRun(selectedMode);
-  };
-
   const openCaptainEditor = () => {
     if (!state.user) return;
-    if (typeof window !== 'undefined') window.localStorage.setItem(CAPTAIN_EDIT_TIP_KEY, '1');
-    setShowCaptainEditTip(false);
     setNameInput(state.user.username);
     setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
     setScreen('onboarding');
@@ -2060,12 +2058,6 @@ export default function App() {
         </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
       </section>
-      {showCaptainEditTip && (
-        <p className="home-tip-toast" role="status" aria-live="polite">
-          Tip: Tap your captain card to edit.
-        </p>
-      )}
-
       <button className="card home-hero home-hero-button" onClick={openCaptainEditor} aria-label="Edit captain" type="button">
         <div className="home-hero-head">
           <div className="home-hero-main">
@@ -2441,7 +2433,7 @@ export default function App() {
                 </div>
                 <p className="muted">Bonus preview: {bonusBefore} → {bonusAfter}</p>
               </>
-            ) : (
+            ) : run.bossStage === 'question' ? (
               <>
                 <h3>Bonus Round: Mini Boss</h3>
                 <p className="muted">{activeBonus.title} • {activeBonus.label}</p>
@@ -2559,6 +2551,20 @@ export default function App() {
                   />
                 </div>
               </>
+            ) : (
+              <div className="bonus-result-modal" role="dialog" aria-modal="true" aria-label="Bonus complete">
+                <h3>{bonusResult?.correct ? 'Mini Boss Cleared!' : 'Mini Boss Complete'}</h3>
+                <p className="muted">
+                  {bonusResult?.correct
+                    ? 'Awesome work. Your bonus puzzle points were doubled for this run.'
+                    : `Nice attempt. The answer was ${bonusResult?.answer ?? activeBonus.answer}.`}
+                </p>
+                <div className="btn-row">
+                  <button className="btn btn-primary" onClick={continueFromBonusResult}>
+                    Continue to Stats
+                  </button>
+                </div>
+              </div>
             )}
           </>
         )}
@@ -2641,9 +2647,6 @@ export default function App() {
       <section className="section-header">
         <h2 className="text-title">Star Leaderboard</h2>
       </section>
-      <p className="muted">
-        {leaderboardStatus === 'online' ? '🌐 Online leaderboard' : '📴 Offline (local only)'}
-      </p>
       <section className="list-container">
         <div className="view-toggle">
           <button
@@ -2672,7 +2675,7 @@ export default function App() {
           <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
-            <span>{entry.name}</span>
+            <span className="podium-name" title={entry.name}>{entry.name}</span>
             <small>{entry.primaryValue}</small>
           </div>
         ))}
@@ -2864,10 +2867,6 @@ export default function App() {
         <button className={`nav-item ${screen === 'home' ? 'active' : ''}`} onClick={() => setScreen('home')} aria-label="Home">
           <span className="nav-icon">🏠</span>
           <span className="nav-label">Home</span>
-        </button>
-        <button className={`nav-item ${screen === 'run' || screen === 'summary' ? 'active' : ''}`} onClick={navToRun} aria-label="Play">
-          <span className="nav-icon">▶️</span>
-          <span className="nav-label">Play</span>
         </button>
         <button className={`nav-item ${screen === 'museum' ? 'active' : ''}`} onClick={() => setScreen('museum')} aria-label="Trophies">
           <span className="nav-icon">🏆</span>

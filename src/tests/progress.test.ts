@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { LeaderboardRow } from '../lib/leaderboard-api';
 import type { MuseumEntry, TotalsState } from '../lib/types';
-import { applyStarAward, completeRunTotals, recalcTotals, sortLeaderboardRows, upsertSolvedPuzzleIds } from '../lib/progress';
+import {
+  applyStarAward,
+  completeRunTotals,
+  MAX_REASONABLE_RUN_STARS,
+  recalcTotals,
+  sortLeaderboardRows,
+  upsertSolvedPuzzleIds
+} from '../lib/progress';
 
 const baseTotals = (): TotalsState => ({
   allTimeStars: 0,
@@ -104,5 +111,10 @@ describe('progress logic', () => {
     expect(sortLeaderboardRows(rows, 'all_time')[0].userId).toBe('a');
     expect(sortLeaderboardRows(rows, 'best_run')[0].userId).toBe('b');
     expect(sortLeaderboardRows(rows, 'trophies')[0].userId).toBe('c');
+  });
+
+  it('caps inflated best-run values to a sane max', () => {
+    const totals = completeRunTotals(baseTotals(), 1200, 0);
+    expect(totals.bestRunStars).toBe(MAX_REASONABLE_RUN_STARS);
   });
 });

@@ -1398,6 +1398,16 @@ p {
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(79, 70, 229, 0.12));
 }
 
+.bonus-result-modal {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(79, 70, 229, 0.18));
+  box-shadow: 0 10px 24px rgba(8, 15, 36, 0.35);
+}
+
 .tutor-label {
   font-size: 11px;
   font-weight: 800;
@@ -1751,6 +1761,18 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.1);
   display: grid;
   gap: 4px;
+}
+
+.podium-name {
+  display: block;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
 }
 
 .podium-item small {
@@ -2819,6 +2841,10 @@ p {
 }
 
 @media (max-width: 440px) {
+  .podium-name {
+    font-size: 12px;
+  }
+
   .app-brand-inline {
     font-size: 11px;
     letter-spacing: 0.03em;
