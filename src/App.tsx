@@ -3,7 +3,7 @@ import { updateRating } from './lib/adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
-import { fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode } from './lib/leaderboard-api';
+import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
 import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, upsertSolvedPuzzleIds } from './lib/progress';
 import { loadState, saveState } from './lib/storage';
@@ -928,6 +928,7 @@ export default function App() {
   });
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('all_time');
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
+  const [networkLeaderboardRows, setNetworkLeaderboardRows] = useState<LeaderboardRow[] | null>(null);
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
@@ -1099,23 +1100,6 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
-    let active = true;
-    const checkLeaderboardHealth = async () => {
-      try {
-        const health = await fetchLeaderboardHealth();
-        if (active) setLeaderboardStatus(health ? 'online' : 'offline');
-      } catch {
-        if (active) setLeaderboardStatus('offline');
-        // Keep app usable with local rivals when backend is unavailable.
-      }
-    };
-    checkLeaderboardHealth();
-    return () => {
-      active = false;
-    };
-  }, [leaderboardMode]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     if (screen !== 'home' || !state.user) {
       setShowCaptainEditTip(false);
@@ -1140,20 +1124,24 @@ export default function App() {
   useEffect(() => {
     if (screen !== 'scores') return;
     let active = true;
-    const refreshLeaderboardHealth = async () => {
+    const loadLeaderboardRows = async () => {
       try {
-        const health = await fetchLeaderboardHealth();
-        if (active) setLeaderboardStatus(health ? 'online' : 'offline');
+        const rows = await fetchLeaderboard(leaderboardMode, 50);
+        if (!active) return;
+        setNetworkLeaderboardRows(rows);
+        setLeaderboardStatus('online');
       } catch {
-        if (active) setLeaderboardStatus('offline');
-        // Ignore transient backend failures; local rivals still render.
+        if (!active) return;
+        setNetworkLeaderboardRows(null);
+        setLeaderboardStatus('offline');
+        // Keep app usable with local rivals when backend is unavailable.
       }
     };
-    refreshLeaderboardHealth();
+    loadLeaderboardRows();
     return () => {
       active = false;
     };
-  }, [screen, leaderboardMode]);
+  }, [screen, leaderboardMode, state.user?.userId, state.totals]);
 
   useEffect(() => {
     lastSubmittedStatsRef.current = '';
@@ -1829,7 +1817,7 @@ export default function App() {
   const leaderboard = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
-    const rows = buildLeaderboardEntries(
+    const fallbackRows = buildLeaderboardEntries(
       leaderboardMode,
       {
         userId: youUserId,
@@ -1841,6 +1829,7 @@ export default function App() {
         extensionsSolved: state.totals.extensionsSolved
       }
     );
+    const rows = networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
 
     return rows.map((entry) => ({
       rank: entry.rank,
@@ -1855,7 +1844,7 @@ export default function App() {
       isBot: entry.isBot,
       isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
     }));
-  }, [leaderboardMode, state.totals, state.user]);
+  }, [leaderboardMode, networkLeaderboardRows, state.totals, state.user]);
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
