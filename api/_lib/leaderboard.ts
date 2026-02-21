@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type LeaderboardMode = 'all_time' | 'best_run' | 'trophies';
@@ -188,5 +187,10 @@ export const buildSortQuery = (supabase: SupabaseClient, mode: LeaderboardMode, 
   return query.order('updated_at', { ascending: true });
 };
 
-export const resolveUserId = (requestedUserId?: unknown) =>
-  typeof requestedUserId === 'string' && requestedUserId.trim() ? requestedUserId.trim() : randomUUID();
+const fallbackUuid = () => `uid-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+
+export const resolveUserId = (requestedUserId?: unknown) => {
+  if (typeof requestedUserId === 'string' && requestedUserId.trim()) return requestedUserId.trim();
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return fallbackUuid();
+};

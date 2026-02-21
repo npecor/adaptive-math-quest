@@ -8,6 +8,8 @@ import {
   setCors
 } from '../_lib/leaderboard';
 
+export const config = { runtime: 'nodejs' };
+
 export default async function handler(req: any, res: any) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
