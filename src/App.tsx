@@ -2636,7 +2636,7 @@ export default function App() {
         </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>Play Again</button>
-          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>📊 Leaderboard</button>
+          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>☄️ Stars</button>
         </div>
       </section>
     </>
@@ -2645,7 +2645,7 @@ export default function App() {
   const scores = (
     <>
       <section className="section-header">
-        <h2 className="text-title">Star Leaderboard</h2>
+        <h2 className="text-title">☄️ Star Board</h2>
       </section>
       <section className="list-container">
         <div className="view-toggle">
@@ -2653,7 +2653,7 @@ export default function App() {
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'all_time' ? 'selected' : ''}`}
             onClick={() => setLeaderboardMode('all_time')}
           >
-            ⭐ All-Time Stars
+            ☄️ Stars
           </button>
           <button
             className={`btn btn-secondary chip-btn ${leaderboardMode === 'best_run' ? 'selected' : ''}`}
@@ -2872,9 +2872,9 @@ export default function App() {
           <span className="nav-icon">🏆</span>
           <span className="nav-label">Trophies</span>
         </button>
-        <button className={`nav-item ${screen === 'scores' ? 'active' : ''}`} onClick={() => setScreen('scores')} aria-label="Leaders">
-          <span className="nav-icon">📊</span>
-          <span className="nav-label">Leaders</span>
+        <button className={`nav-item ${screen === 'scores' ? 'active' : ''}`} onClick={() => setScreen('scores')} aria-label="Stars">
+          <span className="nav-icon">☄️</span>
+          <span className="nav-label">Stars</span>
         </button>
       </nav>
     </div>

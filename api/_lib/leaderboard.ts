@@ -1,6 +1,7 @@
 type SupabaseClient = any;
 
 export type LeaderboardMode = 'all_time' | 'best_run' | 'trophies';
+export const MAX_REASONABLE_RUN_STARS = 660;
 
 type DbPlayer = {
   user_id: string;
@@ -175,6 +176,33 @@ export const ensureBots = async (supabase: SupabaseClient) => {
   if (missing.length === 0) return;
   const { error: insertError } = await supabase.from(TABLE).insert(missing);
   if (insertError) throw insertError;
+};
+
+export const normalizeBestRunScores = async (supabase: SupabaseClient) => {
+  const { data, error } = await supabase.from(TABLE).select('user_id,best_run_stars,all_time_stars');
+  if (error) throw error;
+  if (!data?.length) return;
+
+  const updates = data
+    .map((row: { user_id: string; best_run_stars?: number; all_time_stars?: number }) => {
+      const current = Math.max(0, Math.floor(Number(row.best_run_stars ?? 0)));
+      const allTime = Math.max(0, Math.floor(Number(row.all_time_stars ?? 0)));
+      const normalized = Math.min(current, allTime, MAX_REASONABLE_RUN_STARS);
+      if (normalized === current) return null;
+      return { user_id: row.user_id, best_run_stars: normalized };
+    })
+    .filter((row): row is { user_id: string; best_run_stars: number } => Boolean(row));
+
+  if (updates.length === 0) return;
+  await Promise.all(
+    updates.map(async (row) => {
+      const { error: updateError } = await supabase
+        .from(TABLE)
+        .update({ best_run_stars: row.best_run_stars })
+        .eq('user_id', row.user_id);
+      if (updateError) throw updateError;
+    })
+  );
 };
 
 export const buildSortQuery = (supabase: SupabaseClient, mode: LeaderboardMode, limit: number) => {

@@ -9,7 +9,7 @@ import {
 } from '../_lib/leaderboard.js';
 
 export const config = { runtime: 'nodejs' };
-const MAX_REASONABLE_RUN_STARS = 700;
+const MAX_REASONABLE_RUN_STARS = 660;
 
 export default async function handler(req: any, res: any) {
   setCors(res);

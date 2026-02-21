@@ -2145,7 +2145,7 @@ p {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 1px;
+  gap: 5px;
   color: rgba(255, 255, 255, 0.55);
   background: transparent;
   border: none;

@@ -1,7 +1,7 @@
 import type { LeaderboardMode, LeaderboardRow } from './leaderboard-api';
 import type { MuseumEntry, TotalsState } from './types';
 
-export const MAX_REASONABLE_RUN_STARS = 700;
+export const MAX_REASONABLE_RUN_STARS = 660;
 
 export const getExtensionsSolved = (museum: MuseumEntry[]) =>
   museum.reduce((sum, entry) => sum + (entry.solved ? entry.extensionsCompleted : 0), 0);
