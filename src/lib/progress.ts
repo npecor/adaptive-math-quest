@@ -202,7 +202,6 @@ const buildRivals = (mode: LeaderboardMode, user: LeaderboardRow, dateKey: strin
 export const buildLeaderboardEntries = (
   mode: LeaderboardMode,
   userStats: LeaderboardUserStats,
-  apiEntries: LeaderboardRow[] = [],
   date = new Date()
 ): LeaderboardRow[] => {
   const dateKey = getTodayKey(date);
@@ -219,11 +218,7 @@ export const buildLeaderboardEntries = (
   };
 
   const merged = new Map<string, LeaderboardRow>();
-  for (const row of apiEntries) {
-    merged.set(row.userId, { ...row });
-  }
   merged.set(youRow.userId, youRow);
-
   const rivals = buildRivals(mode, youRow, dateKey);
   for (const rival of rivals) {
     merged.set(rival.userId, rival);

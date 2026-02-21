@@ -3,7 +3,7 @@ import { updateRating } from './lib/adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { bonusPointsTarget, createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
-import { fetchLeaderboard, fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
+import { fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
 import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, upsertSolvedPuzzleIds } from './lib/progress';
 import { loadState, saveState } from './lib/storage';
@@ -53,7 +53,7 @@ interface RunState {
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
-const MAX_PUZZLE_HINTS = 2;
+const MAX_PUZZLE_HINTS = 3;
 
 const playerCharacters: PlayerCharacter[] = [
   { id: 'astro-bot', emoji: '🤖', name: 'Astro Bot', vibe: 'Cheerful robot astronaut', kind: 'astronaut' },
@@ -908,7 +908,6 @@ export default function App() {
     if (saved) return getCharacterById(saved)?.id ?? defaultCharacterId;
     return '';
   });
-  const [remoteLeaderboardRows, setRemoteLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('all_time');
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
@@ -1043,19 +1042,16 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    const loadLeaderboardRows = async () => {
+    const checkLeaderboardHealth = async () => {
       try {
         const health = await fetchLeaderboardHealth();
         if (active) setLeaderboardStatus(health ? 'online' : 'offline');
-        const rows = await fetchLeaderboard(leaderboardMode, 50);
-        if (active) setRemoteLeaderboardRows(rows);
       } catch {
         if (active) setLeaderboardStatus('offline');
-        if (active) setRemoteLeaderboardRows([]);
-        // Keep app usable with fallback rows when backend is unavailable.
+        // Keep app usable with local rivals when backend is unavailable.
       }
     };
-    loadLeaderboardRows();
+    checkLeaderboardHealth();
     return () => {
       active = false;
     };
@@ -1086,19 +1082,16 @@ export default function App() {
   useEffect(() => {
     if (screen !== 'scores') return;
     let active = true;
-    const refreshLeaderboardRows = async () => {
+    const refreshLeaderboardHealth = async () => {
       try {
         const health = await fetchLeaderboardHealth();
         if (active) setLeaderboardStatus(health ? 'online' : 'offline');
-        const rows = await fetchLeaderboard(leaderboardMode, 50);
-        if (active) setRemoteLeaderboardRows(rows);
       } catch {
         if (active) setLeaderboardStatus('offline');
-        if (active) setRemoteLeaderboardRows([]);
-        // Ignore transient backend failures; fallback rows still render.
+        // Ignore transient backend failures; local rivals still render.
       }
     };
-    refreshLeaderboardRows();
+    refreshLeaderboardHealth();
     return () => {
       active = false;
     };
@@ -1131,8 +1124,6 @@ export default function App() {
         if (cancelled) return;
         setLeaderboardStatus('online');
         lastSubmittedStatsRef.current = submissionKey;
-        const rows = await fetchLeaderboard(leaderboardMode, 50);
-        if (!cancelled) setRemoteLeaderboardRows(rows);
       } catch {
         if (!cancelled) setLeaderboardStatus('offline');
         // Best-effort sync; app still works offline.
@@ -1673,18 +1664,17 @@ export default function App() {
   };
 
   const getPuzzleTutorSteps = (item: PuzzleItem) => {
-    if (item.tags.includes('geometry_area')) {
-      return [
-        `Step 1: ${getGeometryCoachLine(item.core_prompt)}`,
-        'Step 2: Give a short best guess and keep going.'
-      ];
-    }
+    const explicitSteps = (item.solution_steps ?? [])
+      .slice(0, 3)
+      .map((step, index) => `Step ${index + 1}: ${simplifyCoachLine(step)}`);
+    if (explicitSteps.length === 3) return explicitSteps;
 
     const firstHint = item.hint_ladder[0] ? simplifyCoachLine(item.hint_ladder[0]) : 'Break it into tiny parts.';
+    const secondHint = item.hint_ladder[1] ? simplifyCoachLine(item.hint_ladder[1]) : 'Try one small example.';
     return [
       `Step 1: ${getKidStrategyLine(item.tags)}`,
-      `Step 2: ${firstHint}`,
-      'Step 3: Give a short best guess and keep going.'
+      `Step 2: ${firstHint || secondHint}`,
+      'Step 3: Finish with one clear answer.'
     ];
   };
 
@@ -1713,12 +1703,6 @@ export default function App() {
       save(nextState);
       setNameInput(registered.username);
       setLeaderboardStatus('online');
-      try {
-        const rows = await fetchLeaderboard(leaderboardMode, 50);
-        setRemoteLeaderboardRows(rows);
-      } catch {
-        // Ignore refresh failures; retry happens when opening leaderboard.
-      }
       setScreen('home');
     } catch {
       // Fallback to local save if backend is unavailable.
@@ -1776,16 +1760,6 @@ export default function App() {
   const solvedRows = useMemo(() => museumRows.filter((entry) => entry.solved), [museumRows]);
   const collectionRows = showAttemptedPuzzles ? museumRows : solvedRows;
 
-  const activeLeaderboardMetric = useMemo(
-    () =>
-      leaderboardMode === 'all_time'
-        ? { icon: '⭐', label: 'All-Time Stars' }
-        : leaderboardMode === 'best_run'
-          ? { icon: '🚀', label: 'Best Run' }
-          : { icon: '🏆', label: 'Trophies Earned' },
-    [leaderboardMode]
-  );
-
   const leaderboard = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
@@ -1799,8 +1773,7 @@ export default function App() {
         bestRunStars: state.totals.bestRunStars,
         trophiesEarned: state.totals.trophiesEarned,
         extensionsSolved: state.totals.extensionsSolved
-      },
-      remoteLeaderboardRows
+      }
     );
 
     return rows.map((entry) => ({
@@ -1816,7 +1789,7 @@ export default function App() {
       isBot: entry.isBot,
       isYou: youUserId ? entry.userId === youUserId : entry.username === youUsername
     }));
-  }, [leaderboardMode, remoteLeaderboardRows, state.totals, state.user]);
+  }, [leaderboardMode, state.totals, state.user]);
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
@@ -2464,7 +2437,7 @@ export default function App() {
             <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
             <strong>#{entry.rank}</strong>
             <span>{entry.name}</span>
-            <small>{activeLeaderboardMetric.icon} {entry.primaryValue}</small>
+            <small>{entry.primaryValue}</small>
           </div>
         ))}
       </section>
@@ -2480,10 +2453,10 @@ export default function App() {
                   <span className="row-name" title={entry.name}>{entry.name}</span>
                   {entry.isYou && <span className="you-chip">You</span>}
                 </span>
-                <small className="muted row-subtle">⭐ {entry.allTimeStars} • 🚀 {entry.bestRunStars} • 🏆 {entry.trophiesEarned}</small>
+                <small className="muted row-subtle">⭐ {entry.allTimeStars} • 🏆 {entry.trophiesEarned}</small>
               </span>
             </div>
-            <span className="row-score"><span className="row-score-icon">{activeLeaderboardMetric.icon}</span>{entry.primaryValue}</span>
+            <span className="row-score">{entry.primaryValue}</span>
           </div>
         ))}
       </section>

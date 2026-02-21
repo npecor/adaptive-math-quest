@@ -5,39 +5,90 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = <T,>(items: T[]): T => items[randInt(0, items.length - 1)];
 const hasDecimal = (text: string) => /\d+\.\d+/.test(text);
-const bannedAlgebraNotation = /\bn\b|n\^2|n²|n\(\s*n\s*[\+\-]\s*1\s*\)|n\(\s*n\s*-\s*1\s*\)|n\(\s*n\s*\+\s*1\s*\)/i;
+const bannedAlgebraNotation = /\bn\b|n\^2|n²|n\(\s*n\s*[+\-]\s*1\s*\)|n\(\s*n\s*-\s*1\s*\)|n\(\s*n\s*\+\s*1\s*\)/i;
+
+type PuzzleBuild = Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & {
+  signature: string;
+  difficultyHint?: number;
+};
 
 type PuzzleTemplate = {
   key: string;
+  puzzleType: NonNullable<PuzzleItem['puzzleType']>;
   minDifficulty: number;
   maxDifficulty: number;
-  build: (difficulty: number) => Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string };
+  baseDifficulty: number;
+  weight: number;
+  build: (difficulty: number) => PuzzleBuild;
 };
+
+type SequenceVariant = {
+  slug: string;
+  sequence: string;
+  choices: string[];
+  answer: string;
+  strategy: string;
+  difficultyHint: number;
+};
+
+type OddOneOutVariant = {
+  slug: string;
+  prompt: string;
+  choices: string[];
+  answer: string;
+  reason: string;
+  difficultyHint: number;
+};
+
+type WordProblemVariant = {
+  slug: string;
+  title: string;
+  prompt: string;
+  answer: number;
+  step1: string;
+  step2: string;
+  step3: string;
+  hints: [string, string, string];
+  difficultyHint: number;
+};
+
+type LogicVariant = {
+  slug: string;
+  title: string;
+  prompt: string;
+  choices: string[];
+  answer: string;
+  hints: [string, string, string];
+  steps: [string, string, string];
+  difficultyHint: number;
+};
+
+const FAST_MATH_STYLE_PUZZLE = [
+  /which fraction is (bigger|greater)/i,
+  /\b\d+\s*\/\s*\d+\s*(or|vs)\s*\d+\s*\/\s*\d+/i,
+  /\bx\s*[+\-*/÷×]\s*\d+\s*=\s*-?\d+/i,
+  /^\s*(solve|what is)\s*:?\s*\d+\s*[+\-×x÷/*]\s*\d+/i,
+  /^\s*\d+\s*[+\-×x÷/*]\s*\d+\s*=\s*\?\s*$/i
+];
 
 const extensions = (one: string, two: string) => [
   { label: 'Bonus 1', prompt: one, answer: 'varies' },
   { label: 'Bonus 2', prompt: two, answer: 'varies' }
 ];
 
-const pairCountPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
-  const n = randInt(5, 11);
-  const answer = (n * (n - 1)) / 2;
-  const pairTheme = pick(['Comet Crew', 'Meteor Mates', 'Nebula Buddies', 'Star Squad']);
+const ensureThreeSteps = (steps: string[], fallback: string): [string, string, string] => {
+  const normalized = steps.map((step) => step.trim()).filter(Boolean).slice(0, 3);
+  while (normalized.length < 3) normalized.push(fallback);
+  return [normalized[0], normalized[1], normalized[2]];
+};
+
+const withThreeStepScaffold = (item: PuzzleBuild): PuzzleBuild => {
+  const hints = ensureThreeSteps(item.hint_ladder, 'Try a smaller version first.');
+  const steps = ensureThreeSteps(item.solution_steps, 'Now use that same idea on this puzzle.');
   return {
-    signature: `pairs-${n}`,
-    tags: ['counting', 'logic'],
-    title: `${pairTheme} High-Fives (${n})`,
-    answer_type: 'short_text',
-    core_prompt: `${n} space cadets each high-five every other cadet once. How many high-fives total?`,
-    core_answer: String(answer),
-    hint_ladder: [
-      'Try with 4 cadets first.',
-      'Count unique pairs, not people.',
-      'Use this pattern: students × (students - 1) ÷ 2.',
-      `Reveal: ${n}×${n - 1}/2 = ${answer}.`
-    ],
-    solution_steps: [`Pairs = ${n}(${n} - 1)/2.`, `Answer: ${answer}.`],
-    extensions: extensions('How many with 12 cadets?', 'Write a rule for any number of cadets.')
+    ...item,
+    hint_ladder: hints,
+    solution_steps: steps
   };
 };
 
@@ -49,342 +100,700 @@ const factorPairs = (n: number): Array<[number, number]> => {
   return pairs;
 };
 
-const yesNoAreaPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
+const yesNoAreaPuzzle = (): PuzzleBuild => {
   let side = randInt(4, 18);
-  let squareArea = side * side;
-  let nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
-  // Some square areas only have one non-trivial pair (e.g. 7x7). Re-roll until we get a real rectangle.
-  for (let tries = 0; tries < 20 && nonSquarePairs.length === 0; tries += 1) {
+  let area = side * side;
+  let nonSquarePairs = factorPairs(area).filter(([a, b]) => !(a === side && b === side));
+
+  for (let attempts = 0; attempts < 20 && nonSquarePairs.length === 0; attempts += 1) {
     side = randInt(4, 18);
-    squareArea = side * side;
-    nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
+    area = side * side;
+    nonSquarePairs = factorPairs(area).filter(([a, b]) => !(a === side && b === side));
   }
+
   if (nonSquarePairs.length === 0) {
     side = 12;
-    squareArea = side * side;
-    nonSquarePairs = factorPairs(squareArea).filter(([x, y]) => !(x === side && y === side));
+    area = side * side;
+    nonSquarePairs = factorPairs(area).filter(([a, b]) => !(a === side && b === side));
   }
 
   const isYes = Math.random() < 0.55;
-  let a = side;
-  let b = side;
+  let rectA = side;
+  let rectB = side;
 
   if (isYes) {
-    const pickPair = pick(nonSquarePairs);
-    a = pickPair[0];
-    b = pickPair[1];
+    [rectA, rectB] = pick(nonSquarePairs);
   } else {
-    const target = squareArea;
     const candidates: Array<[number, number]> = [];
-    for (let x = 2; x <= 24; x += 1) {
-      for (let y = 2; y <= 24; y += 1) {
-        const area = x * y;
-        if (area !== target && Math.abs(area - target) <= Math.max(18, Math.floor(target * 0.25))) {
-          candidates.push([x, y]);
-        }
+    for (let a = 2; a <= 24; a += 1) {
+      for (let b = 2; b <= 24; b += 1) {
+        const rectArea = a * b;
+        const closeEnough = Math.abs(rectArea - area) <= Math.max(18, Math.floor(area * 0.25));
+        if (rectArea !== area && closeEnough) candidates.push([a, b]);
       }
     }
-    const chosen = candidates.length ? pick(candidates) : [side + 1, side];
-    a = chosen[0];
-    b = chosen[1];
+    [rectA, rectB] = candidates.length ? pick(candidates) : [side + 1, side];
   }
 
-  const rectArea = a * b;
-  const answer: 'Yes' | 'No' = rectArea === squareArea ? 'Yes' : 'No';
-  return {
-    signature: `area_yn-${side}-${a}-${b}-${answer.toLowerCase()}`,
+  const rectArea = rectA * rectB;
+  const answer: 'Yes' | 'No' = rectArea === area ? 'Yes' : 'No';
+
+  return withThreeStepScaffold({
+    signature: `shape-${side}-${rectA}-${rectB}-${answer.toLowerCase()}`,
+    puzzleType: 'spatial',
     tags: ['spatial', 'reasoning', 'geometry_area'],
-    title: 'Shape Warp: Area Check',
+    title: 'Shape Swap',
     answer_type: 'choice',
     choices: ['Yes', 'No'],
-    core_prompt: `Can a ${side}×${side} square become a ${a}×${b} rectangle (no stretching)?`,
+    core_prompt: `Can a ${side}×${side} square become a ${rectA}×${rectB} rectangle with no stretching?`,
     core_answer: answer,
     hint_ladder: [
-      `Find the square’s area: ${side}×${side}.`,
-      `Find the rectangle’s area: ${a}×${b}.`,
-      'No stretching means the area must stay the same.',
-      `Compare: ${squareArea} vs ${rectArea}.`
+      `Find the square area first: ${side}×${side}.`,
+      `Now find the rectangle area: ${rectA}×${rectB}.`,
+      'If both areas match, answer Yes. If not, answer No.'
     ],
     solution_steps: [
-      `Square area = ${side}×${side} = ${squareArea}.`,
-      `Rectangle area = ${a}×${b} = ${rectArea}.`,
-      'No stretching means area must stay the same.',
-      answer === 'Yes' ? 'Areas match -> Yes.' : 'Areas do not match -> No.'
+      `Square area = ${side}×${side} = ${area}.`,
+      `Rectangle area = ${rectA}×${rectB} = ${rectArea}.`,
+      answer === 'Yes' ? 'Areas match, so the answer is Yes.' : 'Areas do not match, so the answer is No.'
     ],
-    extensions: extensions('Make your own Yes example.', 'Make your own No example.')
-  };
+    extensions: extensions('Make your own Yes example with different dimensions.', 'Make your own No example with close numbers.'),
+    difficultyHint: answer === 'No' ? 20 : 0
+  });
 };
 
-const switchPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
-  const missionCode = randInt(100, 999);
-  const missionName = pick(['Light Lab', 'Lamp Link', 'Switch Secret', 'Glow Guide']);
-  return {
-    signature: `switch-${missionCode}`,
-    tags: ['logic', 'strategy'],
-    title: `${missionName} #${missionCode}`,
-    answer_type: 'long_text',
-    core_prompt: '3 switches control 3 lamps in another room. One trip allowed. What is your plan?',
-    core_answer: 'use heat',
-    accept_answers: ['one switch long', 'warm bulb', 'turn one on then off'],
+const perimeterSurprisePuzzle = (): PuzzleBuild => {
+  const width = randInt(4, 12);
+  const height = randInt(4, 12);
+  const borderTiles = 2 * (width + height) - 4;
+  return withThreeStepScaffold({
+    signature: `border-${width}-${height}`,
+    puzzleType: 'spatial',
+    tags: ['spatial', 'geometry_area', 'perimeter'],
+    title: 'Border Tiles',
+    answer_type: 'short_text',
+    core_prompt: `A launch pad is ${width} by ${height} tiles. How many tiles touch the outer edge?`,
+    core_answer: String(borderTiles),
     hint_ladder: [
-      'Use more than just on/off.',
-      'Heat can act like a clue.',
-      'One on long, one on short, one off.',
-      'Reveal: identify lamps by light + warmth.'
+      'Count around the edge, not the inside.',
+      `Use 2×(${width}+${height}) for the border walk.`,
+      'Corner tiles get counted twice, so subtract 4.'
     ],
-    solution_steps: ['Use timing to create warm vs cold clues.', 'Match each lamp by light state and bulb temperature.'],
-    extensions: extensions('How could this scale to 4 lamps?', 'Why does heat add information?')
-  };
+    solution_steps: [
+      `Start with 2×(${width}+${height}) = ${2 * (width + height)}.`,
+      `Subtract 4 corner repeats: ${2 * (width + height)} - 4 = ${borderTiles}.`,
+      `So ${borderTiles} tiles touch the edge.`
+    ],
+    extensions: extensions('Try a 10 by 10 pad.', 'How does the border change if you add one row?'),
+    difficultyHint: borderTiles > 30 ? 25 : 5
+  });
 };
 
-type StarsVariant = {
-  slug: string;
-  title: string;
-  n: number;
-  takeMax: 3;
-};
-
-const STARS_VARIANTS: StarsVariant[] = [
-  { slug: 'n-8', title: 'Star Grab: 8 Stars', n: 8, takeMax: 3 },
-  { slug: 'n-9', title: 'Star Grab: 9 Stars', n: 9, takeMax: 3 },
-  { slug: 'n-10', title: 'Star Grab: 10 Stars', n: 10, takeMax: 3 },
-  { slug: 'n-11', title: 'Star Grab: 11 Stars', n: 11, takeMax: 3 },
-  { slug: 'n-12', title: 'Star Grab: 12 Stars', n: 12, takeMax: 3 },
-  { slug: 'n-13', title: 'Star Grab: 13 Stars', n: 13, takeMax: 3 },
-  { slug: 'n-14', title: 'Star Grab: 14 Stars', n: 14, takeMax: 3 },
-  { slug: 'n-15', title: 'Star Grab: 15 Stars', n: 15, takeMax: 3 },
-  { slug: 'n-16', title: 'Star Grab: 16 Stars', n: 16, takeMax: 3 },
-  { slug: 'n-18', title: 'Star Grab: 18 Stars', n: 18, takeMax: 3 }
-];
-
-const starsStrategyPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
-  const v = pick(STARS_VARIANTS);
-  const n = v.n;
-  const answer: 'Yes' | 'No' = n % 4 === 0 ? 'No' : 'Yes';
-  const winningMove = n % 4 === 0 ? null : n % 4;
-
-  return {
-    signature: `${n}-${v.slug}`,
-    tags: ['strategy', 'pattern', 'logic'],
-    title: v.title,
+const constraintSwitchPuzzle = (): PuzzleBuild => {
+  return withThreeStepScaffold({
+    signature: 'switches-one-trip',
+    puzzleType: 'constraint',
+    tags: ['constraint', 'logic', 'one_chance'],
+    title: 'Switch Mission',
     answer_type: 'choice',
-    choices: ['Yes', 'No'],
-    core_prompt: `There are ${n} stars. You go first. Each turn you may take 1, 2, or 3 stars. Whoever takes the last star wins. Do you have a winning strategy?`,
-    core_answer: answer,
+    choices: [
+      'Turn one on for a while, switch it off, turn a second on, then check heat and light.',
+      'Turn all three on, wait, then check only brightness.',
+      'Turn one on and immediately run upstairs.',
+      'Flip random switches quickly and guess.'
+    ],
+    core_prompt: 'Three switches control three lamps in another room. You only get one visit upstairs. What plan works?',
+    core_answer: 'Turn one on for a while, switch it off, turn a second on, then check heat and light.',
     hint_ladder: [
-      'Try tiny games first: 1, 2, 3, 4 stars.',
-      'Find bad starting numbers where the first player loses.',
-      'Notice a pattern: 4, 8, 12, 16...',
-      'Try to leave a multiple of 4 after your move.'
+      'Use more than just on or off.',
+      'Warm bulbs give extra information after a switch is off.',
+      'Make three different lamp states: on, warm-off, and cold-off.'
     ],
     solution_steps: [
-      'With 4 stars, the first player loses (whatever you take, the other player takes the rest).',
-      'That makes 4 a bad number to start on.',
-      'Every multiple of 4 is bad if both players play perfectly.',
-      winningMove
-        ? `Since ${n} is not a multiple of 4, take ${winningMove} first to leave ${n - winningMove} (a multiple of 4).`
-        : `Since ${n} is a multiple of 4, the other player can always respond to keep multiples of 4.`,
-      `Answer: ${answer}.`
+      'Turn Switch A on and wait so that lamp gets warm.',
+      'Turn A off, turn B on, and keep C off before your one trip.',
+      'Upstairs: glowing lamp is B, warm dark lamp is A, cold dark lamp is C.'
     ],
-    extensions: extensions('Try the same game with 20 stars.', 'What if you can take 1 to 4 instead?')
-  };
+    extensions: extensions('How could you do this with four lamps?', 'Why does heat make this puzzle possible?'),
+    difficultyHint: 120
+  });
 };
 
-type LogicVariant = {
-  slug: string;
-  title: string;
-  prompt: string;
-  answerType: PuzzleItem['answer_type'];
-  answer: string;
-  choices?: string[];
-  accept?: string[];
-  hints: string[];
-  steps: string[];
+const constraintAirlockQuestionPuzzle = (): PuzzleBuild => {
+  const bestQuestion = 'Ask either guard: “If I asked the other guard which door is safe, what would they say?” then choose the opposite door.';
+  return withThreeStepScaffold({
+    signature: 'airlocks-one-question',
+    puzzleType: 'constraint',
+    tags: ['constraint', 'logic', 'one_chance'],
+    title: 'Two Airlocks, One Question',
+    answer_type: 'choice',
+    choices: [
+      bestQuestion,
+      'Ask Guard A directly which door is safe and trust the answer.',
+      'Ask both guards the same question and pick the matching door.',
+      'Pick a random door and run.'
+    ],
+    core_prompt: 'One guard lies and one tells truth. You can ask ONE yes/no question to ONE guard. What is the best strategy?',
+    core_answer: bestQuestion,
+    hint_ladder: [
+      'You need a question that works on both the liar and truth-teller.',
+      'Asking what the other guard would say flips truth twice.',
+      'After that question, take the opposite door from the answer.'
+    ],
+    solution_steps: [
+      'Ask either guard what the other guard would point to.',
+      'Both guards will point to the wrong door with that question.',
+      'Choose the opposite door to reach safety.'
+    ],
+    extensions: extensions('Write your own one-question strategy.', 'How would this change with three doors?'),
+    difficultyHint: 105
+  });
 };
 
-const LOGIC_VARIANTS: LogicVariant[] = [
-  {
-    slug: 'two-airlocks',
-    title: 'Two Airlocks',
-    prompt: 'Two airlocks: one is SAFE, one is TRAP.\n\nSign on Airlock 1: "Airlock 2 is SAFE."\nSign on Airlock 2: "Airlock 1 is TRAP."\n\nExactly ONE sign is true.\nWhich airlock is SAFE?',
-    answerType: 'choice',
-    choices: ['Airlock 1', 'Airlock 2'],
-    answer: 'Airlock 2',
-    hints: [
-      'Try assuming Airlock 1 is safe, then check both signs.',
-      'You need exactly ONE sign to be true.',
-      'If you get 0 true signs or 2 true signs, that case is wrong.',
-      'Try the other airlock.'
+const constraintNineRocksPuzzle = (): PuzzleBuild => {
+  const bestMove = 'Weigh 3 rocks against 3 rocks.';
+  return withThreeStepScaffold({
+    signature: 'rocks-9-one-weigh',
+    puzzleType: 'constraint',
+    tags: ['constraint', 'strategy', 'one_chance'],
+    title: 'Heavy Rock Check',
+    answer_type: 'choice',
+    choices: [bestMove, 'Weigh 4 rocks against 4 rocks.', 'Weigh 1 rock against 1 rock.', 'Weigh all 9 rocks at once.'],
+    core_prompt: 'You have 9 space rocks and one is heavier. You get one balance weighing. What first move gives the best clue?',
+    core_answer: bestMove,
+    hint_ladder: [
+      'One weighing should split the possibilities into equal groups.',
+      'Try dividing 9 into three groups of 3.',
+      'A 3-vs-3 weighing tells you which group to focus on next.'
     ],
-    steps: [
-      'Assume Airlock 1 is SAFE -> Airlock 2 is TRAP.',
-      'Sign 1 says "Airlock 2 is SAFE." That would be false.',
-      'Sign 2 says "Airlock 1 is TRAP." That would be false.',
-      'That is 0 true signs, but we need exactly 1 -> impossible.',
-      'So Airlock 1 is not safe -> Airlock 2 is SAFE.',
-      'Answer: Airlock 2.'
-    ]
-  },
-  {
-    slug: 'robot-buttons',
-    title: 'Robot Buttons',
-    prompt: 'A robot has 3 buttons: ZAP, BOOP, BEEP.\nExactly ONE button gives a candy.\nYou press ZAP and get NO candy.\nWhich buttons could still give candy?',
-    answerType: 'short_text',
-    answer: 'BOOP or BEEP',
-    accept: ['boop or beep', 'boop and beep', 'boop, beep', 'BOOP or BEEP', 'BOOP and BEEP'],
-    hints: ['ZAP did not work.', 'So it is not ZAP.', 'That leaves two possibilities.', 'Name both.'],
-    steps: [
-      'Only one button works.',
-      'ZAP failed, so ZAP is not the candy button.',
-      'So it must be BOOP or BEEP.',
-      'Answer: BOOP or BEEP.'
-    ]
-  },
-  {
-    slug: 'planet-prime',
-    title: 'Planet Prime',
-    prompt: 'Which number does NOT belong? 2, 3, 5, 9',
-    answerType: 'short_text',
-    answer: '9',
-    accept: ['9', 'nine', 'Nine'],
-    hints: [
-      'Three of these are prime numbers.',
-      'Prime means: only 1 and itself are factors.',
-      '2, 3, and 5 are prime.',
-      '9 is not prime (3x3).'
+    solution_steps: [
+      'Split rocks into groups: 3, 3, and 3.',
+      'Weigh one group of 3 against another group of 3.',
+      'If balanced, heavy rock is in the third group; if not, it is in the heavier side.'
     ],
-    steps: ['2, 3, and 5 are prime.', '9 = 3x3, so it has more factors.', 'So 9 does not belong.', 'Answer: 9.']
+    extensions: extensions('How would you solve it with one more weighing?', 'Try the same idea with 12 rocks.'),
+    difficultyHint: 90
+  });
+};
+
+const alwaysSometimesNeverPuzzle = (): PuzzleBuild => {
+  const variants: LogicVariant[] = [
+    {
+      slug: 'odd-plus-odd',
+      title: 'Always / Sometimes / Never',
+      prompt: 'Odd number + odd number is even.',
+      choices: ['Always', 'Sometimes', 'Never'],
+      answer: 'Always',
+      hints: [
+        'Test a small example like 3 + 5.',
+        'Try another one like 7 + 9.',
+        'If every test is even, it is Always.'
+      ],
+      steps: ['3 + 5 = 8, which is even.', '7 + 9 = 16, also even.', 'Odd + odd is always even.'],
+      difficultyHint: -30
+    },
+    {
+      slug: 'odd-times-odd',
+      title: 'Always / Sometimes / Never',
+      prompt: 'Odd number × odd number is even.',
+      choices: ['Always', 'Sometimes', 'Never'],
+      answer: 'Never',
+      hints: [
+        'Try 3 × 5 first.',
+        'Try 7 × 9 next.',
+        'If all results are odd, the statement is Never.'
+      ],
+      steps: ['3 × 5 = 15, which is odd.', '7 × 9 = 63, also odd.', 'Odd × odd is never even.'],
+      difficultyHint: -15
+    },
+    {
+      slug: 'number-times-itself',
+      title: 'Always / Sometimes / Never',
+      prompt: 'A number times itself is even.',
+      choices: ['Always', 'Sometimes', 'Never'],
+      answer: 'Sometimes',
+      hints: [
+        'Try an even number first: 4 × 4.',
+        'Now try an odd number: 3 × 3.',
+        'If one example is even and one is odd, the answer is Sometimes.'
+      ],
+      steps: ['4 × 4 = 16, which is even.', '3 × 3 = 9, which is odd.', 'So this is true only sometimes.'],
+      difficultyHint: 10
+    }
+  ];
+
+  const variant = pick(variants);
+  return withThreeStepScaffold({
+    signature: `asn-${variant.slug}`,
+    puzzleType: 'logic',
+    tags: ['logic', 'reasoning'],
+    title: variant.title,
+    answer_type: 'choice',
+    choices: variant.choices,
+    core_prompt: variant.prompt,
+    core_answer: variant.answer,
+    hint_ladder: variant.hints,
+    solution_steps: variant.steps,
+    extensions: extensions('Write your own Always/Sometimes/Never statement.', 'Test your statement with two examples.'),
+    difficultyHint: variant.difficultyHint
+  });
+};
+
+const whoIsLyingPuzzle = (): PuzzleBuild => {
+  const variants: LogicVariant[] = [
+    {
+      slug: 'nova-comet-luna',
+      title: 'Who Is Lying?',
+      prompt: 'Nova says “Comet did it.” Comet says “Luna did it.” Luna says “Comet is lying.” Exactly one is lying. Who is lying?',
+      choices: ['Nova', 'Comet', 'Luna'],
+      answer: 'Nova',
+      hints: [
+        'Test each person as the only liar.',
+        'If Nova lies, then Comet did not do it.',
+        'Check whether that makes the other two statements true.'
+      ],
+      steps: [
+        'Assume Nova lies, so “Comet did it” is false.',
+        'Then Comet saying “Luna did it” can be true, and Luna saying “Comet is lying” can also be true.',
+        'That gives exactly one liar: Nova.'
+      ],
+      difficultyHint: 40
+    },
+    {
+      slug: 'astro-jelly-cosmo',
+      title: 'Who Is Lying?',
+      prompt: 'Astro says “Jelly found the map.” Jelly says “Cosmo found the map.” Cosmo says “Jelly is truthful.” Exactly one statement is false. Who is lying?',
+      choices: ['Astro', 'Jelly', 'Cosmo'],
+      answer: 'Astro',
+      hints: [
+        'Try making Astro the liar first.',
+        'If Astro lies, Jelly did not find the map.',
+        'Check if Jelly and Cosmo can both stay true.'
+      ],
+      steps: [
+        'Astro lying means Jelly did not find the map.',
+        'Jelly saying Cosmo found the map can be true, and Cosmo saying Jelly is truthful can be true.',
+        'So Astro is the only liar.'
+      ],
+      difficultyHint: 55
+    }
+  ];
+
+  const variant = pick(variants);
+  return withThreeStepScaffold({
+    signature: `liar-${variant.slug}`,
+    puzzleType: 'logic',
+    tags: ['logic', 'deduction'],
+    title: variant.title,
+    answer_type: 'choice',
+    choices: variant.choices,
+    core_prompt: variant.prompt,
+    core_answer: variant.answer,
+    hint_ladder: variant.hints,
+    solution_steps: variant.steps,
+    extensions: extensions('Change one clue and solve again.', 'Make a version with four players.'),
+    difficultyHint: variant.difficultyHint
+  });
+};
+
+const deductionMapPuzzle = (): PuzzleBuild => {
+  const answer = 'Moon Dock';
+  return withThreeStepScaffold({
+    signature: 'deduction-map',
+    puzzleType: 'logic',
+    tags: ['logic', 'deduction'],
+    title: 'Dock Deduction',
+    answer_type: 'choice',
+    choices: ['Sun Dock', 'Moon Dock', 'Star Dock'],
+    core_prompt: 'The map is not at Sun Dock. Star Dock is closed for repairs. Which dock has the map?',
+    core_answer: answer,
+    hint_ladder: [
+      'Cross out places that are impossible.',
+      'Sun Dock is ruled out by the first clue.',
+      'Star Dock is ruled out by the second clue, so one dock remains.'
+    ],
+    solution_steps: [
+      'Not at Sun Dock removes one choice.',
+      'Star Dock closed removes another choice.',
+      'Only Moon Dock is left, so that is the answer.'
+    ],
+    extensions: extensions('Write a new clue that keeps Moon Dock as the answer.', 'Make a four-dock version.'),
+    difficultyHint: 0
+  });
+};
+
+const SEQUENCE_VARIANTS: SequenceVariant[] = [
+  {
+    slug: 'plus-3',
+    sequence: '4, 7, 10, 13, ? ',
+    choices: ['14', '15', '16', '17'],
+    answer: '16',
+    strategy: 'Each number goes up by 3.',
+    difficultyHint: -35
   },
   {
-    slug: 'even-meteor',
-    title: 'Even Meteor',
-    prompt: 'Pick the expression that is ALWAYS even:\nA) odd + odd\nB) odd + even\nC) odd x odd',
-    answerType: 'choice',
-    choices: ['A) odd + odd', 'B) odd + even', 'C) odd x odd'],
-    answer: 'A) odd + odd',
-    hints: ['Try small examples.', '3+5 = 8 (even).', '3+4 = 7 (odd).', '3x5 = 15 (odd).'],
-    steps: ['Odd + odd is always even.', 'Odd + even is always odd.', 'Odd x odd is always odd.', 'Answer: A) odd + odd.']
+    slug: 'double-minus-1',
+    sequence: '3, 5, 9, 17, ? ',
+    choices: ['25', '31', '33', '35'],
+    answer: '33',
+    strategy: 'Double then subtract 1 each time.',
+    difficultyHint: 25
   },
   {
-    slug: 'stardust-estimate',
-    title: 'Stardust Estimate',
-    prompt: 'Three portals are marked A, B, and C.\nA clue says: "The safe portal is NOT A."\nAnother clue says: "C is blocked."\nWhich portal is safe?',
-    answerType: 'choice',
-    choices: ['Portal A', 'Portal B', 'Portal C'],
-    answer: 'Portal B',
-    hints: ['First clue says the safe one is not A.', 'Second clue says C is blocked.', 'That leaves one option.', 'So B is safe.'],
-    steps: ['Safe portal is not A.', 'C is blocked.', 'Only B can be safe.', 'Answer: Portal B.']
-  },
-  {
-    slug: 'orbit-pattern',
-    title: 'Orbit Pattern',
-    prompt: 'A scout drone repeats this move pattern:\nLeft, Right, Left, Right, ...\nIf it just moved Left, what is the next move?',
-    answerType: 'short_text',
-    answer: 'Right',
-    accept: ['right', 'Right'],
-    hints: ['The moves alternate.', 'Left is always followed by Right.', 'It keeps repeating.', 'So next is Right.'],
-    steps: ['Pattern is Left, Right, Left, Right.', 'After Left comes Right.', 'Answer: Right.']
-  },
-  {
-    slug: 'rocket-code',
-    title: 'Rocket Code',
-    prompt: 'A lock uses symbols in this order: 🔵, 🟢, 🟣, then repeats.\nWhich symbol comes next after 🔵, 🟢, 🟣, 🔵, 🟢?',
-    answerType: 'short_text',
-    answer: '🟣',
-    accept: ['🟣', 'purple', 'Purple'],
-    hints: ['The cycle has three symbols.', 'After 🟣, it goes back to 🔵.', 'Sequence shown ends on 🟢.', 'So next is 🟣.'],
-    steps: ['Pattern repeats every three symbols: 🔵, 🟢, 🟣.', 'Given sequence ends at 🟢.', 'Next symbol is 🟣.', 'Answer: 🟣.']
-  },
-  {
-    slug: 'meteor-balance',
-    title: 'Meteor Balance',
-    prompt: 'Three crates are labeled A, B, C.\nExactly one label is true.\nA: "Treasure is in B."\nB: "Treasure is in C."\nC: "Treasure is NOT in C."\nWhere is the treasure?',
-    answerType: 'choice',
-    choices: ['Crate A', 'Crate B', 'Crate C'],
-    answer: 'Crate C',
-    hints: ['Test each possible treasure location.', 'Only one label may be true.', 'Try C as the treasure.', 'That gives exactly one true label.'],
-    steps: ['If treasure is in C, A is false and B is true.', 'C says "not in C," so C is false.', 'Exactly one statement is true, so this fits.', 'Answer: Crate C.']
-  },
-  {
-    slug: 'moon-fractions',
-    title: 'Moon Fractions',
-    prompt: 'Mission doors use color clues.\nDoor 1 says: "Door 2 is safe."\nDoor 2 says: "Door 3 is safe."\nDoor 3 says: "Door 2 is lying."\nExactly one door is safe. Which door should you pick first?',
-    answerType: 'choice',
-    choices: ['Door 1', 'Door 2', 'Door 3'],
-    answer: 'Door 2',
-    hints: ['Test each door as safe.', 'If Door 2 is safe, check all three claims.', 'Exactly one door is safe, but claims can disagree.', 'Door 2 gives the most consistent clue set.'],
-    steps: ['Assume Door 2 is safe.', 'Door 1 then says a true statement.', 'Door 3 says Door 2 is lying, which is false.', 'This setup is consistent enough to pick Door 2 first.', 'Answer: Door 2.']
-  },
-  {
-    slug: 'alien-train',
-    title: 'Alien Train',
-    prompt: 'Four astronauts line up for launch: Nova, Comet, Luna, Orion.\nNova is not first.\nOrion is last.\nComet stands before Luna.\nWho is first?',
-    answerType: 'short_text',
-    answer: 'Comet',
-    accept: ['comet', 'Comet'],
-    hints: ['Orion is fixed at last.', 'Comet must be before Luna.', 'Nova cannot be first.', 'So Comet is first.'],
-    steps: ['Place Orion in the last spot.', 'Comet must be before Luna.', 'Nova cannot take first, so Comet must.', 'Answer: Comet.']
+    slug: 'square-ish',
+    sequence: '2, 6, 12, 20, ? ',
+    choices: ['28', '30', '32', '34'],
+    answer: '30',
+    strategy: 'The jumps are +4, +6, +8, so next is +10.',
+    difficultyHint: 40
   }
 ];
 
-const miniLogicPuzzle = (): Omit<PuzzleItem, 'id' | 'difficulty' | 'type'> & { signature: string } => {
-  const v = pick(LOGIC_VARIANTS);
-  return {
-    signature: `logic-${v.slug}`,
-    tags: ['logic', 'reasoning'],
-    title: v.title,
-    answer_type: v.answerType,
-    core_prompt: v.prompt,
-    core_answer: v.answer,
-    ...(v.choices ? { choices: v.choices } : {}),
-    ...(v.accept ? { accept_answers: v.accept } : {}),
-    hint_ladder: [...v.hints],
-    solution_steps: [...v.steps],
-    extensions: extensions('Try making your own version.', 'Explain your reasoning in one sentence.')
-  };
+const nextPatternPuzzle = (): PuzzleBuild => {
+  const variant = pick(SEQUENCE_VARIANTS);
+  return withThreeStepScaffold({
+    signature: `next-${variant.slug}`,
+    puzzleType: 'pattern',
+    tags: ['pattern', 'reasoning'],
+    title: 'What Comes Next?',
+    answer_type: 'choice',
+    choices: variant.choices,
+    core_prompt: `Find the next number: ${variant.sequence}`,
+    core_answer: variant.answer,
+    hint_ladder: [
+      'Look at how each step changes.',
+      variant.strategy,
+      'Use that same change one more time.'
+    ],
+    solution_steps: [
+      variant.strategy,
+      `Apply the pattern to the last shown number.`,
+      `The next number is ${variant.answer}.`
+    ],
+    extensions: extensions('Build your own sequence with a hidden rule.', 'Challenge a friend with your sequence.'),
+    difficultyHint: variant.difficultyHint
+  });
+};
+
+const ODD_ONE_OUT_VARIANTS: OddOneOutVariant[] = [
+  {
+    slug: 'prime-mix',
+    prompt: 'Which one does not belong: 11, 13, 15, 17?',
+    choices: ['11', '13', '15', '17'],
+    answer: '15',
+    reason: '15 is not prime while the others are prime.',
+    difficultyHint: -10
+  },
+  {
+    slug: 'shapes-sides',
+    prompt: 'Which one does not belong: triangle, square, pentagon, circle?',
+    choices: ['triangle', 'square', 'pentagon', 'circle'],
+    answer: 'circle',
+    reason: 'A circle has no straight sides, but the others do.',
+    difficultyHint: -20
+  },
+  {
+    slug: 'number-forms',
+    prompt: 'Which one does not belong: 8, 16, 24, 25?',
+    choices: ['8', '16', '24', '25'],
+    answer: '25',
+    reason: 'The others are multiples of 8; 25 is not.',
+    difficultyHint: 15
+  }
+];
+
+const oddOneOutPuzzle = (): PuzzleBuild => {
+  const variant = pick(ODD_ONE_OUT_VARIANTS);
+  return withThreeStepScaffold({
+    signature: `odd-${variant.slug}`,
+    puzzleType: 'pattern',
+    tags: ['pattern', 'logic'],
+    title: 'Odd One Out',
+    answer_type: 'choice',
+    choices: variant.choices,
+    core_prompt: variant.prompt,
+    core_answer: variant.answer,
+    hint_ladder: [
+      'Find a rule that fits most choices.',
+      'Test each option against that rule.',
+      'Pick the one that breaks the rule.'
+    ],
+    solution_steps: [
+      'Check what three choices have in common.',
+      variant.reason,
+      `So the odd one out is ${variant.answer}.`
+    ],
+    extensions: extensions('Create your own odd-one-out set.', 'Explain your rule in one sentence.'),
+    difficultyHint: variant.difficultyHint
+  });
+};
+
+const symbolPatternPuzzle = (): PuzzleBuild => {
+  const cycle = ['🪐', '🌙', '⭐'];
+  const shown = [...cycle, ...cycle, '🪐'];
+  const answer = '🌙';
+  return withThreeStepScaffold({
+    signature: 'symbols-orbit-cycle',
+    puzzleType: 'pattern',
+    tags: ['pattern', 'reasoning'],
+    title: 'Orbit Symbols',
+    answer_type: 'choice',
+    choices: ['🪐', '🌙', '⭐', '☄️'],
+    core_prompt: `Which symbol comes next? ${shown.join(' ')}`,
+    core_answer: answer,
+    hint_ladder: [
+      'Look for the repeating chunk.',
+      'The cycle is 🪐 then 🌙 then ⭐.',
+      'After 🪐, the next symbol in that cycle is 🌙.'
+    ],
+    solution_steps: [
+      'Identify the repeating cycle: 🪐 → 🌙 → ⭐.',
+      `The shown line ends on ${shown[shown.length - 1]}.`,
+      'So the next symbol is 🌙.'
+    ],
+    extensions: extensions('Make a 4-symbol cycle.', 'Write a cycle that starts with ⭐.'),
+    difficultyHint: -15
+  });
+};
+
+const WORD_PROBLEM_VARIANTS: WordProblemVariant[] = [
+  {
+    slug: 'fuel-cells',
+    title: 'Space Story: Fuel Cells',
+    prompt: 'A shuttle uses 7 fuel cells per hop. It makes 6 hops. How many fuel cells are used?',
+    answer: 42,
+    step1: 'Each hop uses 7 cells.',
+    step2: 'Multiply hops by cells per hop: 6×7.',
+    step3: '6×7 = 42 cells total.',
+    hints: ['Find the number used in one hop.', 'Count how many hops there are.', 'Multiply to get the total used.'],
+    difficultyHint: -5
+  },
+  {
+    slug: 'crystal-crates',
+    title: 'Space Story: Crystal Crates',
+    prompt: 'Nova collected 54 crystals and packs 6 per crate. How many full crates can she pack?',
+    answer: 9,
+    step1: 'This is a grouping problem.',
+    step2: 'Compute 54 ÷ 6.',
+    step3: '54 ÷ 6 = 9 crates.',
+    hints: ['Think: how many groups of 6 fit in 54?', 'Use a multiplication check: 6×?=54.', 'The missing number is the crate count.'],
+    difficultyHint: 20
+  },
+  {
+    slug: 'snack-balance',
+    title: 'Space Story: Snack Supply',
+    prompt: 'A station has 36 snacks. Crew eats 8, then supply ship brings 14 more. How many snacks now?',
+    answer: 42,
+    step1: 'Start with 36 snacks and subtract what was eaten.',
+    step2: '36 - 8 = 28, then add the new 14.',
+    step3: '28 + 14 = 42 snacks now.',
+    hints: ['Do the story in order: subtract then add.', 'After eating, find what remains.', 'Then add the new shipment.'],
+    difficultyHint: 35
+  },
+  {
+    slug: 'distance-legs',
+    title: 'Space Story: Route Distance',
+    prompt: 'A rover travels 18 km to Beacon A, then 27 km to Beacon B. How far total?',
+    answer: 45,
+    step1: 'Add the two trip legs.',
+    step2: '18 + 27 can be split as (18 + 20) + 7.',
+    step3: '38 + 7 = 45 km total.',
+    hints: ['This asks for a total distance.', 'Add the two parts of the trip.', 'Use tens first if that feels easier.'],
+    difficultyHint: 5
+  }
+];
+
+const wordProblemPuzzle = (): PuzzleBuild => {
+  const variant = pick(WORD_PROBLEM_VARIANTS);
+  return withThreeStepScaffold({
+    signature: `word-${variant.slug}`,
+    puzzleType: 'word',
+    tags: ['word_problem', 'reasoning'],
+    title: variant.title,
+    answer_type: 'short_text',
+    core_prompt: variant.prompt,
+    core_answer: String(variant.answer),
+    hint_ladder: [...variant.hints],
+    solution_steps: [variant.step1, variant.step2, variant.step3],
+    extensions: extensions('Change one number and solve again.', 'Write this story as an equation.'),
+    difficultyHint: variant.difficultyHint
+  });
 };
 
 const templates: PuzzleTemplate[] = [
-  { key: 'pairs', minDifficulty: 900, maxDifficulty: 1150, build: () => pairCountPuzzle() },
-  { key: 'area_yn', minDifficulty: 900, maxDifficulty: 1400, build: () => yesNoAreaPuzzle() },
-  { key: 'stars', minDifficulty: 980, maxDifficulty: 1500, build: () => starsStrategyPuzzle() },
-  { key: 'logic', minDifficulty: 900, maxDifficulty: 1500, build: () => miniLogicPuzzle() },
-  { key: 'switch', minDifficulty: 1280, maxDifficulty: 1700, build: () => switchPuzzle() }
+  {
+    key: 'word_story',
+    puzzleType: 'word',
+    minDifficulty: 900,
+    maxDifficulty: 1650,
+    baseDifficulty: 1160,
+    weight: 30,
+    build: () => wordProblemPuzzle()
+  },
+  {
+    key: 'logic_asn',
+    puzzleType: 'logic',
+    minDifficulty: 900,
+    maxDifficulty: 1450,
+    baseDifficulty: 1080,
+    weight: 9,
+    build: () => alwaysSometimesNeverPuzzle()
+  },
+  {
+    key: 'logic_lying',
+    puzzleType: 'logic',
+    minDifficulty: 980,
+    maxDifficulty: 1650,
+    baseDifficulty: 1210,
+    weight: 8,
+    build: () => whoIsLyingPuzzle()
+  },
+  {
+    key: 'logic_deduction',
+    puzzleType: 'logic',
+    minDifficulty: 920,
+    maxDifficulty: 1500,
+    baseDifficulty: 1110,
+    weight: 8,
+    build: () => deductionMapPuzzle()
+  },
+  {
+    key: 'pattern_next',
+    puzzleType: 'pattern',
+    minDifficulty: 900,
+    maxDifficulty: 1600,
+    baseDifficulty: 1080,
+    weight: 8,
+    build: () => nextPatternPuzzle()
+  },
+  {
+    key: 'pattern_odd',
+    puzzleType: 'pattern',
+    minDifficulty: 900,
+    maxDifficulty: 1500,
+    baseDifficulty: 1030,
+    weight: 6,
+    build: () => oddOneOutPuzzle()
+  },
+  {
+    key: 'pattern_symbols',
+    puzzleType: 'pattern',
+    minDifficulty: 900,
+    maxDifficulty: 1480,
+    baseDifficulty: 990,
+    weight: 6,
+    build: () => symbolPatternPuzzle()
+  },
+  {
+    key: 'spatial_area',
+    puzzleType: 'spatial',
+    minDifficulty: 930,
+    maxDifficulty: 1600,
+    baseDifficulty: 1130,
+    weight: 8,
+    build: () => yesNoAreaPuzzle()
+  },
+  {
+    key: 'spatial_border',
+    puzzleType: 'spatial',
+    minDifficulty: 980,
+    maxDifficulty: 1650,
+    baseDifficulty: 1220,
+    weight: 7,
+    build: () => perimeterSurprisePuzzle()
+  },
+  {
+    key: 'constraint_switch',
+    puzzleType: 'constraint',
+    minDifficulty: 1160,
+    maxDifficulty: 1700,
+    baseDifficulty: 1370,
+    weight: 3.5,
+    build: () => constraintSwitchPuzzle()
+  },
+  {
+    key: 'constraint_airlock',
+    puzzleType: 'constraint',
+    minDifficulty: 1140,
+    maxDifficulty: 1700,
+    baseDifficulty: 1340,
+    weight: 3.3,
+    build: () => constraintAirlockQuestionPuzzle()
+  },
+  {
+    key: 'constraint_rocks',
+    puzzleType: 'constraint',
+    minDifficulty: 1080,
+    maxDifficulty: 1680,
+    baseDifficulty: 1300,
+    weight: 3.2,
+    build: () => constraintNineRocksPuzzle()
+  }
 ];
 
+const isFastMathLike = (candidate: PuzzleItem): boolean => {
+  const prompt = candidate.core_prompt.trim();
+  return FAST_MATH_STYLE_PUZZLE.some((pattern) => pattern.test(prompt));
+};
+
 const pickTemplate = (difficulty: number): PuzzleTemplate => {
-  const eligible = templates.filter((template) => difficulty >= template.minDifficulty - 80 && difficulty <= template.maxDifficulty + 80);
-  return eligible.length ? pick(eligible) : templates[0];
+  const eligible = templates.filter(
+    (template) => difficulty >= template.minDifficulty - 80 && difficulty <= template.maxDifficulty + 80
+  );
+  const pool = eligible.length ? eligible : templates;
+  const totalWeight = pool.reduce((sum, template) => sum + template.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const template of pool) {
+    roll -= template.weight;
+    if (roll <= 0) return template;
+  }
+  return pool[pool.length - 1];
 };
 
 const isKidSafePuzzle = (candidate: PuzzleItem): boolean => {
-  const textFields = [candidate.title, candidate.core_prompt, candidate.core_answer, ...(candidate.hint_ladder ?? []), ...(candidate.solution_steps ?? [])];
+  const textFields = [
+    candidate.title,
+    candidate.core_prompt,
+    candidate.core_answer,
+    ...(candidate.hint_ladder ?? []),
+    ...(candidate.solution_steps ?? [])
+  ];
+
   if (textFields.some((text) => bannedAlgebraNotation.test(text))) return false;
-  if (candidate.id.startsWith('area_yn-') && textFields.some((text) => hasDecimal(text))) return false;
-  if (/which is (bigger|greater).*\d+\/\d+/i.test(candidate.core_prompt)) return false;
+  if (candidate.id.startsWith('spatial_area-') && textFields.some((text) => hasDecimal(text))) return false;
+  if (isFastMathLike(candidate)) return false;
+  if ((candidate.hint_ladder?.length ?? 0) !== 3) return false;
+  if ((candidate.solution_steps?.length ?? 0) !== 3) return false;
   return true;
 };
 
 const buildCandidate = (targetDifficulty: number): PuzzleItem => {
-  for (let attempts = 0; attempts < 14; attempts += 1) {
-    const difficulty = clamp(Math.round(targetDifficulty + randInt(-60, 60)), 900, 1700);
-    const template = pickTemplate(difficulty);
-    const built = template.build(difficulty);
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    const target = clamp(Math.round(targetDifficulty + randInt(-60, 60)), 900, 1700);
+    const template = pickTemplate(target);
+    const built = template.build(target);
+    const { signature, difficultyHint, ...safeBuilt } = built;
+    const centeredDifficulty = Math.round((target + template.baseDifficulty) / 2 + (difficultyHint ?? 0) + randInt(-35, 35));
+    const difficulty = clamp(centeredDifficulty, 900, 1700);
     const candidate: PuzzleItem = {
-      id: `${template.key}-${built.signature}`,
+      id: `${template.key}-${signature}`,
       type: 'puzzle',
       difficulty,
-      ...built
+      puzzleType: safeBuilt.puzzleType ?? template.puzzleType,
+      ...safeBuilt
     };
     if (isKidSafePuzzle(candidate)) return candidate;
   }
 
-  const fallbackBuilt = yesNoAreaPuzzle();
+  const fallbackBuilt = wordProblemPuzzle();
+  const { signature: fallbackSignature, difficultyHint: fallbackHint, ...safeFallback } = fallbackBuilt;
+  const fallbackDifficulty = clamp(1080 + (fallbackHint ?? 0), 900, 1700);
   return {
-    id: `area_yn-${fallbackBuilt.signature}`,
+    id: `word_story-${fallbackSignature}`,
     type: 'puzzle',
-    difficulty: 1000,
-    ...fallbackBuilt
+    difficulty: fallbackDifficulty,
+    puzzleType: safeFallback.puzzleType,
+    ...safeFallback
   };
 };
 
@@ -397,16 +806,21 @@ export const generateAdaptivePuzzleItem = (
   const candidates = Array.from({ length: 24 }, () => buildCandidate(target));
   const fresh = candidates.filter((candidate) => !usedIds.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
+
   const scored = pool.map((item) => {
-    const jumpPenalty = prevDifficulty === undefined ? 0 : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - 110) * 2.8;
+    const jumpPenalty =
+      prevDifficulty === undefined ? 0 : Math.max(0, Math.abs(item.difficulty - prevDifficulty) - 110) * 2.8;
+
     const key = item.id.split('-')[0];
     let templatePenalty = 0;
     for (const usedId of usedIds) {
       if (usedId.startsWith(`${key}-`)) templatePenalty += 5;
     }
     templatePenalty = Math.min(templatePenalty, 25);
+
     return { item, score: Math.abs(item.difficulty - target) + jumpPenalty + templatePenalty };
   });
+
   scored.sort((a, b) => a.score - b.score);
   return pick(scored.slice(0, Math.min(6, scored.length))).item;
 };

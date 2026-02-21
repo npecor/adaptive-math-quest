@@ -29,6 +29,7 @@ export interface PuzzleItem {
   id: string;
   type: 'puzzle';
   difficulty: number;
+  puzzleType?: 'constraint' | 'logic' | 'pattern' | 'word' | 'spatial';
   tags: string[];
   title: string;
   answer_type?: 'choice' | 'short_text' | 'long_text';

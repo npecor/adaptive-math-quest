@@ -27,9 +27,11 @@ const HARD_PLUS_LABELS = new Set<DifficultyLabel>(['Hard', 'Expert', 'Master']);
 const gcdNumber = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcdNumber(b, a % b));
 const FAST_MATH_STYLE_PUZZLE = [
   /which is (bigger|greater).*\d+\/\d+/i,
+  /\b\d+\s*\/\s*\d+\s*(or|vs)\s*\d+\s*\/\s*\d+/i,
   /x\s*[+\-*/÷×]\s*\d+\s*=\s*-?\d+/i,
   /which is closest to/i,
-  /^\s*(solve|what is)\s*:\s*\d+\s*[+\-×x÷]\s*\d+/i
+  /^\s*(solve|what is)\s*:\s*\d+\s*[+\-×x÷]\s*\d+/i,
+  /^\s*\d+\s*[+\-×x÷/*]\s*\d+\s*=\s*\?\s*$/i
 ];
 
 const toSortedEntries = (counts: Record<string, number>) =>
@@ -308,6 +310,7 @@ function printFlowSamples(): { failures: string[] } {
 function runPuzzleSanity(): { failures: string[] } {
   const failures: string[] = [];
   const templateCounts: Record<string, number> = {};
+  const puzzleTypeCounts: Record<string, number> = {};
   let areaYes = 0;
   let areaNo = 0;
 
@@ -324,6 +327,8 @@ function runPuzzleSanity(): { failures: string[] } {
 
     const template = puzzle.id.split('-')[0] ?? 'unknown';
     templateCounts[template] = (templateCounts[template] ?? 0) + 1;
+    const puzzleType = puzzle.puzzleType ?? 'unknown';
+    puzzleTypeCounts[puzzleType] = (puzzleTypeCounts[puzzleType] ?? 0) + 1;
 
     const textFields = [
       puzzle.title,
@@ -341,8 +346,14 @@ function runPuzzleSanity(): { failures: string[] } {
     if (FAST_MATH_STYLE_PUZZLE.some((pattern) => pattern.test(puzzle.core_prompt))) {
       failures.push(`Fast-math style puzzle detected: ${puzzle.id} :: ${puzzle.core_prompt}`);
     }
+    if (!Array.isArray(puzzle.hint_ladder) || puzzle.hint_ladder.length !== 3) {
+      failures.push(`Puzzle hints are not 3-step: ${puzzle.id}`);
+    }
+    if (!Array.isArray(puzzle.solution_steps) || puzzle.solution_steps.length !== 3) {
+      failures.push(`Puzzle Teach Me steps are not 3-step: ${puzzle.id}`);
+    }
 
-    if (startsWithTemplate(puzzle.id, 'area_yn')) {
+    if (startsWithTemplate(puzzle.id, 'spatial_area') || startsWithTemplate(puzzle.id, 'area_yn')) {
       const yesNo = puzzle.core_answer.toLowerCase();
       if (yesNo === 'yes') areaYes += 1;
       if (yesNo === 'no') areaNo += 1;
@@ -365,9 +376,10 @@ function runPuzzleSanity(): { failures: string[] } {
 
   console.log(`\n=== Puzzle Sanity (${PUZZLE_SANITY_COUNT} generated puzzles) ===`);
   printDistributionTable('Template frequency', templateCounts, PUZZLE_SANITY_COUNT);
-  console.log(`\n  area_yn split: Yes=${areaYes}, No=${areaNo}`);
+  printDistributionTable('Puzzle type frequency', puzzleTypeCounts, PUZZLE_SANITY_COUNT);
+  console.log(`\n  shape-swap split: Yes=${areaYes}, No=${areaNo}`);
   if (areaYes === 0 || areaNo === 0) {
-    failures.push(`area_yn split missing side: Yes=${areaYes}, No=${areaNo}`);
+    failures.push(`shape-swap split missing side: Yes=${areaYes}, No=${areaNo}`);
   }
 
   return { failures };

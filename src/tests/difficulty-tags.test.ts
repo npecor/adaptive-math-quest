@@ -77,7 +77,7 @@ describe('puzzle prompt safety', () => {
     for (let i = 0; i < 900; i += 1) {
       const puzzle = generateAdaptivePuzzleItem(1200, used);
       used.add(puzzle.id);
-      if (!puzzle.id.startsWith('area_yn-')) continue;
+      if (!puzzle.id.startsWith('spatial_area-')) continue;
       expect(puzzle.core_prompt).not.toMatch(decimalPattern);
       expect(puzzle.solution_steps.join(' ')).not.toMatch(decimalPattern);
     }
