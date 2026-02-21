@@ -6,12 +6,22 @@ import {
   updateRating,
   updateTrainingRating
 } from './lib/adaptive';
+import { buildBonusCoachPlan, buildFlowCoachPlan, buildPuzzleCoachPlan, type CoachPlan } from './lib/coach-plan';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
-import { applyStarAward, buildLeaderboardEntries, completeRunTotals, getLeaderboardPrimaryValue, recalcTotals, sortLeaderboardRows, upsertSolvedPuzzleIds } from './lib/progress';
+import {
+  applyStarAward,
+  buildLeaderboardEntries,
+  completeRunTotals,
+  filterLeaderboardRowsForMode,
+  getLeaderboardPrimaryValue,
+  recalcTotals,
+  sortLeaderboardRows,
+  upsertSolvedPuzzleIds
+} from './lib/progress';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
@@ -73,8 +83,10 @@ const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
 const GLOBAL_LEADERBOARD_MIN_STARS = 21; // must be > 20 to appear globally
+const TRAINING_SINGLE_DIGIT_ADD_SUB_QUESTIONS = 6;
 const TRAINING_ADD_SUB_ONLY_QUESTIONS = 8;
 const TRAINING_ADD_SUB_MULT_DIV_QUESTIONS = 12;
+const TRAINING_SINGLE_DIGIT_MAX_DIFFICULTY = 860;
 const TRAINING_EARLY_MAX_DIFFICULTY = 880;
 const TRAINING_MID_MAX_DIFFICULTY = 950;
 const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
@@ -1201,6 +1213,7 @@ export default function App() {
   const [clarifyReply, setClarifyReply] = useState('');
   const scratchpadRef = useRef<HTMLTextAreaElement | null>(null);
   const [showTutor, setShowTutor] = useState(false);
+  const [coachMode, setCoachMode] = useState<'quick' | 'steps'>('quick');
   const [showClarifyDialog, setShowClarifyDialog] = useState(false);
   const [tutorStep, setTutorStep] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
@@ -1219,7 +1232,9 @@ export default function App() {
   });
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('all_time');
   const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
-  const [networkLeaderboardRows, setNetworkLeaderboardRows] = useState<LeaderboardRow[] | null>(null);
+  const [networkLeaderboardRowsByMode, setNetworkLeaderboardRowsByMode] = useState<
+    Partial<Record<LeaderboardMode, LeaderboardRow[] | null>>
+  >({});
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
@@ -1268,7 +1283,18 @@ export default function App() {
     const finiteCaps = caps.filter((cap): cap is number => typeof cap === 'number');
     return finiteCaps.length ? Math.min(...finiteCaps) : undefined;
   };
-  const getTrainingFlowConstraints = (runState: RunState): { allowedTemplates?: string[]; maxDifficultyScore?: number } => {
+  const getTrainingFlowConstraints = (runState: RunState): {
+    allowedTemplates?: string[];
+    maxDifficultyScore?: number;
+    forceSingleDigitAddSub?: boolean;
+  } => {
+    if (runState.trainingQuestionsAnswered < TRAINING_SINGLE_DIGIT_ADD_SUB_QUESTIONS) {
+      return {
+        allowedTemplates: ['add_sub'],
+        maxDifficultyScore: TRAINING_SINGLE_DIGIT_MAX_DIFFICULTY,
+        forceSingleDigitAddSub: true
+      };
+    }
     if (runState.trainingQuestionsAnswered < TRAINING_ADD_SUB_ONLY_QUESTIONS) {
       return { allowedTemplates: ['add_sub'], maxDifficultyScore: TRAINING_EARLY_MAX_DIFFICULTY };
     }
@@ -1284,7 +1310,8 @@ export default function App() {
         targetProfile: 'default' as const,
         maxJumpFromPrev: undefined as number | undefined,
         allowedTemplates: undefined as string[] | undefined,
-        maxDifficultyScore: undefined as number | undefined
+        maxDifficultyScore: undefined as number | undefined,
+        forceSingleDigitAddSub: undefined as boolean | undefined
       };
     }
     const constraints = getTrainingFlowConstraints(runState);
@@ -1293,7 +1320,8 @@ export default function App() {
       targetProfile: 'training_flow' as const,
       maxJumpFromPrev: 120,
       allowedTemplates: constraints.allowedTemplates,
-      maxDifficultyScore: constraints.maxDifficultyScore
+      maxDifficultyScore: constraints.maxDifficultyScore,
+      forceSingleDigitAddSub: constraints.forceSingleDigitAddSub
     };
   };
   const getTrainingPuzzleTypes = (runState: RunState): Array<NonNullable<PuzzleItem['puzzleType']>> => {
@@ -1525,18 +1553,28 @@ export default function App() {
     return () => window.cancelAnimationFrame(rafId);
   }, [screen]);
 
+  useLayoutEffect(() => {
+    if (screen !== 'scores') return;
+    setNetworkLeaderboardRowsByMode((prev) => {
+      if (prev[leaderboardMode] == null) return prev;
+      return { ...prev, [leaderboardMode]: null };
+    });
+  }, [leaderboardMode, screen]);
+
   useEffect(() => {
     if (screen !== 'scores') return;
     let active = true;
+    const modeForRequest = leaderboardMode;
     const loadLeaderboardRows = async () => {
       try {
-        const rows = await fetchLeaderboard(leaderboardMode, 50);
+        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: null }));
+        const rows = await fetchLeaderboard(modeForRequest, 50);
         if (!active) return;
-        setNetworkLeaderboardRows(rows);
+        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: rows }));
         setLeaderboardStatus('online');
       } catch {
         if (!active) return;
-        setNetworkLeaderboardRows(null);
+        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: null }));
         setLeaderboardStatus('offline');
         // Keep app usable with local rivals when backend is unavailable.
       }
@@ -1640,7 +1678,8 @@ export default function App() {
         {
           targetProfile: flowPlan.targetProfile,
           maxJumpFromPrev: flowPlan.maxJumpFromPrev,
-          allowedTemplates: flowPlan.allowedTemplates
+          allowedTemplates: flowPlan.allowedTemplates,
+          forceSingleDigitAddSub: flowPlan.forceSingleDigitAddSub
         }
       );
     }
@@ -1823,7 +1862,8 @@ export default function App() {
       {
         targetProfile: nextFlowPlan.targetProfile,
         maxJumpFromPrev: nextFlowPlan.maxJumpFromPrev,
-        allowedTemplates: nextFlowPlan.allowedTemplates
+        allowedTemplates: nextFlowPlan.allowedTemplates,
+        forceSingleDigitAddSub: nextFlowPlan.forceSingleDigitAddSub
       }
     );
     setRun({
@@ -2387,6 +2427,7 @@ export default function App() {
 
   const leaderboardMetricIcon = leaderboardMode === 'all_time' ? '☄️' : leaderboardMode === 'best_run' ? '🚀' : '🏆';
   const leaderboardMetricLabel = leaderboardMode === 'all_time' ? 'Stars' : leaderboardMode === 'best_run' ? 'Best Run' : 'Trophies';
+  const networkLeaderboardRows = networkLeaderboardRowsByMode[leaderboardMode] ?? null;
 
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
@@ -2403,7 +2444,8 @@ export default function App() {
         extensionsSolved: state.totals.extensionsSolved
       }
     );
-    return networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
+    const sourceRows = networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
+    return filterLeaderboardRowsForMode(sourceRows, leaderboardMode);
   }, [leaderboardMode, networkLeaderboardRows, state.totals, state.user]);
 
   const leaderboard = useMemo(() => {
@@ -2449,6 +2491,7 @@ export default function App() {
     }));
     const found = ranked.find((entry) => entry.userId === userId || entry.username === state.user?.username);
     if (!found) return null;
+    if (getLeaderboardPrimaryValue(found, leaderboardMode) <= 0) return null;
 
     return {
       rank: found.rank,
@@ -2477,16 +2520,23 @@ export default function App() {
     isMobileViewport &&
     (screen === 'run' || (screen === 'home' && !homeNavRevealed) || isTextEntryFocused);
   const showGamePhasesPanel = false;
-  const currentFlowTutorSteps = run.currentFlow ? getFlowTutorSteps(run.currentFlow) : [];
+  const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
   const flowHasChoices = (run.currentFlow?.choices?.length ?? 0) > 0;
   const puzzleInputMode = run.currentPuzzle ? getPuzzleInputMode(run.currentPuzzle) : 'short_text';
   const puzzleHasChoices = puzzleInputMode === 'choice';
-  const currentPuzzleTutorSteps = run.currentPuzzle ? getPuzzleTutorSteps(run.currentPuzzle) : [];
+  const currentPuzzleCoachPlan = run.currentPuzzle ? buildPuzzleCoachPlan(run.currentPuzzle) : null;
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
   const activeBonus = run.bonusChallenge ?? fallbackBonusChallenge;
-  const currentBonusTutorSteps = (activeBonus.solutionSteps ?? []).map((step, index) => `Step ${index + 1}: ${step}`);
+  const currentBonusCoachPlan = buildBonusCoachPlan({
+    difficulty: activeBonus.difficulty,
+    label: activeBonus.label,
+    puzzleType: activeBonus.puzzleType,
+    prompt: activeBonus.prompt,
+    hintLadder: activeBonus.hintLadder,
+    solutionSteps: activeBonus.solutionSteps
+  });
   const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
   const bonusBefore = run.brainScore;
@@ -2529,24 +2579,125 @@ export default function App() {
     );
   };
 
-  const renderHintStack = (hints: string[], shownCount: number) => {
-    if (shownCount <= 0 || hints.length === 0) return null;
-    const cappedCount = Math.min(shownCount, hints.length);
-    const latestHint = hints[cappedCount - 1];
+  const markCoachUse = (revealedCount: number, maxCount: number) => {
+    setRun((prev) => ({
+      ...prev,
+      currentHints: Math.min(Math.max(prev.currentHints, revealedCount), maxCount)
+    }));
+  };
+
+  const openCoach = (mode: 'quick' | 'steps', maxCount: number) => {
+    setShowTutor(true);
+    setCoachMode(mode);
+    if (mode === 'steps') {
+      setTutorStep(0);
+    }
+    markCoachUse(1, maxCount);
+  };
+
+  const renderCoachPanel = (
+    coachPlan: CoachPlan | null,
+    coachVisual: CoachVisualData | null,
+    panelLabel: string,
+    maxCount: number
+  ) => {
+    if (!showTutor || !coachPlan) return null;
+    const stepCount = Math.max(coachPlan.steps.length, 1);
+    const stepIndex = Math.min(tutorStep, stepCount - 1);
+    const shownCount = Math.min(run.currentHints, stepCount);
+
     return (
-      <div className="hint-stack">
-        {cappedCount > 1 && (
-          <div className="hint-chip-row" aria-label={`Hint progress ${cappedCount} of ${hints.length}`}>
-            {Array.from({ length: cappedCount }, (_, index) => (
-              <span key={`hint-chip-${index + 1}`} className={`hint-chip ${index === cappedCount - 1 ? 'active' : ''}`}>
-                Hint {index + 1}{index === cappedCount - 1 ? '' : ' ✓'}
-              </span>
-            ))}
-          </div>
+      <div className="tutor-panel coach-panel">
+        <p className="tutor-label">{panelLabel}</p>
+        <div className="coach-mode-tabs" role="tablist" aria-label="Coach mode">
+          <button
+            type="button"
+            className={`coach-mode-tab ${coachMode === 'quick' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={coachMode === 'quick'}
+            onClick={() => {
+              setCoachMode('quick');
+              markCoachUse(1, maxCount);
+            }}
+          >
+            Quick hint
+          </button>
+          <button
+            type="button"
+            className={`coach-mode-tab ${coachMode === 'steps' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={coachMode === 'steps'}
+            onClick={() => {
+              setCoachMode('steps');
+              setTutorStep(0);
+              markCoachUse(1, maxCount);
+            }}
+          >
+            Step-by-step
+          </button>
+        </div>
+
+        {coachVisual && <CoachVisual visual={coachVisual} />}
+
+        {coachMode === 'quick' ? (
+          <>
+            <p className="hint-box">{coachPlan.quickHint}</p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setCoachMode('steps');
+                setTutorStep(0);
+                markCoachUse(1, maxCount);
+              }}
+            >
+              Show steps
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="hint-stack">
+              {shownCount > 1 && (
+                <div className="hint-chip-row" aria-label={`Step progress ${shownCount} of ${stepCount}`}>
+                  {Array.from({ length: shownCount }, (_, index) => (
+                    <span key={`coach-step-chip-${index + 1}`} className={`hint-chip ${index === stepIndex ? 'active' : ''}`}>
+                      Step {index + 1}{index === stepIndex ? '' : ' ✓'}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="tutor-step">Step {stepIndex + 1}: {coachPlan.steps[stepIndex] ?? coachPlan.quickHint}</p>
+            </div>
+            <div className="btn-row">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  const next = Math.max(stepIndex - 1, 0);
+                  setTutorStep(next);
+                  markCoachUse(next + 1, maxCount);
+                }}
+                disabled={stepIndex === 0}
+              >
+                Back
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const next = Math.min(stepIndex + 1, stepCount - 1);
+                  setTutorStep(next);
+                  markCoachUse(next + 1, maxCount);
+                }}
+                disabled={stepIndex >= stepCount - 1}
+              >
+                Next Step
+              </button>
+            </div>
+          </>
         )}
-        <p className="hint-box">
-          Hint {cappedCount}: {latestHint}
-        </p>
+
+        {coachPlan.checkTip && <p className="coach-check-tip">Check: {coachPlan.checkTip}</p>}
+        <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
+          Close
+        </button>
       </div>
     );
   };
@@ -2834,57 +2985,12 @@ export default function App() {
             <div className="helper-actions">
               <button
                 className="btn btn-secondary utility-btn"
-                onClick={() => {
-                  setShowTutor(true);
-                  setTutorStep(0);
-                }}
+                onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
               >
-                <span aria-hidden="true">🧑‍🏫</span> Teach me
+                <span aria-hidden="true">🧠</span> Help
               </button>
-              {run.currentHints < run.currentFlow.hints.length && (
-                <button
-                  className="btn btn-secondary utility-btn"
-                  onClick={() =>
-                    setRun({
-                      ...run,
-                      currentHints: Math.min(run.currentHints + 1, run.currentFlow?.hints.length ?? 0)
-                    })
-                  }
-                >
-                  <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
-                </button>
-              )}
             </div>
-            {renderHintStack(run.currentFlow.hints, run.currentHints)}
-
-            {showTutor && (
-              <div className="tutor-panel">
-                <p className="tutor-label">Mini Coach</p>
-                {currentFlowCoachVisual && <CoachVisual visual={currentFlowCoachVisual} />}
-                <p className="tutor-step">{currentFlowTutorSteps[tutorStep]}</p>
-                <div className="btn-row">
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setTutorStep((step) => Math.max(step - 1, 0))}
-                    disabled={tutorStep === 0}
-                  >
-                    Back
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() =>
-                      setTutorStep((step) => Math.min(step + 1, currentFlowTutorSteps.length - 1))
-                    }
-                    disabled={tutorStep >= currentFlowTutorSteps.length - 1}
-                  >
-                    Next Step
-                  </button>
-                </div>
-                <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
-                  Got it
-                </button>
-              </div>
-            )}
+            {renderCoachPanel(currentFlowCoachPlan, currentFlowCoachVisual, 'Coach', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
 
             {renderScratchpad('flow')}
           </>
@@ -2957,51 +3063,19 @@ export default function App() {
             <div className="helper-actions puzzle-helper-actions">
               <button
                 className="btn btn-secondary utility-btn"
-                onClick={() => {
-                  setShowTutor(true);
-                  setTutorStep(0);
-                }}
+                onClick={() =>
+                  openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
+                }
               >
-                <span aria-hidden="true">🧑‍🏫</span> Teach me
-              </button>
-              <button
-                className="btn btn-secondary utility-btn"
-                onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
-                disabled={run.currentHints >= MAX_PUZZLE_HINTS}
-              >
-                <span aria-hidden="true">😉</span> Hint
+                <span aria-hidden="true">🧠</span> Help
               </button>
             </div>
             <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
-            {renderHintStack(run.currentPuzzle.hint_ladder, run.currentHints)}
-
-            {showTutor && (
-              <div className="tutor-panel">
-                <p className="tutor-label">Mini Coach</p>
-                {currentPuzzleCoachVisual && <CoachVisual visual={currentPuzzleCoachVisual} />}
-                <p className="tutor-step">{currentPuzzleTutorSteps[tutorStep]}</p>
-                <div className="btn-row">
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setTutorStep((step) => Math.max(step - 1, 0))}
-                    disabled={tutorStep === 0}
-                  >
-                    Back
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() =>
-                      setTutorStep((step) => Math.min(step + 1, currentPuzzleTutorSteps.length - 1))
-                    }
-                    disabled={tutorStep >= currentPuzzleTutorSteps.length - 1}
-                  >
-                    Next Step
-                  </button>
-                </div>
-                <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
-                  Got it
-                </button>
-              </div>
+            {renderCoachPanel(
+              currentPuzzleCoachPlan,
+              currentPuzzleCoachVisual,
+              'Coach',
+              currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS
             )}
 
             {renderScratchpad('puzzle')}
@@ -3071,52 +3145,14 @@ export default function App() {
                 <div className="helper-actions puzzle-helper-actions">
                   <button
                     className="btn btn-secondary utility-btn"
-                    onClick={() => {
-                      setShowTutor(true);
-                      setTutorStep(0);
-                    }}
+                    onClick={() =>
+                      openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
+                    }
                   >
-                    <span aria-hidden="true">🧑‍🏫</span> Teach me
-                  </button>
-                  <button
-                    className="btn btn-secondary utility-btn"
-                    onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
-                    disabled={run.currentHints >= MAX_PUZZLE_HINTS}
-                  >
-                    <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
+                    <span aria-hidden="true">🧠</span> Help
                   </button>
                 </div>
-                {renderHintStack(activeBonus.hintLadder, run.currentHints)}
-
-                {showTutor && (
-                  <div className="tutor-panel">
-                    <p className="tutor-label">Mini Boss Coach</p>
-                    <p className="tutor-step">
-                      {currentBonusTutorSteps[Math.min(tutorStep, Math.max(currentBonusTutorSteps.length - 1, 0))] ?? 'Step 1: Break it into small parts.'}
-                    </p>
-                    <div className="btn-row">
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => setTutorStep((step) => Math.max(step - 1, 0))}
-                        disabled={tutorStep === 0}
-                      >
-                        Back
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() =>
-                          setTutorStep((step) => Math.min(step + 1, Math.max(currentBonusTutorSteps.length - 1, 0)))
-                        }
-                        disabled={tutorStep >= currentBonusTutorSteps.length - 1}
-                      >
-                        Next Step
-                      </button>
-                    </div>
-                    <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
-                      Got it
-                    </button>
-                  </div>
-                )}
+                {renderCoachPanel(currentBonusCoachPlan, null, 'Mini Boss Coach', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))}
 
                 {renderScratchpad('boss')}
               </>

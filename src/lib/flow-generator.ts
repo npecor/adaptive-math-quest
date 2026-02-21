@@ -17,6 +17,9 @@ const shouldDebugFlowDifficulty = () => {
 };
 
 type BuiltFlow = Omit<FlowItem, 'id' | 'difficulty' | 'type'> & { signature: string };
+type AddSubBuildOptions = {
+  singleDigitOnly?: boolean;
+};
 
 type Template = {
   key: string;
@@ -150,7 +153,50 @@ const buildBreakApartPlan = (left: number, right: number): BreakApartPlan => {
   };
 };
 
-const createAddSub = (difficulty: number): BuiltFlow => {
+const createAddSub = (difficulty: number, options: AddSubBuildOptions = {}): BuiltFlow => {
+  if (options.singleDigitOnly) {
+    const isAdd = Math.random() < 0.5;
+    if (isAdd) {
+      const a = randInt(0, 9);
+      const b = randInt(0, 9);
+      const result = a + b;
+      return {
+        signature: `addsub-sd-add-${a}-${b}`,
+        template: 'add_sub',
+        shapeSignature: 'addsub_add_single_digit',
+        tags: ['add_sub'],
+        format: 'numeric_input',
+        prompt: `${a} + ${b} = ?`,
+        answer: String(result),
+        hints: [
+          `Start with ${a}, then count up ${b} more.`,
+          `If it helps, use fingers or a number line to count each step.`,
+          `Check: ${a} + ${b} = ${result}.`
+        ],
+        solution_steps: [`${a} + ${b} = ${result}.`, `Answer: ${result}.`]
+      };
+    }
+
+    const left = randInt(1, 9);
+    const right = randInt(0, left);
+    const result = left - right;
+    return {
+      signature: `addsub-sd-sub-${left}-${right}`,
+      template: 'add_sub',
+      shapeSignature: 'addsub_sub_single_digit',
+      tags: ['add_sub'],
+      format: 'numeric_input',
+      prompt: `${left} - ${right} = ?`,
+      answer: String(result),
+      hints: [
+        `Start at ${left} and take away ${right}.`,
+        `Count backward ${right} steps from ${left}.`,
+        `Check: ${result} + ${right} = ${left}.`
+      ],
+      solution_steps: [`${left} - ${right} = ${result}.`, `Answer: ${result}.`]
+    };
+  }
+
   const band = toBand(difficulty);
   const isAdd = Math.random() < 0.5;
   const allowNegative = difficulty >= 980 && Math.random() < 0.2;
@@ -924,12 +970,16 @@ const buildCandidate = (
   rating: number,
   options: {
     allowTrivialForHighRating?: boolean;
+    forceSingleDigitAddSub?: boolean;
   } = {}
 ): FlowItem => {
   for (let attempts = 0; attempts < 12; attempts += 1) {
     const difficulty = clamp(Math.round(targetDifficulty + randInt(-45, 45)), 800, 1700);
     const template = pickTemplate(difficulty);
-    const built = template.build(difficulty);
+    const built =
+      template.key === 'add_sub'
+        ? createAddSub(difficulty, { singleDigitOnly: options.forceSingleDigitAddSub })
+        : template.build(difficulty);
     const rawCandidate: FlowItem = {
       id: `${template.key}-${built.signature}`,
       type: 'flow',
@@ -961,7 +1011,10 @@ const buildCandidate = (
   const fallbackDifficulty = clamp(Math.round(targetDifficulty), 800, 1700);
   for (let attempts = 0; attempts < 20; attempts += 1) {
     const fallbackTemplate = pickTemplate(fallbackDifficulty);
-    const fallback = fallbackTemplate.build(fallbackDifficulty);
+    const fallback =
+      fallbackTemplate.key === 'add_sub'
+        ? createAddSub(fallbackDifficulty, { singleDigitOnly: options.forceSingleDigitAddSub })
+        : fallbackTemplate.build(fallbackDifficulty);
     const rawCandidate: FlowItem = {
       id: `${fallbackTemplate.key}-${fallback.signature}`,
       type: 'flow',
@@ -991,7 +1044,9 @@ const buildCandidate = (
   }
 
   // Guaranteed integer-safe emergency fallback.
-  const emergency = createAddSub(Math.max(900, fallbackDifficulty));
+  const emergency = createAddSub(Math.max(900, fallbackDifficulty), {
+    singleDigitOnly: options.forceSingleDigitAddSub
+  });
   const emergencyRaw: FlowItem = {
     id: `add_sub-${emergency.signature}`,
     type: 'flow',
@@ -1021,12 +1076,16 @@ export const generateAdaptiveFlowItem = (
     targetProfile?: TargetDifficultyProfile;
     maxJumpFromPrev?: number;
     allowedTemplates?: string[];
+    forceSingleDigitAddSub?: boolean;
   } = {}
 ): FlowItem => {
   const target = chooseTargetDifficulty(rating, correctStreak, options.targetProfile ?? 'default');
   const allowTrivialForHighRating = options.targetProfile === 'training_flow';
   const candidates = Array.from({ length: FLOW_SELECTION_SETTINGS.candidateCount }, () =>
-    buildCandidate(target, rating, { allowTrivialForHighRating })
+    buildCandidate(target, rating, {
+      allowTrivialForHighRating,
+      forceSingleDigitAddSub: options.forceSingleDigitAddSub
+    })
   );
   const fresh = candidates.filter((candidate) => !usedSignatures.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
@@ -1057,7 +1116,10 @@ export const generateAdaptiveFlowItem = (
     for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 40; attempt += 1) {
       const baselineTarget = prevDifficulty ?? target;
       const constraintRating = prevDifficulty !== undefined ? Math.min(rating, prevDifficulty) : rating;
-      const retry = buildCandidate(baselineTarget, constraintRating, { allowTrivialForHighRating: true });
+      const retry = buildCandidate(baselineTarget, constraintRating, {
+        allowTrivialForHighRating: true,
+        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+      });
       if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
       if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
       if (
@@ -1072,7 +1134,9 @@ export const generateAdaptiveFlowItem = (
 
     if (!options.allowedTemplates?.length || options.allowedTemplates.includes('add_sub')) {
       const emergencyBase = clamp(prevDifficulty ?? target, 800, 940);
-      const emergency = createAddSub(emergencyBase);
+      const emergency = createAddSub(emergencyBase, {
+        singleDigitOnly: options.forceSingleDigitAddSub
+      });
       const emergencyRaw: FlowItem = {
         id: `add_sub-${emergency.signature}`,
         type: 'flow',
@@ -1120,7 +1184,10 @@ export const generateAdaptiveFlowItem = (
   if (violatesTemplate || violatesMaxDifficulty || violatesJump) {
     for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 20; attempt += 1) {
       const baselineTarget = prevDifficulty ?? target;
-      const retry = buildCandidate(baselineTarget, rating, { allowTrivialForHighRating });
+      const retry = buildCandidate(baselineTarget, rating, {
+        allowTrivialForHighRating,
+        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+      });
 
       if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
       if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
@@ -1142,7 +1209,10 @@ export const generateAdaptiveFlowItem = (
     Math.abs(chosen.difficulty - prevDifficulty) > options.maxJumpFromPrev
   ) {
     for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 30; attempt += 1) {
-      const retry = buildCandidate(prevDifficulty, Math.min(rating, prevDifficulty), { allowTrivialForHighRating: true });
+      const retry = buildCandidate(prevDifficulty, Math.min(rating, prevDifficulty), {
+        allowTrivialForHighRating: true,
+        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+      });
       if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
       if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
       if (Math.abs(retry.difficulty - prevDifficulty) <= options.maxJumpFromPrev) return retry;
@@ -1151,7 +1221,9 @@ export const generateAdaptiveFlowItem = (
     // Deterministic safety net for constrained modes (e.g. training) to prevent abrupt spikes.
     if (!options.allowedTemplates?.length || options.allowedTemplates.includes('add_sub')) {
       const emergencyBase = clamp(prevDifficulty, 800, 980);
-      const emergency = createAddSub(emergencyBase);
+      const emergency = createAddSub(emergencyBase, {
+        singleDigitOnly: options.forceSingleDigitAddSub
+      });
       const emergencyRaw: FlowItem = {
         id: `add_sub-${emergency.signature}`,
         type: 'flow',

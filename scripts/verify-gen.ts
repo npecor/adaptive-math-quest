@@ -8,6 +8,7 @@ import {
   updateTrainingRating
 } from '../src/lib/adaptive';
 import { buildBonusTarget, createBonusChallenge, type BonusChallenge } from '../src/lib/bonus-generator';
+import { buildFlowCoachPlan, buildPuzzleCoachPlan } from '../src/lib/coach-plan';
 import { analyzeFlowItem, difficultyLabelFromScore, type DifficultyLabel } from '../src/lib/difficulty-tags';
 import { FLOW_TEMPLATE_CATALOG, generateAdaptiveFlowItem } from '../src/lib/flow-generator';
 import { generateAdaptivePuzzleItem } from '../src/lib/puzzle-generator';
@@ -32,6 +33,7 @@ const percent = (n: number, total: number) => ((n / total) * 100).toFixed(2);
 const REWRITE_PATTERN = /(=\s*[0-9() +×x*\-/]+[+\-]\s*[0-9() +×x*\-/]+)|(\(\d+\s*[+\-]\s*\d+\))|(\bdouble\b)/i;
 const BREAK_WORD_PATTERN = /\b(split|break)\b/i;
 const HARD_PLUS_LABELS = new Set<DifficultyLabel>(['Hard', 'Expert', 'Master']);
+const COACH_BANNED_TERMS = /\binverse operation|decompose|undo\s*\+?\d*|factors?\b/i;
 const FAST_MATH_STYLE_PUZZLE = [
   /which is (bigger|greater).*\d+\/\d+/i,
   /\b\d+\s*\/\s*\d+\s*(or|vs)\s*\d+\s*\/\s*\d+/i,
@@ -89,6 +91,30 @@ const getUglyFlags = (item: FlowItem, previous: FlowItem | null): string[] => {
   if (item.prompt.length < 8) flags.push('too-short');
   if (hasDecimal(item.prompt) || hasDecimal(item.answer)) flags.push('decimal');
   return flags;
+};
+
+const validateCoachPlan = (
+  context: string,
+  plan: { quickHint: string; steps: string[] },
+  failures: string[]
+) => {
+  const quick = plan.quickHint.trim();
+  if (!quick) failures.push(`Coach quick hint missing: ${context}`);
+  if (quick.length < 8) failures.push(`Coach quick hint too short: ${context} :: "${quick}"`);
+  if (COACH_BANNED_TERMS.test(quick)) failures.push(`Coach quick hint has banned wording: ${context} :: "${quick}"`);
+  if (!Array.isArray(plan.steps) || plan.steps.length < 2) {
+    failures.push(`Coach steps missing progression: ${context}`);
+    return;
+  }
+  if (plan.steps.length > 4) failures.push(`Coach steps exceed 4: ${context}`);
+  const normalizedSteps = plan.steps.map((step) => step.trim().toLowerCase());
+  if (new Set(normalizedSteps).size !== normalizedSteps.length) {
+    failures.push(`Coach steps duplicate wording: ${context} :: ${plan.steps.join(' | ')}`);
+  }
+  for (const step of plan.steps) {
+    if (step.trim().length < 8) failures.push(`Coach step too short: ${context} :: "${step}"`);
+    if (COACH_BANNED_TERMS.test(step)) failures.push(`Coach step has banned wording: ${context} :: "${step}"`);
+  }
 };
 
 function printDistributionTable(title: string, counts: Record<string, number>, total: number, limit = 999): void {
@@ -214,6 +240,8 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
       if (!Array.isArray(item.hints) || item.hints.length !== 3) {
         failures.push(`Hints length != 3 for ${item.id}`);
       }
+      const coachPlan = buildFlowCoachPlan(item);
+      validateCoachPlan(`flow:${item.id}`, coachPlan, failures);
       if (Array.isArray(item.hints)) {
         const normalizedHints = item.hints.map((hint) => hint.trim().toLowerCase());
         if (new Set(normalizedHints).size !== normalizedHints.length) {
@@ -331,6 +359,75 @@ function printFlowSamples(): { failures: string[] } {
   return { failures };
 }
 
+function printCoachSamples(): { failures: string[] } {
+  const failures: string[] = [];
+  console.log(`\n=== Coach Samples (shared quick hint + steps) ===`);
+  const used = new Set<string>();
+  let prevDifficulty: number | undefined;
+  let recentTemplates: string[] = [];
+  let recentShapes: string[] = [];
+  let recentPatternTags: string[] = [];
+  let correctStreak = 0;
+  const flowPrinted = new Set<string>();
+
+  console.log('\n-- Flow coach samples --');
+  let flowCount = 0;
+  for (let i = 0; i < 400 && flowCount < 12; i += 1) {
+    const rating = TIERS[i % TIERS.length].rating;
+    const item = generateAdaptiveFlowItem(
+      rating,
+      used,
+      prevDifficulty,
+      recentTemplates,
+      recentShapes,
+      recentPatternTags,
+      correctStreak
+    );
+    const key = `${item.template}:${inferFlowLabel(item)}`;
+    if (flowPrinted.has(key)) continue;
+    flowPrinted.add(key);
+    const plan = buildFlowCoachPlan(item);
+    validateCoachPlan(`flow-sample:${item.id}`, plan, failures);
+    console.log(
+      `  - ${item.template} | ${inferFlowLabel(item)} d=${item.difficulty} | quick="${plan.quickHint}" | steps=${plan.steps.join(' -> ')}`
+    );
+    flowCount += 1;
+
+    const patternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
+    recentTemplates = [...recentTemplates, item.template].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentShapes = [...recentShapes, item.shapeSignature].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentPatternTags = [...recentPatternTags, ...patternTags].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    prevDifficulty = item.difficulty;
+    used.add(item.id);
+    if (item.difficulty <= rating + 25) correctStreak = Math.min(correctStreak + 1, 8);
+    else correctStreak = 0;
+  }
+
+  console.log('\n-- Puzzle coach samples --');
+  const puzzlePrinted = new Set<string>();
+  const puzzleUsed = new Set<string>();
+  let puzzlePrevDifficulty: number | undefined;
+  let puzzleCount = 0;
+  for (let i = 0; i < 300 && puzzleCount < 10; i += 1) {
+    const rating = i % 3 === 0 ? 1050 : i % 3 === 1 ? 1250 : 1450;
+    const puzzle = generateAdaptivePuzzleItem(rating, puzzleUsed, puzzlePrevDifficulty);
+    puzzlePrevDifficulty = puzzle.difficulty;
+    puzzleUsed.add(puzzle.id);
+    if (i % 10 === 0) puzzleUsed.clear();
+    const key = `${puzzle.puzzleType ?? 'unknown'}:${difficultyLabelFromScore(puzzle.difficulty)}`;
+    if (puzzlePrinted.has(key)) continue;
+    puzzlePrinted.add(key);
+    const plan = buildPuzzleCoachPlan(puzzle);
+    validateCoachPlan(`puzzle-sample:${puzzle.id}`, plan, failures);
+    console.log(
+      `  - ${puzzle.puzzleType ?? 'unknown'} | ${difficultyLabelFromScore(puzzle.difficulty)} d=${puzzle.difficulty} | quick="${plan.quickHint}" | steps=${plan.steps.join(' -> ')}`
+    );
+    puzzleCount += 1;
+  }
+
+  return { failures };
+}
+
 function runPuzzleSanity(): { failures: string[] } {
   const failures: string[] = [];
   const templateCounts: Record<string, number> = {};
@@ -382,6 +479,8 @@ function runPuzzleSanity(): { failures: string[] } {
     if (!Array.isArray(puzzle.solution_steps) || puzzle.solution_steps.length !== 3) {
       failures.push(`Puzzle Teach Me steps are not 3-step: ${puzzle.id}`);
     }
+    const puzzleCoachPlan = buildPuzzleCoachPlan(puzzle);
+    validateCoachPlan(`puzzle:${puzzle.id}`, puzzleCoachPlan, failures);
 
     if (startsWithTemplate(puzzle.id, 'spatial_area') || startsWithTemplate(puzzle.id, 'area_yn')) {
       const yesNo = puzzle.core_answer.toLowerCase();
@@ -627,6 +726,7 @@ function main(): void {
 
   const flowStats = runFlowDistributionAndAssertions();
   const flowSamples = printFlowSamples();
+  const coachSamples = printCoachSamples();
   const fractionBenchmarkCheck = runFractionBenchmarkLabelCheck();
   const trainingStats = runTrainingModeSanity();
   const puzzleStats = runPuzzleSanity();
@@ -634,6 +734,7 @@ function main(): void {
   const failures = [
     ...flowStats.failures,
     ...flowSamples.failures,
+    ...coachSamples.failures,
     ...fractionBenchmarkCheck.failures,
     ...trainingStats.failures,
     ...puzzleStats.failures,

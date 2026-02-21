@@ -48,6 +48,9 @@ export const getLeaderboardPrimaryValue = (row: LeaderboardRow, mode: Leaderboar
   return row.allTimeStars;
 };
 
+export const filterLeaderboardRowsForMode = (rows: LeaderboardRow[], mode: LeaderboardMode) =>
+  rows.filter((row) => getLeaderboardPrimaryValue(row, mode) > 0);
+
 export const sortLeaderboardRows = (rows: LeaderboardRow[], mode: LeaderboardMode) =>
   [...rows].sort((a, b) => {
     if (mode === 'best_run') {
@@ -142,5 +145,8 @@ export const buildLeaderboardEntries = (
     merged.set(rival.userId, rival);
   }
 
-  return sortLeaderboardRows([...merged.values()], mode).map((row, index) => ({ ...row, rank: index + 1 }));
+  return sortLeaderboardRows(filterLeaderboardRowsForMode([...merged.values()], mode), mode).map((row, index) => ({
+    ...row,
+    rank: index + 1
+  }));
 };

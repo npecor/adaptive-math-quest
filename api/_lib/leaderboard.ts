@@ -208,14 +208,21 @@ export const normalizeBestRunScores = async (supabase: SupabaseClient) => {
 export const buildSortQuery = (supabase: SupabaseClient, mode: LeaderboardMode, limit: number) => {
   let query = supabase.from(TABLE).select('*').limit(limit);
   if (mode === 'best_run') {
-    query = query.order('best_run_stars', { ascending: false }).order('all_time_stars', { ascending: false });
+    query = query
+      .gt('best_run_stars', 0)
+      .order('best_run_stars', { ascending: false })
+      .order('all_time_stars', { ascending: false });
   } else if (mode === 'trophies') {
     query = query
+      .gt('trophies_earned', 0)
       .order('trophies_earned', { ascending: false })
       .order('extensions_solved', { ascending: false })
       .order('all_time_stars', { ascending: false });
   } else {
-    query = query.order('all_time_stars', { ascending: false }).order('best_run_stars', { ascending: false });
+    query = query
+      .gt('all_time_stars', 0)
+      .order('all_time_stars', { ascending: false })
+      .order('best_run_stars', { ascending: false });
   }
   return query.order('updated_at', { ascending: true });
 };
