@@ -1,4 +1,5 @@
 import { chooseTargetDifficulty } from './adaptive';
+import { difficultyLabelFromScore, type DifficultyLabel } from './difficulty-tags';
 import type { PuzzleItem } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -70,6 +71,7 @@ const FAST_MATH_STYLE_PUZZLE = [
   /^\s*(solve|what is)\s*:?\s*\d+\s*[+\-×x÷/*]\s*\d+/i,
   /^\s*\d+\s*[+\-×x÷/*]\s*\d+\s*=\s*\?\s*$/i
 ];
+const HARD_LABELS = new Set<DifficultyLabel>(['Hard', 'Expert', 'Master']);
 
 const extensions = (one: string, two: string) => [
   { label: 'Bonus 1', prompt: one, answer: 'varies' },
@@ -731,7 +733,7 @@ const templates: PuzzleTemplate[] = [
   }
 ];
 
-const isFastMathLike = (candidate: PuzzleItem): boolean => {
+export const isFastMathLikePuzzle = (candidate: Pick<PuzzleItem, 'core_prompt'>): boolean => {
   const prompt = candidate.core_prompt.trim();
   return FAST_MATH_STYLE_PUZZLE.some((pattern) => pattern.test(prompt));
 };
@@ -761,7 +763,7 @@ const isKidSafePuzzle = (candidate: PuzzleItem): boolean => {
 
   if (textFields.some((text) => bannedAlgebraNotation.test(text))) return false;
   if (candidate.id.startsWith('spatial_area-') && textFields.some((text) => hasDecimal(text))) return false;
-  if (isFastMathLike(candidate)) return false;
+  if (isFastMathLikePuzzle(candidate)) return false;
   if ((candidate.hint_ladder?.length ?? 0) !== 3) return false;
   if ((candidate.solution_steps?.length ?? 0) !== 3) return false;
   return true;
@@ -834,4 +836,114 @@ export const generateAdaptivePuzzleChoices = (rating: number, usedIds: Set<strin
     choices.push(next);
   }
   return choices;
+};
+
+const countPromptStatements = (text: string) =>
+  text
+    .split(/[.!?\n]+/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean).length;
+
+const hasMultiStepWordSignals = (text: string) =>
+  /\bthen\b|\bafter\b|\bbefore\b|\bleft\b|\bremain\b|\btotal\b|\baltogether\b|\bnow\b/i.test(text);
+
+const meetsBonusHardnessSignal = (puzzle: PuzzleItem, label: DifficultyLabel): boolean => {
+  const puzzleType = puzzle.puzzleType ?? 'logic';
+  if (!HARD_LABELS.has(label)) return false;
+
+  if (puzzleType === 'constraint') return true;
+
+  if (puzzleType === 'logic') {
+    const statementCount = countPromptStatements(puzzle.core_prompt);
+    return statementCount >= 3 || puzzle.tags.includes('deduction');
+  }
+
+  if (puzzleType === 'spatial') {
+    return puzzle.tags.includes('reasoning') || /no stretching|outer edge|border/i.test(puzzle.core_prompt);
+  }
+
+  if (puzzleType === 'pattern') {
+    return puzzle.difficulty >= 1200 || /rule|pattern|next/i.test(puzzle.core_prompt);
+  }
+
+  if (puzzleType === 'word') {
+    return hasMultiStepWordSignals(puzzle.core_prompt) && puzzle.difficulty >= 1220;
+  }
+
+  return false;
+};
+
+const bonusScore = (puzzle: PuzzleItem): number => {
+  const puzzleType = puzzle.puzzleType ?? 'logic';
+  const typeBoost =
+    puzzleType === 'constraint'
+      ? 100
+      : puzzleType === 'logic'
+        ? 65
+        : puzzleType === 'spatial'
+          ? 55
+          : puzzleType === 'pattern'
+            ? 40
+            : 20;
+  const statementBoost = countPromptStatements(puzzle.core_prompt) * 8;
+  return puzzle.difficulty + typeBoost + statementBoost;
+};
+
+export const generateBonusPuzzle = (
+  rating: number,
+  runMedianDifficulty: number,
+  bonusTargetDifficulty: number
+): PuzzleItem => {
+  const gateDifficulty = clamp(Math.max(1120, runMedianDifficulty + 90, bonusTargetDifficulty - 30), 980, 1700);
+  const seededRating = clamp(Math.max(rating, gateDifficulty), 980, 1700);
+  const used = new Set<string>();
+  const accepted: PuzzleItem[] = [];
+
+  for (let attempts = 0; attempts < 220; attempts += 1) {
+    const candidate = generateAdaptivePuzzleItem(seededRating, used);
+    used.add(candidate.id);
+    if (used.size > 36 && attempts % 9 === 0) used.clear();
+
+    if (isFastMathLikePuzzle(candidate)) continue;
+    const label = difficultyLabelFromScore(candidate.difficulty);
+    if (candidate.difficulty < gateDifficulty) continue;
+    if (!meetsBonusHardnessSignal(candidate, label)) continue;
+    accepted.push(candidate);
+    if (accepted.length >= 30) break;
+  }
+
+  if (accepted.length > 0) {
+    const sorted = [...accepted].sort((a, b) => bonusScore(b) - bonusScore(a));
+    const topPool = sorted.slice(0, Math.min(8, sorted.length));
+    return pick(topPool);
+  }
+
+  return {
+    id: 'constraint_switch-bonus-fallback',
+    type: 'puzzle',
+    difficulty: 1360,
+    puzzleType: 'constraint',
+    tags: ['constraint', 'logic', 'one_chance'],
+    title: 'Switch Mission',
+    answer_type: 'choice',
+    choices: [
+      'Turn one on for a while, switch it off, turn a second on, then check heat and light.',
+      'Turn all three on, wait, then check only brightness.',
+      'Turn one on and immediately run upstairs.',
+      'Flip random switches quickly and guess.'
+    ],
+    core_prompt: 'Three switches control three lamps in another room. You only get one visit upstairs. What plan works?',
+    core_answer: 'Turn one on for a while, switch it off, turn a second on, then check heat and light.',
+    hint_ladder: [
+      'Use more than just on or off.',
+      'Warm bulbs give extra information after a switch is off.',
+      'Create three states: on, warm-off, and cold-off.'
+    ],
+    solution_steps: [
+      'Turn Switch A on and wait so one bulb becomes warm.',
+      'Turn A off, turn B on, and keep C off before your one trip.',
+      'Upstairs: glowing is B, warm dark is A, cold dark is C.'
+    ],
+    extensions: []
+  };
 };

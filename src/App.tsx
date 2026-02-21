@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { updateRating } from './lib/adaptive';
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
-import { bonusPointsTarget, createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
+import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
 import { fetchLeaderboardHealth, registerPlayer, upsertScore, type LeaderboardMode } from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
@@ -199,6 +199,12 @@ const cleanPuzzlePromptDisplay = (prompt: string) =>
 const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long_text' => {
   if (puzzle.answer_type) return puzzle.answer_type;
   if (getPuzzleAnswerChoices(puzzle.core_answer)) return 'choice';
+  return 'short_text';
+};
+
+const getBonusInputMode = (bonus: BonusChallenge): 'choice' | 'short_text' | 'long_text' => {
+  if (bonus.answerType) return bonus.answerType;
+  if (bonus.choices.length > 0) return 'choice';
   return 'short_text';
 };
 
@@ -1140,10 +1146,8 @@ export default function App() {
     generateAdaptivePuzzleChoices(rating, usedPuzzleIds, 2);
 
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
-    const challenge = runSnapshot.bonusChallenge ?? fallbackBonusChallenge;
-    const doublesFastMath = bonusPointsTarget(challenge, runSnapshot.gameMode) === 'fast_math';
-    const sprint = bossAttempted && doublesFastMath ? runSnapshot.sprintScore * 2 : runSnapshot.sprintScore;
-    const brain = bossAttempted && !doublesFastMath ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
+    const sprint = runSnapshot.sprintScore;
+    const brain = bossAttempted ? runSnapshot.brainScore * 2 : runSnapshot.brainScore;
     const total = sprint + brain;
     const bonusDelta = total - runSnapshot.starsThisRound;
     const finalRunStars = runSnapshot.starsThisRound + Math.max(0, bonusDelta);
@@ -1465,18 +1469,18 @@ export default function App() {
   };
 
   const startBonusRound = () => {
-    const challenge = run.bonusChallenge ?? fallbackBonusChallenge;
-    const targetLabel = bonusPointsTarget(challenge, run.gameMode) === 'fast_math' ? 'fast-math' : 'puzzle';
-    setRun({ ...run, bossStage: 'question' as const });
+    setRun({ ...run, bossStage: 'question' as const, currentHints: 0 });
     setInput('');
-    setFeedback(`Bonus challenge unlocked. Solve it to double your ${targetLabel} points!`);
+    setShowTutor(false);
+    setTutorStep(0);
+    setFeedback('Mini Boss unlocked. Solve it to double your puzzle points!');
     setFeedbackTone('info');
   };
 
   const submitBonusRound = () => {
     if (!input.trim()) return;
     const challenge = run.bonusChallenge ?? fallbackBonusChallenge;
-    const correct = isSmartAnswerMatch(input, [challenge.answer]);
+    const correct = isSmartAnswerMatch(input, [challenge.answer, ...(challenge.acceptAnswers ?? [])]);
     const snapshot: RunState = { ...run, bossStage: 'question' };
     finishRun(correct, snapshot);
   };
@@ -1806,10 +1810,9 @@ export default function App() {
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
   const activeBonus = run.bonusChallenge ?? fallbackBonusChallenge;
-  const bonusDoublesFastMath = bonusPointsTarget(activeBonus, run.gameMode) === 'fast_math';
-  const bonusBefore = bonusDoublesFastMath ? run.sprintScore : run.brainScore;
+  const currentBonusTutorSteps = (activeBonus.solutionSteps ?? []).map((step, index) => `Step ${index + 1}: ${step}`);
+  const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
-  const bonusTargetCopy = bonusDoublesFastMath ? 'fast-math' : 'puzzle';
   const navToRun = () => {
     if (runInProgress) {
       setScreen('run');
@@ -2281,47 +2284,120 @@ export default function App() {
           <>
             {run.bossStage === 'intro' ? (
               <>
-                <h3>Bonus Round: {activeBonus.title}</h3>
-                <p>Try it to double your {bonusTargetCopy} points this game.</p>
+                <h3>Bonus Round: Mini Boss</h3>
+                <p className="muted">Mission type: {activeBonus.puzzleType} • {activeBonus.label}</p>
+                <p>Take on this hard puzzle to double your puzzle points this game.</p>
+                <p className="puzzle-question-prompt"><InlineMathText text={cleanPuzzlePromptDisplay(activeBonus.prompt)} /></p>
                 <div className="btn-row">
-                  <button className="btn btn-primary" onClick={startBonusRound}>Play Bonus Round</button>
+                  <button className="btn btn-primary" onClick={startBonusRound}>Start Mini Boss</button>
                   <button className="btn btn-secondary" onClick={() => finishRun(false)}>Finish Game</button>
                 </div>
                 <p className="muted">Bonus preview: {bonusBefore} → {bonusAfter}</p>
               </>
             ) : (
               <>
-                <h3>Bonus Round: {activeBonus.title}</h3>
+                <h3>Bonus Round: Mini Boss</h3>
+                <p className="muted">{activeBonus.title} • {activeBonus.label}</p>
                 <p className="puzzle-question-prompt"><InlineMathText text={activeBonus.prompt} /></p>
-                <div className="chips">
-                  {activeBonus.choices.map((choice) => (
-                    <button
-                      key={choice}
-                      className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
-                      onClick={() => setInput(choice)}
-                    >
-                      <InlineMathText text={choice} />
-                    </button>
-                  ))}
-                </div>
-                <input
-                  className="math-input"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  placeholder="Your bonus answer"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') submitBonusRound();
-                  }}
-                />
+                {getBonusInputMode(activeBonus) === 'choice' ? (
+                  <div className="chips">
+                    {activeBonus.choices.map((choice) => (
+                      <button
+                        key={choice}
+                        className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
+                        onClick={() => setInput(choice)}
+                      >
+                        <InlineMathText text={cleanChoiceMarker(choice)} />
+                      </button>
+                    ))}
+                  </div>
+                ) : getBonusInputMode(activeBonus) === 'long_text' ? (
+                  <textarea
+                    className="math-input text-area-input"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    placeholder="Write your strategy in one short sentence"
+                    rows={3}
+                  />
+                ) : (
+                  <input
+                    className="math-input"
+                    inputMode={expectsNumericInput(activeBonus.answer, activeBonus.acceptAnswers) ? 'numeric' : 'text'}
+                    pattern={expectsNumericInput(activeBonus.answer, activeBonus.acceptAnswers) ? '[0-9]*' : undefined}
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    placeholder="Your mini boss answer"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') submitBonusRound();
+                    }}
+                  />
+                )}
                 <div className="btn-row">
                   <button className="btn btn-primary" onClick={submitBonusRound} disabled={!input.trim()}>
-                    Submit Bonus Answer
+                    Submit Mini Boss Answer
                   </button>
                   <button className="btn btn-secondary" onClick={() => finishRun(false)}>
                     Skip Bonus
                   </button>
                 </div>
-                <p className="muted">{activeBonus.hint}</p>
+                <div className="helper-actions puzzle-helper-actions">
+                  <button
+                    className="btn btn-secondary utility-btn"
+                    onClick={() => {
+                      setShowTutor(true);
+                      setTutorStep(0);
+                    }}
+                  >
+                    <span aria-hidden="true">🧑‍🏫</span> Teach me
+                  </button>
+                  <button
+                    className="btn btn-secondary utility-btn"
+                    onClick={() => setRun({ ...run, currentHints: Math.min(run.currentHints + 1, MAX_PUZZLE_HINTS) })}
+                    disabled={run.currentHints >= MAX_PUZZLE_HINTS}
+                  >
+                    <span aria-hidden="true">😉</span> {run.currentHints === 0 ? 'Show hint' : 'Next hint'}
+                  </button>
+                </div>
+
+                {run.currentHints > 0 && (
+                  <div className="hint-stack">
+                    {activeBonus.hintLadder.slice(0, run.currentHints).map((hint, index) => (
+                      <p key={hint} className="hint-box">
+                        Hint {index + 1}: {hint}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {showTutor && (
+                  <div className="tutor-panel">
+                    <p className="tutor-label">Mini Boss Coach</p>
+                    <p className="tutor-step">
+                      {currentBonusTutorSteps[Math.min(tutorStep, Math.max(currentBonusTutorSteps.length - 1, 0))] ?? 'Step 1: Break it into small parts.'}
+                    </p>
+                    <div className="btn-row">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setTutorStep((step) => Math.max(step - 1, 0))}
+                        disabled={tutorStep === 0}
+                      >
+                        Back
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() =>
+                          setTutorStep((step) => Math.min(step + 1, Math.max(currentBonusTutorSteps.length - 1, 0)))
+                        }
+                        disabled={tutorStep >= currentBonusTutorSteps.length - 1}
+                      >
+                        Next Step
+                      </button>
+                    </div>
+                    <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
+                      Got it
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </>

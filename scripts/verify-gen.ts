@@ -24,7 +24,6 @@ const percent = (n: number, total: number) => ((n / total) * 100).toFixed(2);
 const REWRITE_PATTERN = /(=\s*[0-9() +×x*\-/]+[+\-]\s*[0-9() +×x*\-/]+)|(\(\d+\s*[+\-]\s*\d+\))|(\bdouble\b)/i;
 const BREAK_WORD_PATTERN = /\b(split|break)\b/i;
 const HARD_PLUS_LABELS = new Set<DifficultyLabel>(['Hard', 'Expert', 'Master']);
-const gcdNumber = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcdNumber(b, a % b));
 const FAST_MATH_STYLE_PUZZLE = [
   /which is (bigger|greater).*\d+\/\d+/i,
   /\b\d+\s*\/\s*\d+\s*(or|vs)\s*\d+\s*\/\s*\d+/i,
@@ -414,12 +413,13 @@ function runFractionBenchmarkLabelCheck(): { failures: string[] } {
 
 function runBonusSanity(): { failures: string[] } {
   const failures: string[] = [];
-  const BONUS_COUNT = 100;
+  const BONUS_COUNT = 50;
   const labelCounts: Record<string, number> = {};
   const templateCounts: Record<string, number> = {};
+  const puzzleTypeCounts: Record<string, number> = {};
+  const samples: string[] = [];
   let hardPlusCount = 0;
-  let aboveMedianCount = 0;
-  let hardPlusOrAboveCount = 0;
+  let fastMathLikeCount = 0;
 
   for (let i = 0; i < BONUS_COUNT; i += 1) {
     const tier = TIERS[i % TIERS.length];
@@ -431,42 +431,34 @@ function runBonusSanity(): { failures: string[] } {
 
     labelCounts[challenge.label] = (labelCounts[challenge.label] ?? 0) + 1;
     templateCounts[challenge.templateKey] = (templateCounts[challenge.templateKey] ?? 0) + 1;
+    puzzleTypeCounts[challenge.puzzleType] = (puzzleTypeCounts[challenge.puzzleType] ?? 0) + 1;
     if (HARD_PLUS_LABELS.has(challenge.label)) hardPlusCount += 1;
-    if (challenge.difficulty >= runMedianDifficulty + 70) aboveMedianCount += 1;
-    if (HARD_PLUS_LABELS.has(challenge.label) || challenge.difficulty >= runMedianDifficulty + 70) {
-      hardPlusOrAboveCount += 1;
+    if (FAST_MATH_STYLE_PUZZLE.some((pattern) => pattern.test(challenge.prompt))) {
+      fastMathLikeCount += 1;
+      failures.push(`Fast-math-like bonus detected: ${challenge.id} :: ${challenge.prompt}`);
     }
 
-    if (challenge.templateKey === 'fraction_compare') {
-      const prompt = challenge.prompt;
-      const match = prompt.match(/(\d+)\/(\d+)\s+or\s+(\d+)\/(\d+)/i);
-      if (!match) failures.push(`Fraction bonus prompt format mismatch: ${challenge.id} :: ${prompt}`);
-      else {
-        const d1 = Number(match[2]);
-        const d2 = Number(match[4]);
-        const sharedLcm = Math.abs(d1 * d2) / Math.max(1, gcdNumber(d1, d2));
-        if (sharedLcm <= 24) failures.push(`Fraction bonus LCM too small (${sharedLcm}) for ${challenge.id}`);
-        if (d1 % d2 === 0 || d2 % d1 === 0) failures.push(`Fraction bonus denominators are multiples (${d1}, ${d2}) for ${challenge.id}`);
-      }
+    if (samples.length < 10) {
+      samples.push(
+        `${String(samples.length + 1).padStart(2, '0')}. [${challenge.puzzleType}/${challenge.templateKey}] ${challenge.label} d=${challenge.difficulty} :: ${challenge.prompt}`
+      );
     }
   }
 
   console.log(`\n=== Bonus Sanity (${BONUS_COUNT} generated bonuses) ===`);
   printDistributionTable('Bonus label distribution', labelCounts, BONUS_COUNT);
+  printDistributionTable('Bonus puzzleType distribution', puzzleTypeCounts, BONUS_COUNT);
   printDistributionTable('Bonus template distribution', templateCounts, BONUS_COUNT);
   console.log(`\n  Hard+ rate: ${percent(hardPlusCount, BONUS_COUNT)}% (${hardPlusCount}/${BONUS_COUNT})`);
-  console.log(
-    `  Above run-median+70 rate: ${percent(aboveMedianCount, BONUS_COUNT)}% (${aboveMedianCount}/${BONUS_COUNT})`
-  );
-  console.log(
-    `  Hard+ OR above-median+70 rate: ${percent(hardPlusOrAboveCount, BONUS_COUNT)}% (${hardPlusOrAboveCount}/${BONUS_COUNT})`
-  );
+  console.log(`  Fast-math-like bonus rate: ${percent(fastMathLikeCount, BONUS_COUNT)}% (${fastMathLikeCount}/${BONUS_COUNT})`);
+  console.log('\n  Bonus samples:');
+  samples.forEach((sample) => console.log(`  ${sample}`));
 
   if (hardPlusCount < BONUS_COUNT * 0.8) {
     failures.push(`Bonus Hard+ rate below threshold: ${hardPlusCount}/${BONUS_COUNT}`);
   }
-  if (hardPlusOrAboveCount < BONUS_COUNT * 0.8) {
-    failures.push(`Bonus Hard+/above-median combined rate below threshold: ${hardPlusOrAboveCount}/${BONUS_COUNT}`);
+  if (fastMathLikeCount > 0) {
+    failures.push(`Fast-math-like bonus prompts detected: ${fastMathLikeCount}/${BONUS_COUNT}`);
   }
 
   return { failures };
