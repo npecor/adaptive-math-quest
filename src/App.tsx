@@ -11,7 +11,7 @@ import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
@@ -62,6 +62,7 @@ const PUZZLE_TARGET = 3;
 const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
+const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const SHOW_TROPHY_ACTIVITY_CARD = false;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -1146,9 +1147,24 @@ const CharacterAvatar = ({ characterId, size = 'md' }: { characterId?: string; s
   );
 };
 
+const BrandMark = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
+  <span className={`brand-mark size-${size}`} aria-hidden="true">
+    <span className="brand-mark-planet" />
+    <span className="brand-mark-ring" />
+    <span className="brand-mark-moon" />
+  </span>
+);
+
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState());
-  const [screen, setScreen] = useState<Screen>(() => (loadState().user ? 'home' : 'onboarding'));
+  const [screen, setScreen] = useState<Screen>(() => {
+    const bootState = loadState();
+    if (typeof window !== 'undefined') {
+      const hasSeenLanding = window.localStorage.getItem(LANDING_SEEN_STORAGE_KEY) === '1';
+      if (!hasSeenLanding) return 'landing';
+    }
+    return bootState.user ? 'home' : 'onboarding';
+  });
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
   const [input, setInput] = useState('');
@@ -2309,13 +2325,42 @@ export default function App() {
     setScreen('onboarding');
   };
 
+  const continueFromLanding = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LANDING_SEEN_STORAGE_KEY, '1');
+    }
+    setScreen(state.user ? 'home' : 'onboarding');
+  };
+
+  const landing = (
+    <div className="landing-shell">
+      <div className="landing-stars" aria-hidden="true" />
+      <section className="landing-card">
+        <div className="landing-brand">
+          <BrandMark size="lg" />
+        </div>
+        <h1 className="landing-title">Galaxy Genius</h1>
+        <p className="landing-tagline">Big Brains. Space Games.</p>
+        <p className="landing-copy">
+          Blast through fast math, solve cartoon brain teasers, and build your cosmic trophy shelf.
+        </p>
+        <div className="landing-actions">
+          <button className="btn btn-primary" onClick={continueFromLanding}>
+            {state.user ? `Continue as ${state.user.username}` : 'Start Playing'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
   const onboarding = (
     <div className="auth-shell">
       <div className="card onboarding-card">
         <div className="onboarding-brand">
-          <span className="onboarding-brand-badge" aria-hidden="true">🪐</span>
+          <BrandMark size="sm" />
           <div className="onboarding-brand-copy">
-            <p className="onboarding-brand-name">GALAXY GENIUS</p>
+            <p className="onboarding-brand-name">Galaxy Genius</p>
+            <p className="onboarding-brand-tagline">Big Brains. Space Games.</p>
           </div>
         </div>
 
@@ -3233,6 +3278,10 @@ export default function App() {
     </>
   );
 
+  if (screen === 'landing') {
+    return landing;
+  }
+
   if (!state.user || screen === 'onboarding') {
     return onboarding;
   }
@@ -3256,8 +3305,11 @@ export default function App() {
       <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
           <div className="app-brand-inline" aria-label="Galaxy Genius">
-            <span aria-hidden="true">🪐</span>
-            <span>Galaxy Genius</span>
+            <BrandMark size="sm" />
+            <div className="app-brand-copy">
+              <span className="app-brand-name">Galaxy Genius</span>
+              <span className="app-brand-tagline">Big Brains. Space Games.</span>
+            </div>
           </div>
           <div className="streak-counter" title="Score">⭐ {topBarPoints}</div>
         </header>
