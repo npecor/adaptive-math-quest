@@ -4,7 +4,7 @@ export interface FlowItem {
   id: string;
   type: 'flow';
   difficulty: number;
-  tier?: 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
+  tier?: 'Rookie' | 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
   template: string;
   shapeSignature: string;
   tags: string[];

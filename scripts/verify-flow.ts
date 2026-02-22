@@ -14,6 +14,7 @@ type AnyFlow = {
 };
 
 const TIERS = [
+  { name: 'Rookie', rating: 810 },
   { name: 'Easy', rating: 850 },
   { name: 'Medium', rating: 975 },
   { name: 'Hard', rating: 1125 },
@@ -79,7 +80,8 @@ function inferLabel(item: AnyFlow): string {
   if (d >= 1200) return 'Expert';
   if (d >= 1050) return 'Hard';
   if (d >= 900) return 'Medium';
-  return 'Easy';
+  if (d >= 850) return 'Easy';
+  return 'Rookie';
 }
 
 function inferGeomShape(item: AnyFlow): string | null {
@@ -184,8 +186,8 @@ async function runTier(name: string, rating: number) {
     }
   }
 
-  if (rating === 850 && negativeSub > 0) {
-    console.error('Easy tier has negative subtraction answers.');
+  if ((rating === 810 || rating === 850) && negativeSub > 0) {
+    console.error('Rookie/Easy tier has negative subtraction answers.');
     process.exitCode = 1;
   }
 

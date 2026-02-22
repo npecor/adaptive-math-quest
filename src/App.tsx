@@ -83,10 +83,10 @@ const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
 const GLOBAL_LEADERBOARD_MIN_STARS = 21; // must be > 20 to appear globally
-const TRAINING_SINGLE_DIGIT_ADD_SUB_QUESTIONS = 6;
-const TRAINING_ADD_SUB_ONLY_QUESTIONS = 8;
-const TRAINING_ADD_SUB_MULT_DIV_QUESTIONS = 12;
-const TRAINING_SINGLE_DIGIT_MAX_DIFFICULTY = 860;
+const TRAINING_SINGLE_DIGIT_ADD_SUB_QUESTIONS = 8;
+const TRAINING_ADD_SUB_ONLY_QUESTIONS = 10;
+const TRAINING_ADD_SUB_MULT_DIV_QUESTIONS = 14;
+const TRAINING_SINGLE_DIGIT_MAX_DIFFICULTY = 840;
 const TRAINING_EARLY_MAX_DIFFICULTY = 880;
 const TRAINING_MID_MAX_DIFFICULTY = 950;
 const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
@@ -217,6 +217,7 @@ const getTier = (
   explicitTier?: DifficultyLabel
 ): { label: DifficultyLabel; icon: string; flowPoints: number; puzzlePoints: number } => {
   const label = explicitTier ?? difficultyLabelFromScore(difficulty);
+  if (label === 'Rookie') return { label, icon: '👶', flowPoints: 8, puzzlePoints: 24 };
   if (label === 'Master') return { label, icon: '🧭', flowPoints: 22, puzzlePoints: 66 };
   if (label === 'Expert') return { label, icon: '🎖️', flowPoints: 18, puzzlePoints: 54 };
   if (label === 'Hard') return { label, icon: '🚀', flowPoints: 15, puzzlePoints: 45 };
@@ -339,13 +340,6 @@ const getClarifyingReply = (puzzle: PuzzleItem, question: string, hintsShown: nu
   }
 
   return 'Great question. Focus on what stays the same, then answer the core prompt in one step.';
-};
-
-const phaseLabel = (phase: RunState['phase']) => {
-  if (phase === 'flow') return 'Quick Questions';
-  if (phase === 'puzzle_pick') return 'Pick a Puzzle';
-  if (phase === 'puzzle') return 'Puzzle Time';
-  return 'Bonus Round';
 };
 
 const getCharacterById = (characterId?: string) => {
@@ -3525,7 +3519,6 @@ export default function App() {
           <section className="run-progress-inline" aria-label="Orbit progress">
             <div className="flow-progress-head compact">
               <p className="text-label">Question {Math.min(runDoneTotal + 1, runTargetTotal)}/{runTargetTotal}</p>
-              <span className="tag compact-tag">{phaseLabel(run.phase)}</span>
             </div>
             <div className="flow-meter-wrap compact">
               <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>

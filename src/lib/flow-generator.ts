@@ -29,7 +29,7 @@ type Template = {
   build: (difficulty: number) => BuiltFlow;
 };
 
-type DifficultyBand = 'easy' | 'medium' | 'hard' | 'expert' | 'master';
+type DifficultyBand = 'rookie' | 'easy' | 'medium' | 'hard' | 'expert' | 'master';
 
 export const makeUniqueChoices = (correct: number, candidates: number[], count = 4): number[] => {
   const targetCount = Math.max(2, count);
@@ -89,7 +89,8 @@ const toBand = (difficulty: number): DifficultyBand => {
   if (difficulty >= 1250) return 'expert';
   if (difficulty >= 1080) return 'hard';
   if (difficulty >= 920) return 'medium';
-  return 'easy';
+  if (difficulty >= 860) return 'easy';
+  return 'rookie';
 };
 
 type BreakApartPlan = {
@@ -200,6 +201,50 @@ const createAddSub = (difficulty: number, options: AddSubBuildOptions = {}): Bui
   const band = toBand(difficulty);
   const isAdd = Math.random() < 0.5;
   const allowNegative = difficulty >= 980 && Math.random() < 0.2;
+  if (band === 'rookie') {
+    if (isAdd) {
+      const useTeenStarter = Math.random() < 0.2;
+      const a = useTeenStarter ? randInt(10, 19) : randInt(0, 9);
+      const b = randInt(0, 9);
+      const result = a + b;
+      return {
+        signature: `addsub-rookie-add-${a}-${b}`,
+        template: 'add_sub',
+        shapeSignature: useTeenStarter ? 'addsub_add_rookie_teen_plus_one_digit' : 'addsub_add_single_digit',
+        tags: ['add_sub'],
+        format: 'numeric_input',
+        prompt: `${a} + ${b} = ?`,
+        answer: String(result),
+        hints: [
+          `Start at ${a}, then count up ${b} more.`,
+          `Count one step at a time until you add all ${b}.`,
+          `Check: ${a} + ${b} = ${result}.`
+        ],
+        solution_steps: [`${a} + ${b} = ${result}.`, `Answer: ${result}.`]
+      };
+    }
+
+    const useTeenStarter = Math.random() < 0.2;
+    const left = useTeenStarter ? randInt(10, 19) : randInt(1, 9);
+    const right = randInt(0, Math.min(left, 9));
+    const result = left - right;
+    return {
+      signature: `addsub-rookie-sub-${left}-${right}`,
+      template: 'add_sub',
+      shapeSignature: useTeenStarter ? 'addsub_sub_rookie_teen_minus_one_digit' : 'addsub_sub_single_digit',
+      tags: ['add_sub'],
+      format: 'numeric_input',
+      prompt: `${left} - ${right} = ?`,
+      answer: String(result),
+      hints: [
+        `Start at ${left} and take away ${right}.`,
+        `Count back ${right} steps.`,
+        `Check: ${result} + ${right} = ${left}.`
+      ],
+      solution_steps: [`${left} - ${right} = ${result}.`, `Answer: ${result}.`]
+    };
+  }
+
   const numberRange =
     band === 'easy'
       ? { aMin: 18, aMax: 95, bMin: 6, bMax: 28 }
@@ -281,7 +326,10 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
   if (isMult) {
     let a: number;
     let b: number;
-    if (band === 'easy') {
+    if (band === 'rookie') {
+      a = randInt(2, 5);
+      b = randInt(2, 5);
+    } else if (band === 'easy') {
       a = randInt(3, 12);
       b = randInt(3, 12);
     } else if (band === 'medium') {
@@ -334,7 +382,10 @@ const createMultDiv = (difficulty: number): BuiltFlow => {
 
   let divisor: number;
   let quotient: number;
-  if (band === 'easy') {
+  if (band === 'rookie') {
+    divisor = randInt(2, 5);
+    quotient = randInt(1, 5);
+  } else if (band === 'easy') {
     divisor = randInt(3, 12);
     quotient = randInt(1, 12);
   } else if (band === 'medium') {
@@ -1079,22 +1130,31 @@ export const generateAdaptiveFlowItem = (
     forceSingleDigitAddSub?: boolean;
   } = {}
 ): FlowItem => {
-  const target = chooseTargetDifficulty(rating, correctStreak, options.targetProfile ?? 'default');
-  const allowTrivialForHighRating = options.targetProfile === 'training_flow';
+  const targetProfile = options.targetProfile ?? 'default';
+  const rookieOnramp = targetProfile === 'default' && rating <= 830;
+  const resolvedAllowedTemplates =
+    rookieOnramp && !options.allowedTemplates?.length ? ['add_sub'] : options.allowedTemplates;
+  const resolvedMaxDifficultyScore = rookieOnramp ? Math.min(maxDifficultyScore ?? 840, 840) : maxDifficultyScore;
+  const resolvedForceSingleDigitAddSub = Boolean(options.forceSingleDigitAddSub || (rookieOnramp && rating <= 820));
+
+  const target = chooseTargetDifficulty(rating, correctStreak, targetProfile);
+  const allowTrivialForHighRating = targetProfile === 'training_flow';
   const candidates = Array.from({ length: FLOW_SELECTION_SETTINGS.candidateCount }, () =>
     buildCandidate(target, rating, {
       allowTrivialForHighRating,
-      forceSingleDigitAddSub: options.forceSingleDigitAddSub
+      forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
     })
   );
   const fresh = candidates.filter((candidate) => !usedSignatures.has(candidate.id));
   const pool = fresh.length ? fresh : candidates;
   const cappedPool =
-    typeof maxDifficultyScore === 'number' ? pool.filter((item) => item.difficulty <= maxDifficultyScore) : pool;
-  const hasTemplateConstraint = Boolean(options.allowedTemplates?.length);
+    typeof resolvedMaxDifficultyScore === 'number'
+      ? pool.filter((item) => item.difficulty <= resolvedMaxDifficultyScore)
+      : pool;
+  const hasTemplateConstraint = Boolean(resolvedAllowedTemplates?.length);
   const templateCappedPool =
     hasTemplateConstraint
-      ? cappedPool.filter((item) => options.allowedTemplates!.includes(item.template))
+      ? cappedPool.filter((item) => resolvedAllowedTemplates!.includes(item.template))
       : cappedPool;
   const jumpCappedPool =
     typeof options.maxJumpFromPrev === 'number' && prevDifficulty !== undefined
@@ -1118,10 +1178,10 @@ export const generateAdaptiveFlowItem = (
       const constraintRating = prevDifficulty !== undefined ? Math.min(rating, prevDifficulty) : rating;
       const retry = buildCandidate(baselineTarget, constraintRating, {
         allowTrivialForHighRating: true,
-        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+        forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
       });
-      if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
-      if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
+      if (resolvedAllowedTemplates?.length && !resolvedAllowedTemplates.includes(retry.template)) continue;
+      if (typeof resolvedMaxDifficultyScore === 'number' && retry.difficulty > resolvedMaxDifficultyScore) continue;
       if (
         typeof options.maxJumpFromPrev === 'number' &&
         prevDifficulty !== undefined &&
@@ -1132,10 +1192,10 @@ export const generateAdaptiveFlowItem = (
       return retry;
     }
 
-    if (!options.allowedTemplates?.length || options.allowedTemplates.includes('add_sub')) {
+    if (!resolvedAllowedTemplates?.length || resolvedAllowedTemplates.includes('add_sub')) {
       const emergencyBase = clamp(prevDifficulty ?? target, 800, 940);
       const emergency = createAddSub(emergencyBase, {
-        singleDigitOnly: options.forceSingleDigitAddSub
+        singleDigitOnly: resolvedForceSingleDigitAddSub
       });
       const emergencyRaw: FlowItem = {
         id: `add_sub-${emergency.signature}`,
@@ -1151,7 +1211,7 @@ export const generateAdaptiveFlowItem = (
         tags: [...new Set([...(emergencyRaw.tags ?? []), ...annotated.tags])],
         difficultyBreakdown: annotated.breakdown
       };
-      if (typeof maxDifficultyScore !== 'number' || emergencyItem.difficulty <= maxDifficultyScore) {
+      if (typeof resolvedMaxDifficultyScore !== 'number' || emergencyItem.difficulty <= resolvedMaxDifficultyScore) {
         return emergencyItem;
       }
     }
@@ -1174,8 +1234,9 @@ export const generateAdaptiveFlowItem = (
   const top = scored.slice(0, Math.min(FLOW_SELECTION_SETTINGS.topPoolSize, scored.length));
   const chosen = pick(top).item;
 
-  const violatesTemplate = Boolean(options.allowedTemplates?.length && !options.allowedTemplates.includes(chosen.template));
-  const violatesMaxDifficulty = typeof maxDifficultyScore === 'number' && chosen.difficulty > maxDifficultyScore;
+  const violatesTemplate = Boolean(resolvedAllowedTemplates?.length && !resolvedAllowedTemplates.includes(chosen.template));
+  const violatesMaxDifficulty =
+    typeof resolvedMaxDifficultyScore === 'number' && chosen.difficulty > resolvedMaxDifficultyScore;
   const violatesJump =
     typeof options.maxJumpFromPrev === 'number' &&
     prevDifficulty !== undefined &&
@@ -1186,11 +1247,11 @@ export const generateAdaptiveFlowItem = (
       const baselineTarget = prevDifficulty ?? target;
       const retry = buildCandidate(baselineTarget, rating, {
         allowTrivialForHighRating,
-        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+        forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
       });
 
-      if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
-      if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
+      if (resolvedAllowedTemplates?.length && !resolvedAllowedTemplates.includes(retry.template)) continue;
+      if (typeof resolvedMaxDifficultyScore === 'number' && retry.difficulty > resolvedMaxDifficultyScore) continue;
       if (
         typeof options.maxJumpFromPrev === 'number' &&
         prevDifficulty !== undefined &&
@@ -1211,18 +1272,18 @@ export const generateAdaptiveFlowItem = (
     for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 30; attempt += 1) {
       const retry = buildCandidate(prevDifficulty, Math.min(rating, prevDifficulty), {
         allowTrivialForHighRating: true,
-        forceSingleDigitAddSub: options.forceSingleDigitAddSub
+        forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
       });
-      if (options.allowedTemplates?.length && !options.allowedTemplates.includes(retry.template)) continue;
-      if (typeof maxDifficultyScore === 'number' && retry.difficulty > maxDifficultyScore) continue;
+      if (resolvedAllowedTemplates?.length && !resolvedAllowedTemplates.includes(retry.template)) continue;
+      if (typeof resolvedMaxDifficultyScore === 'number' && retry.difficulty > resolvedMaxDifficultyScore) continue;
       if (Math.abs(retry.difficulty - prevDifficulty) <= options.maxJumpFromPrev) return retry;
     }
 
     // Deterministic safety net for constrained modes (e.g. training) to prevent abrupt spikes.
-    if (!options.allowedTemplates?.length || options.allowedTemplates.includes('add_sub')) {
+    if (!resolvedAllowedTemplates?.length || resolvedAllowedTemplates.includes('add_sub')) {
       const emergencyBase = clamp(prevDifficulty, 800, 980);
       const emergency = createAddSub(emergencyBase, {
-        singleDigitOnly: options.forceSingleDigitAddSub
+        singleDigitOnly: resolvedForceSingleDigitAddSub
       });
       const emergencyRaw: FlowItem = {
         id: `add_sub-${emergency.signature}`,
@@ -1239,7 +1300,7 @@ export const generateAdaptiveFlowItem = (
         difficultyBreakdown: annotated.breakdown
       };
       if (
-        (typeof maxDifficultyScore !== 'number' || emergencyItem.difficulty <= maxDifficultyScore) &&
+        (typeof resolvedMaxDifficultyScore !== 'number' || emergencyItem.difficulty <= resolvedMaxDifficultyScore) &&
         Math.abs(emergencyItem.difficulty - prevDifficulty) <= options.maxJumpFromPrev
       ) {
         return emergencyItem;

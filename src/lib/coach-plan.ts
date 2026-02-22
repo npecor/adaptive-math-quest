@@ -53,7 +53,7 @@ const inferLabel = (difficulty: number, explicit?: DifficultyLabel): DifficultyL
   explicit ?? difficultyLabelFromScore(difficulty);
 
 const stepCapFor = (label: DifficultyLabel) => {
-  if (label === 'Easy') return 2;
+  if (label === 'Rookie' || label === 'Easy') return 2;
   if (label === 'Medium' || label === 'Hard') return 3;
   return 4;
 };
@@ -278,7 +278,7 @@ const finalizePlan = (input: {
 }): CoachPlan => {
   const label = inferLabel(input.difficulty, input.explicitLabel);
   const cap = stepCapFor(label);
-  const minSteps = label === 'Easy' ? 1 : 2;
+  const minSteps = label === 'Rookie' || label === 'Easy' ? 1 : 2;
 
   const cleanSteps = compactUnique(input.steps);
   const steps = cleanSteps.slice(0, cap);

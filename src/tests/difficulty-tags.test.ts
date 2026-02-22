@@ -29,8 +29,15 @@ describe('difficulty tags', () => {
   it('labels order-of-ops expressions as at least Medium', () => {
     const item = mkFlow('8 + 3 × 4 = ?', 'order_ops', 'expr_order_ops');
     const analyzed = analyzeFlowItem(item);
-    const labels = ['Easy', 'Medium', 'Hard', 'Expert', 'Master'] as const;
+    const labels = ['Rookie', 'Easy', 'Medium', 'Hard', 'Expert', 'Master'] as const;
     expect(labels.indexOf(analyzed.difficultyLabel)).toBeGreaterThanOrEqual(labels.indexOf('Medium'));
+  });
+
+  it('labels simple single-digit add/sub as Rookie', () => {
+    const add = mkFlow('6 + 2 = ?', 'add_sub', 'addsub_add_single_digit');
+    const sub = mkFlow('9 - 4 = ?', 'add_sub', 'addsub_sub_single_digit');
+    expect(analyzeFlowItem(add).difficultyLabel).toBe('Rookie');
+    expect(analyzeFlowItem(sub).difficultyLabel).toBe('Rookie');
   });
 
   it('never yields negative subtraction for Easy-labeled subtraction items', () => {
@@ -51,7 +58,7 @@ describe('difficulty tags', () => {
       const sub = item.prompt.match(/^(\d+)\s*-\s*(\d+)\s*=\s*\?$/);
       if (!sub) continue;
       const label = item.tier ?? difficultyLabelFromScore(item.difficulty);
-      if (label === 'Easy') {
+      if (label === 'Rookie' || label === 'Easy') {
         expect(Number(item.answer)).toBeGreaterThanOrEqual(0);
       }
     }

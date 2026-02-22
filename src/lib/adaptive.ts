@@ -4,7 +4,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 export type TargetDifficultyProfile = 'default' | 'training_flow' | 'training_puzzle';
 export const TRAINING_RATING_MIN = 800;
-export const TRAINING_START_RATING = 850;
+export const TRAINING_START_RATING = 810;
 export const TRAINING_EARLY_QUESTION_CAP = 8;
 export const TRAINING_EARLY_BUFFER = 40;
 export const TRAINING_BASE_UP = 10;

@@ -15,6 +15,7 @@ import { generateAdaptivePuzzleItem } from '../src/lib/puzzle-generator';
 import type { FlowItem, PuzzleItem } from '../src/lib/types';
 
 const TIERS = [
+  { name: 'Rookie', rating: 810 },
   { name: 'Easy', rating: 850 },
   { name: 'Medium', rating: 975 },
   { name: 'Hard', rating: 1125 },
@@ -58,6 +59,13 @@ const parseAddSub = (prompt: string): { a: number; b: number; op: '+' | '-' } | 
   const m = prompt.match(/^\s*(\d+)\s*([+-])\s*(\d+)\s*=\s*\?\s*$/);
   if (!m) return null;
   return { a: Number(m[1]), op: m[2] as '+' | '-', b: Number(m[3]) };
+};
+
+const isRookieSimpleAddSub = (item: FlowItem): boolean => {
+  if (item.template !== 'add_sub') return false;
+  const parsed = parseAddSub(item.prompt);
+  if (!parsed) return false;
+  return parsed.a <= 9 && parsed.b <= 9;
 };
 
 const isTrivialForHardPlus = (item: FlowItem): boolean => {
@@ -207,6 +215,7 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
     const subtypeCounts: Record<string, number> = {};
     let subtractionCount = 0;
     let easyNegativeSubtractions = 0;
+    let rookieSimpleAddSubCount = 0;
     let hardPlusTrivial = 0;
     let oneStepHardPlus = 0;
     const decimalExamples: string[] = [];
@@ -257,6 +266,7 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
         subtractionCount += 1;
         if (Number(item.answer) < 0) easyNegativeSubtractions += 1;
       }
+      if (tier.name === 'Rookie' && isRookieSimpleAddSub(item)) rookieSimpleAddSubCount += 1;
 
       if (tier.rating >= 1125 && isTrivialForHardPlus(item)) hardPlusTrivial += 1;
       if (
@@ -286,8 +296,13 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
     printDistributionTable('% chosen by label', labelCounts, FLOW_SELECTIONS_PER_BAND);
     printDistributionTable('Top 10 most-common subtypes', subtypeCounts, FLOW_SELECTIONS_PER_BAND, 10);
     console.log(
-      `\n  Easy-negative-subtraction rate: ${subtractionCount ? percent(easyNegativeSubtractions, subtractionCount) : '0.00'}% (${easyNegativeSubtractions}/${subtractionCount})`
+      `\n  Rookie/Easy-negative-subtraction rate: ${subtractionCount ? percent(easyNegativeSubtractions, subtractionCount) : '0.00'}% (${easyNegativeSubtractions}/${subtractionCount})`
     );
+    if (tier.name === 'Rookie') {
+      console.log(
+        `  Rookie single-digit add/sub rate: ${percent(rookieSimpleAddSubCount, FLOW_SELECTIONS_PER_BAND)}% (${rookieSimpleAddSubCount}/${FLOW_SELECTIONS_PER_BAND})`
+      );
+    }
     if (tier.rating >= 1125) {
       console.log(
         `  Hard+ trivial pattern rate: ${percent(hardPlusTrivial, FLOW_SELECTIONS_PER_BAND)}% (${hardPlusTrivial}/${FLOW_SELECTIONS_PER_BAND})`
@@ -300,8 +315,13 @@ function runFlowDistributionAndAssertions(): { failures: string[] } {
     if (decimalExamples.length > 0) {
       failures.push(`Decimal text found in flow generation at ${tier.name}. Example: ${decimalExamples[0]}`);
     }
-    if (tier.name === 'Easy' && easyNegativeSubtractions > 0) {
-      failures.push(`Easy tier produced ${easyNegativeSubtractions} negative subtraction answers.`);
+    if ((tier.name === 'Rookie' || tier.name === 'Easy') && easyNegativeSubtractions > 0) {
+      failures.push(`${tier.name} tier produced ${easyNegativeSubtractions} negative subtraction answers.`);
+    }
+    if (tier.name === 'Rookie' && rookieSimpleAddSubCount < FLOW_SELECTIONS_PER_BAND * 0.65) {
+      failures.push(
+        `Rookie tier not simple enough: ${rookieSimpleAddSubCount}/${FLOW_SELECTIONS_PER_BAND} single-digit add/sub.`
+      );
     }
     if (tier.rating >= 1125 && hardPlusTrivial > 0) {
       failures.push(`Hard+ trivial content detected at ${tier.name}: ${hardPlusTrivial} cases.`);
@@ -355,6 +375,55 @@ function printFlowSamples(): { failures: string[] } {
       if (item.difficulty <= tier.rating + 25) correctStreak = Math.min(correctStreak + 1, 8);
       else correctStreak = 0;
     }
+  }
+  return { failures };
+}
+
+function printRookieSamples(): { failures: string[] } {
+  const failures: string[] = [];
+  const SAMPLE_COUNT = 20;
+  const used = new Set<string>();
+  let prevDifficulty: number | undefined;
+  let recentTemplates: string[] = [];
+  let recentShapes: string[] = [];
+  let recentPatternTags: string[] = [];
+  let printed = 0;
+  let attempts = 0;
+  let simpleCount = 0;
+
+  console.log(`\n=== Rookie Samples (${SAMPLE_COUNT}) ===`);
+  while (printed < SAMPLE_COUNT && attempts < 1200) {
+    const item = generateAdaptiveFlowItem(
+      810,
+      used,
+      prevDifficulty,
+      recentTemplates,
+      recentShapes,
+      recentPatternTags,
+      0,
+      860
+    );
+    attempts += 1;
+    const label = inferFlowLabel(item);
+    if (label !== 'Rookie') continue;
+    printed += 1;
+    console.log(
+      `${String(printed).padStart(2, '0')}. ${item.template}/${item.shapeSignature} | ${label} d=${item.difficulty} | ${item.prompt} | ans=${item.answer}`
+    );
+    if (isRookieSimpleAddSub(item)) simpleCount += 1;
+    const patternTags = item.tags.filter((tag) => tag.startsWith('pattern:'));
+    recentTemplates = [...recentTemplates, item.template].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentShapes = [...recentShapes, item.shapeSignature].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    recentPatternTags = [...recentPatternTags, ...patternTags].slice(-FLOW_SELECTION_SETTINGS.recentHistorySize);
+    prevDifficulty = item.difficulty;
+    used.add(item.id);
+  }
+
+  if (printed < SAMPLE_COUNT) {
+    failures.push(`Could not collect ${SAMPLE_COUNT} Rookie samples (collected ${printed}).`);
+  }
+  if (printed > 0 && simpleCount / printed < 0.7) {
+    failures.push(`Rookie samples not simple enough: ${simpleCount}/${printed} single-digit add/sub.`);
   }
   return { failures };
 }
@@ -548,7 +617,7 @@ function runTrainingModeSanity(): { failures: string[] } {
   const SKILL_RATING = 1325;
 
   let earlyTotal = 0;
-  let earlyEasyMedium = 0;
+  let earlyRookieEasyMedium = 0;
   let lateTotal = 0;
   let lateHardPlus = 0;
   let maxObservedJump = 0;
@@ -590,7 +659,7 @@ function runTrainingModeSanity(): { failures: string[] } {
       const label = inferFlowLabel(item);
       if (i < 8) {
         earlyTotal += 1;
-        if (label === 'Easy' || label === 'Medium') earlyEasyMedium += 1;
+        if (label === 'Rookie' || label === 'Easy' || label === 'Medium') earlyRookieEasyMedium += 1;
       }
       if (i < 8 && item.template === 'add_sub') earlyAddSubCount += 1;
       if (i >= 12) {
@@ -636,22 +705,24 @@ function runTrainingModeSanity(): { failures: string[] } {
     }
   }
 
-  const earlyEasyMediumRate = earlyTotal > 0 ? earlyEasyMedium / earlyTotal : 1;
+  const earlyRookieEasyMediumRate = earlyTotal > 0 ? earlyRookieEasyMedium / earlyTotal : 1;
   const earlyAddSubRate = SIM_COUNT > 0 ? earlyAddSubCount / (SIM_COUNT * 8) : 1;
   const lateHardPlusRate = lateTotal > 0 ? lateHardPlus / lateTotal : 0;
   const avgTrendDelta = trendDeltaTotal / Math.max(1, SIM_COUNT);
 
   console.log(`\n=== Training Mode Sanity (${SIM_COUNT} sims × ${QUESTIONS_PER_SIM} correct-first questions) ===`);
   console.log(
-    `  Early Easy/Medium rate (first 8): ${(earlyEasyMediumRate * 100).toFixed(2)}% (${earlyEasyMedium}/${earlyTotal})`
+    `  Early Rookie/Easy/Medium rate (first 8): ${(earlyRookieEasyMediumRate * 100).toFixed(2)}% (${earlyRookieEasyMedium}/${earlyTotal})`
   );
   console.log(`  Early add/sub-only rate (first 8): ${(earlyAddSubRate * 100).toFixed(2)}% (${earlyAddSubCount}/${SIM_COUNT * 8})`);
   console.log(`  Late Hard+ rate (questions 13-20): ${(lateHardPlusRate * 100).toFixed(2)}% (${lateHardPlus}/${lateTotal})`);
   console.log(`  Avg difficulty trend delta (late - early): ${avgTrendDelta.toFixed(1)}`);
   console.log(`  Max observed consecutive difficulty jump: ${maxObservedJump}`);
 
-  if (earlyEasyMediumRate < 0.85) {
-    failures.push(`Training early cluster too hard: Easy/Medium ${(earlyEasyMediumRate * 100).toFixed(1)}%`);
+  if (earlyRookieEasyMediumRate < 0.9) {
+    failures.push(
+      `Training early cluster too hard: Rookie/Easy/Medium ${(earlyRookieEasyMediumRate * 100).toFixed(1)}%`
+    );
   }
   if (earlyAddSubRate < 1) {
     failures.push(`Training first-8 questions are not strictly add/sub: ${(earlyAddSubRate * 100).toFixed(1)}% add/sub`);
@@ -726,6 +797,7 @@ function main(): void {
 
   const flowStats = runFlowDistributionAndAssertions();
   const flowSamples = printFlowSamples();
+  const rookieSamples = printRookieSamples();
   const coachSamples = printCoachSamples();
   const fractionBenchmarkCheck = runFractionBenchmarkLabelCheck();
   const trainingStats = runTrainingModeSanity();
@@ -734,6 +806,7 @@ function main(): void {
   const failures = [
     ...flowStats.failures,
     ...flowSamples.failures,
+    ...rookieSamples.failures,
     ...coachSamples.failures,
     ...fractionBenchmarkCheck.failures,
     ...trainingStats.failures,

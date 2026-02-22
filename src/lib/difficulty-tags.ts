@@ -1,6 +1,6 @@
 import type { FlowItem } from './types';
 
-export type DifficultyLabel = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
+export type DifficultyLabel = 'Rookie' | 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
 
 type Breakdown = Record<string, number>;
 
@@ -23,7 +23,8 @@ export const difficultyLabelFromScore = (difficultyScore: number): DifficultyLab
   if (difficultyScore >= 1200) return 'Expert';
   if (difficultyScore >= 1050) return 'Hard';
   if (difficultyScore >= 900) return 'Medium';
-  return 'Easy';
+  if (difficultyScore >= 850) return 'Easy';
+  return 'Rookie';
 };
 
 const parseBinaryPrompt = (prompt: string, operator: '+' | '-' | '×' | '÷') => {
@@ -88,6 +89,10 @@ export const analyzeFlowItem = (
           addTag(tags, 'pattern:+10');
           addScore(breakdown, 'easy:+10', -170);
         }
+        if (add.left <= 9 && add.right <= 9) {
+          addTag(tags, 'addsub:single-digit');
+          addScore(breakdown, 'rookie:single_digit_add', -180);
+        }
       } else if (sub) {
         const result = sub.left - sub.right;
         const borrow = (sub.left % 10) < (sub.right % 10);
@@ -103,6 +108,10 @@ export const analyzeFlowItem = (
           addTag(tags, 'pattern:-1/-2/-10');
           addScore(breakdown, 'easy:-small', -170);
         }
+        if (sub.left <= 9 && sub.right <= 9 && result >= 0) {
+          addTag(tags, 'addsub:single-digit');
+          addScore(breakdown, 'rookie:single_digit_sub', -180);
+        }
         if (result < 0) {
           addTag(tags, 'sub:negative');
           addScore(breakdown, 'negative_result', 95);
@@ -111,7 +120,7 @@ export const analyzeFlowItem = (
       break;
     }
     case 'mult_div': {
-      applyBase(840);
+      applyBase(900);
       const mult = parseBinaryPrompt(item.prompt, '×');
       const div = parseBinaryPrompt(item.prompt, '÷');
       if (mult) {
@@ -122,7 +131,11 @@ export const analyzeFlowItem = (
         const isTenVariant = (left === 10 && right >= 3 && right <= 12) || (right === 10 && left >= 3 && left <= 12);
         if (isTimesTable || isTenVariant) {
           addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:times-table', -220);
+          addScore(breakdown, 'easy:times-table', -110);
+        }
+        if (left <= 5 && right <= 5) {
+          addTag(tags, 'mul:tiny-fact');
+          addScore(breakdown, 'rookie:tiny_mul_fact', -110);
         }
         if (left === 10 || right === 10) {
           addTag(tags, 'pattern:×10');
@@ -133,7 +146,7 @@ export const analyzeFlowItem = (
           addScore(breakdown, 'easy:trailing-zero', -60);
         }
         if (left >= 10 && right >= 10) addScore(breakdown, 'two_digit_by_two_digit', 120);
-        if ((left % 10) * (right % 10) >= 10) {
+        if (!isTimesTable && !isTenVariant && (left % 10) * (right % 10) >= 10) {
           addTag(tags, 'requires:carry');
           addScore(breakdown, 'carry', 55);
         }
@@ -153,7 +166,11 @@ export const analyzeFlowItem = (
         if (isTimesTableInverse) {
           addTag(tags, 'div:times-table');
           addTag(tags, 'pattern:times-table');
-          addScore(breakdown, 'easy:table-div', -220);
+          addScore(breakdown, 'easy:table-div', -110);
+        }
+        if (divisor <= 5 && Number.isInteger(quotient) && quotient <= 5 && dividend <= 30) {
+          addTag(tags, 'div:tiny-fact');
+          addScore(breakdown, 'rookie:tiny_div_fact', -110);
         }
         if (divisor === 10) {
           addTag(tags, 'pattern:÷10');
