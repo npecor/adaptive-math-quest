@@ -32,7 +32,31 @@ type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
-type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode';
+type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode' | 'practice_mode';
+type HomeExperience = 'mission' | 'practice';
+type PracticeDifficulty = 'easy' | 'medium' | 'hard' | 'adaptive';
+type PracticeSessionLength = 5 | 10;
+type PracticeTopicFamily = 'fast_math' | 'puzzles';
+type PracticeTopicDomain = 'flow' | 'puzzle';
+type PracticeTopic = {
+  key: string;
+  label: string;
+  family: PracticeTopicFamily;
+  domain: PracticeTopicDomain;
+  allowedTemplates?: string[];
+  allowedPuzzleTypes?: Array<NonNullable<PuzzleItem['puzzleType']>>;
+};
+type PracticeConfig = {
+  topicKey: string;
+  topicLabel: string;
+  topicFamily: PracticeTopicFamily;
+  topicDomain: PracticeTopicDomain;
+  difficulty: PracticeDifficulty;
+  sessionLength: PracticeSessionLength;
+  baseRating: number;
+  allowedTemplates?: string[];
+  allowedPuzzleTypes?: Array<NonNullable<PuzzleItem['puzzleType']>>;
+};
 type PlayerCharacter = {
   id: string;
   emoji: string;
@@ -69,6 +93,9 @@ interface RunState {
   trainingRating: number;
   trainingQuestionsAnswered: number;
   trainingPuzzlesSolved: number;
+  practiceConfig?: PracticeConfig;
+  practiceCorrect: number;
+  practiceAttempted: number;
 }
 
 type PendingBonusFinish = {
@@ -79,6 +106,13 @@ type PendingBonusFinish = {
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
+const PRACTICE_SESSION_LENGTH_OPTIONS: PracticeSessionLength[] = [5, 10];
+const PRACTICE_DIFFICULTY_OPTIONS: Array<{ key: PracticeDifficulty; label: string }> = [
+  { key: 'easy', label: 'Easy' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'hard', label: 'Hard' },
+  { key: 'adaptive', label: 'Adaptive' }
+];
 const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
@@ -133,18 +167,56 @@ const characterVariantById: Record<string, string> = {
 };
 
 const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: string; flowTarget: number; puzzleTarget: number }> = {
-  galaxy_mix: { name: 'Mission Mix', icon: '🪐', subtitle: 'Quick math + puzzles', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
+  galaxy_mix: { name: 'Standard Mission', icon: '🚀', subtitle: 'Adaptive fast math + puzzles', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
   rocket_rush: { name: 'Rocket Rush', icon: '🚀', subtitle: 'Fast math only', flowTarget: 12, puzzleTarget: 0 },
   puzzle_orbit: { name: 'Puzzle Planet', icon: '🧩', subtitle: 'Logic puzzles only', flowTarget: 0, puzzleTarget: 5 },
-  training_mode: { name: 'Training Mode', icon: '🛰️', subtitle: 'Starts easy and ramps up.', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET }
+  training_mode: { name: 'Training Mission', icon: '🛰️', subtitle: 'Starts easy and ramps up.', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET },
+  practice_mode: { name: 'Practice Mode', icon: '🧠', subtitle: 'Targeted practice by topic', flowTarget: 0, puzzleTarget: 0 }
 };
 
-const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
-  phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
+const missionModeOptions: GameMode[] = ['galaxy_mix', 'rocket_rush', 'puzzle_orbit', 'training_mode'];
+
+const practiceTopics: PracticeTopic[] = [
+  { key: 'add_subtract', label: 'Add & Subtract', family: 'fast_math', domain: 'flow', allowedTemplates: ['add_sub'] },
+  { key: 'multiply_divide', label: 'Multiply & Divide', family: 'fast_math', domain: 'flow', allowedTemplates: ['mult_div'] },
+  { key: 'fractions', label: 'Fractions', family: 'fast_math', domain: 'flow', allowedTemplates: ['fraction_compare'] },
+  { key: 'equations', label: 'Equations', family: 'fast_math', domain: 'flow', allowedTemplates: ['equation_1', 'equation_2'] },
+  { key: 'percents', label: 'Percents', family: 'fast_math', domain: 'flow', allowedTemplates: ['percent'] },
+  { key: 'ratios', label: 'Ratios', family: 'fast_math', domain: 'flow', allowedTemplates: ['ratio'] },
+  { key: 'geometry', label: 'Geometry', family: 'fast_math', domain: 'flow', allowedTemplates: ['geometry'] },
+  {
+    key: 'mixed_math',
+    label: 'Mixed Math',
+    family: 'fast_math',
+    domain: 'flow',
+    allowedTemplates: ['add_sub', 'mult_div', 'fraction_compare', 'order_ops', 'equation_1', 'percent', 'ratio', 'geometry', 'equation_2']
+  },
+  { key: 'logic_puzzles', label: 'Logic Puzzles', family: 'puzzles', domain: 'puzzle', allowedPuzzleTypes: ['logic'] },
+  { key: 'patterns', label: 'Patterns', family: 'puzzles', domain: 'puzzle', allowedPuzzleTypes: ['pattern'] },
+  { key: 'word_problems', label: 'Word Problems', family: 'puzzles', domain: 'puzzle', allowedPuzzleTypes: ['word'] },
+  { key: 'spatial_puzzles', label: 'Spatial Puzzles', family: 'puzzles', domain: 'puzzle', allowedPuzzleTypes: ['spatial'] },
+  { key: 'brain_teasers', label: 'Brain Teasers', family: 'puzzles', domain: 'puzzle', allowedPuzzleTypes: ['constraint'] }
+];
+
+const newRun = (mode: GameMode = 'galaxy_mix', practiceConfig?: PracticeConfig): RunState => {
+  const isPracticeMode = mode === 'practice_mode';
+  const flowTarget = isPracticeMode
+    ? practiceConfig?.topicDomain === 'flow'
+      ? practiceConfig.sessionLength
+      : 0
+    : modeConfig[mode].flowTarget;
+  const puzzleTarget = isPracticeMode
+    ? practiceConfig?.topicDomain === 'puzzle'
+      ? practiceConfig.sessionLength
+      : 0
+    : modeConfig[mode].puzzleTarget;
+
+  return {
+  phase: flowTarget > 0 ? 'flow' : 'puzzle_pick',
   bossStage: 'intro',
   gameMode: mode,
-  flowTarget: modeConfig[mode].flowTarget,
-  puzzleTarget: modeConfig[mode].puzzleTarget,
+  flowTarget,
+  puzzleTarget,
   flowDone: 0,
   puzzleDone: 0,
   sprintScore: 0,
@@ -164,8 +236,12 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   puzzlesTriedThisRound: 0,
   trainingRating: TRAINING_START_RATING,
   trainingQuestionsAnswered: 0,
-  trainingPuzzlesSolved: 0
-});
+  trainingPuzzlesSolved: 0,
+  practiceConfig,
+  practiceCorrect: 0,
+  practiceAttempted: 0
+};
+};
 
 const normalize = (s: string) => s.trim().toLowerCase();
 const canonicalizeAnswer = (s: string) =>
@@ -238,6 +314,22 @@ const getPuzzleChoiceOptions = (puzzle: PuzzleItem): string[] => {
   if (puzzle.choices?.length) return puzzle.choices;
   return getPuzzleAnswerChoices(puzzle.core_answer) ?? [];
 };
+
+const getPracticeBaseRating = (skillRating: number, difficulty: PracticeDifficulty): number => {
+  if (difficulty === 'adaptive') return skillRating;
+  if (difficulty === 'easy') return 860;
+  if (difficulty === 'medium') return 1000;
+  return 1180;
+};
+
+const toPracticeDifficultyLabel = (difficulty: PracticeDifficulty) =>
+  difficulty === 'adaptive'
+    ? 'Adaptive'
+    : difficulty === 'easy'
+      ? 'Easy'
+      : difficulty === 'medium'
+        ? 'Medium'
+        : 'Hard';
 
 const cleanChoiceMarker = (text: string) =>
   text
@@ -1193,6 +1285,11 @@ export default function App() {
   });
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
+  const [homeExperience, setHomeExperience] = useState<HomeExperience>('mission');
+  const [practiceTopicKey, setPracticeTopicKey] = useState<string>('add_subtract');
+  const [practiceDifficulty, setPracticeDifficulty] = useState<PracticeDifficulty>('adaptive');
+  const [practiceSessionLength, setPracticeSessionLength] = useState<PracticeSessionLength>(5);
+  const [lastPracticeConfig, setLastPracticeConfig] = useState<PracticeConfig | null>(null);
   const [input, setInput] = useState('');
   const [scratchpad, setScratchpad] = useState('');
   const [scratchpadExpanded, setScratchpadExpanded] = useState(() =>
@@ -1248,12 +1345,17 @@ export default function App() {
   const avgSessionPoints = state.totals.runsPlayed ? Math.round(state.totals.allTimeStars / state.totals.runsPlayed) : 0;
   const todayWeekday = new Date().getDay();
   const todayBarIndex = (todayWeekday + 6) % 7;
+  const selectedPracticeTopic =
+    practiceTopics.find((topic) => topic.key === practiceTopicKey) ??
+    practiceTopics.find((topic) => topic.family === 'fast_math') ??
+    practiceTopics[0];
 
   const totalScore = run.sprintScore + run.brainScore;
   const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.totals.allTimeStars;
   const runTargetTotal = run.flowTarget + run.puzzleTarget;
   const runDoneTotal = run.flowDone + run.puzzleDone;
   const flowProgress = runTargetTotal ? Math.round((runDoneTotal / runTargetTotal) * 100) : 0;
+  const practiceAccuracy = run.practiceAttempted ? Math.round((run.practiceCorrect / run.practiceAttempted) * 100) : 0;
   const canJoinGlobalLeaderboard = state.totals.allTimeStars >= GLOBAL_LEADERBOARD_MIN_STARS;
   const puzzleSolveRate = state.totals.allTimePuzzleTries
     ? Math.max(
@@ -1267,6 +1369,7 @@ export default function App() {
       ? NEW_PLAYER_FLOW_MAX_DIFFICULTY
       : undefined;
   const isTrainingMode = (mode: GameMode) => mode === 'training_mode';
+  const isPracticeMode = (mode: GameMode) => mode === 'practice_mode';
   const getTrainingStartRating = (skillRating: number) =>
     clampTrainingRating(Math.min(skillRating, TRAINING_START_RATING), skillRating, 0);
   const getTrainingHardUnlock = (runState: RunState) =>
@@ -1277,6 +1380,10 @@ export default function App() {
     const finiteCaps = caps.filter((cap): cap is number => typeof cap === 'number');
     return finiteCaps.length ? Math.min(...finiteCaps) : undefined;
   };
+  const getPracticeFlowMaxDifficulty = (difficulty: PracticeDifficulty) =>
+    difficulty === 'easy' ? 980 : difficulty === 'medium' ? 1220 : difficulty === 'hard' ? 1520 : undefined;
+  const getPracticePuzzleMaxDifficulty = (difficulty: PracticeDifficulty) =>
+    difficulty === 'easy' ? 1120 : difficulty === 'medium' ? 1360 : difficulty === 'hard' ? 1700 : undefined;
   const getTrainingFlowConstraints = (runState: RunState): {
     allowedTemplates?: string[];
     maxDifficultyScore?: number;
@@ -1298,6 +1405,17 @@ export default function App() {
     return {};
   };
   const getFlowSelectionPlan = (runState: RunState, fallbackRating: number) => {
+    if (isPracticeMode(runState.gameMode) && runState.practiceConfig?.topicDomain === 'flow') {
+      const practiceConfig = runState.practiceConfig;
+      return {
+        rating: practiceConfig.baseRating,
+        targetProfile: practiceConfig.difficulty === 'adaptive' ? ('default' as const) : ('training_flow' as const),
+        maxJumpFromPrev: practiceConfig.difficulty === 'adaptive' ? undefined : 100,
+        allowedTemplates: practiceConfig.allowedTemplates,
+        maxDifficultyScore: getPracticeFlowMaxDifficulty(practiceConfig.difficulty),
+        forceSingleDigitAddSub: practiceConfig.difficulty === 'easy' && practiceConfig.topicKey === 'add_subtract'
+      };
+    }
     if (!isTrainingMode(runState.gameMode)) {
       return {
         rating: fallbackRating,
@@ -1326,6 +1444,17 @@ export default function App() {
     return ['word', 'pattern', 'logic', 'spatial', 'constraint'];
   };
   const getPuzzleSelectionPlan = (runState: RunState, fallbackRating: number) => {
+    if (isPracticeMode(runState.gameMode) && runState.practiceConfig?.topicDomain === 'puzzle') {
+      const practiceConfig = runState.practiceConfig;
+      return {
+        rating: clamp(practiceConfig.baseRating - 40, 800, 1700),
+        options: {
+          targetProfile: practiceConfig.difficulty === 'adaptive' ? ('default' as const) : ('training_puzzle' as const),
+          maxDifficulty: getPracticePuzzleMaxDifficulty(practiceConfig.difficulty),
+          allowedPuzzleTypes: practiceConfig.allowedPuzzleTypes
+        }
+      };
+    }
     if (!isTrainingMode(runState.gameMode)) return { rating: fallbackRating, options: {} };
     const flowTrainingRating = getActiveTrainingRating(runState, fallbackRating);
     const hardUnlocked = getTrainingHardUnlock(runState);
@@ -1623,7 +1752,28 @@ export default function App() {
     return generateAdaptivePuzzleChoices(puzzlePlan.rating, usedPuzzleIds, 2, puzzlePlan.options);
   };
 
+  const buildPracticeConfig = (topic: PracticeTopic): PracticeConfig => ({
+    topicKey: topic.key,
+    topicLabel: topic.label,
+    topicFamily: topic.family,
+    topicDomain: topic.domain,
+    difficulty: practiceDifficulty,
+    sessionLength: practiceSessionLength,
+    baseRating: getPracticeBaseRating(state.skill.rating, practiceDifficulty),
+    allowedTemplates: topic.allowedTemplates,
+    allowedPuzzleTypes: topic.allowedPuzzleTypes
+  });
+
+  const startPracticeSession = () => {
+    if (!selectedPracticeTopic) return;
+    const practiceConfig = buildPracticeConfig(selectedPracticeTopic);
+    setSelectedMode('practice_mode');
+    setLastPracticeConfig(practiceConfig);
+    startRun('practice_mode', { practiceConfig });
+  };
+
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
+    const isPracticeRun = runSnapshot.gameMode === 'practice_mode';
     const sprint = runSnapshot.sprintScore;
     const baseBrain = runSnapshot.brainScore;
     const bonusDelta = bossAttempted ? baseBrain : 0;
@@ -1631,15 +1781,16 @@ export default function App() {
     const total = sprint + brain;
     const finalRunStars = runSnapshot.starsThisRound + Math.max(0, bonusDelta);
 
-    const highs = {
-      bestTotal: Math.max(baseState.highs.bestTotal, total),
-      bestSprint: Math.max(baseState.highs.bestSprint, sprint),
-      bestBrain: Math.max(baseState.highs.bestBrain, brain)
-    };
+    if (!isPracticeRun) {
+      const highs = {
+        bestTotal: Math.max(baseState.highs.bestTotal, total),
+        bestSprint: Math.max(baseState.highs.bestSprint, sprint),
+        bestBrain: Math.max(baseState.highs.bestBrain, brain)
+      };
 
-    const totals = completeRunTotals(baseState.totals, runSnapshot.starsThisRound, bonusDelta);
-
-    save({ ...baseState, highs, totals });
+      const totals = completeRunTotals(baseState.totals, runSnapshot.starsThisRound, bonusDelta);
+      save({ ...baseState, highs, totals });
+    }
     setRun({ ...runSnapshot, sprintScore: sprint, brainScore: brain, starsThisRound: finalRunStars });
     setPendingBonusFinish(null);
     setBonusResult(null);
@@ -1649,13 +1800,20 @@ export default function App() {
     setScreen('summary');
   };
 
-  const startRun = (mode: GameMode = selectedMode) => {
+  const startRun = (mode: GameMode = selectedMode, options: { practiceConfig?: PracticeConfig } = {}) => {
     const streaks = updateDailyStreak(state.streaks);
-    const seeded = newRun(mode);
+    const activePracticeConfig =
+      mode === 'practice_mode' ? options.practiceConfig ?? lastPracticeConfig ?? buildPracticeConfig(selectedPracticeTopic) : undefined;
+    const seeded = newRun(mode, activePracticeConfig);
     if (isTrainingMode(mode)) {
       seeded.trainingRating = getTrainingStartRating(state.skill.rating);
       seeded.trainingQuestionsAnswered = 0;
       seeded.trainingPuzzlesSolved = 0;
+    }
+    if (mode === 'practice_mode' && activePracticeConfig) {
+      seeded.practiceConfig = activePracticeConfig;
+      seeded.practiceCorrect = 0;
+      seeded.practiceAttempted = 0;
     }
     if (seeded.flowTarget > 0) {
       const flowPlan = getFlowSelectionPlan(seeded, state.skill.rating);
@@ -1679,6 +1837,9 @@ export default function App() {
     }
     else seeded.currentPuzzleChoices = getPuzzleChoices(seeded, state.skill.rating, seeded.usedPuzzleIds);
 
+    if (mode === 'practice_mode' && activePracticeConfig) {
+      setLastPracticeConfig(activePracticeConfig);
+    }
     setPendingBonusFinish(null);
     setBonusResult(null);
     setRun(seeded);
@@ -1720,6 +1881,7 @@ export default function App() {
     const correct = isSmartAnswerMatch(input, answers);
 
     const isTrainingRun = isTrainingMode(run.gameMode);
+    const isPracticeRun = isPracticeMode(run.gameMode);
     const nextStreak = correct ? Math.min(run.flowStreak + 1, 8) : 0;
     const nextTrainingQuestionsAnswered = isTrainingRun ? run.trainingQuestionsAnswered + 1 : run.trainingQuestionsAnswered;
     const nextTrainingRating = isTrainingRun
@@ -1731,18 +1893,21 @@ export default function App() {
           nextStreak
         )
       : run.trainingRating;
-    const updatedRating = isTrainingRun
+    const updatedRating = isTrainingRun || isPracticeRun
       ? state.skill.rating
       : updateRating(state.skill.rating, item.difficulty, correct, state.skill.attemptsCount, nextStreak);
     const tier = getTier(item.difficulty, item.tier);
     const hintPenalty = run.currentHints * 3;
     const gain = correct ? Math.max(tier.flowPoints - hintPenalty, 4) : 0;
-    const nextTotals = applyStarAward(state.totals, gain);
-    const nextState: AppState = {
-      ...state,
-      skill: { rating: updatedRating, attemptsCount: state.skill.attemptsCount + 1 },
-      totals: nextTotals
-    };
+    const persistentGain = isPracticeRun ? 0 : gain;
+    const nextTotals = applyStarAward(state.totals, persistentGain);
+    const nextState: AppState = isPracticeRun
+      ? state
+      : {
+          ...state,
+          skill: { rating: updatedRating, attemptsCount: state.skill.attemptsCount + 1 },
+          totals: nextTotals
+        };
 
     const usedFlowIds = new Set(run.usedFlowIds);
     usedFlowIds.add(item.id);
@@ -1758,6 +1923,8 @@ export default function App() {
       trainingRating: nextTrainingRating,
       trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
       trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+      practiceCorrect: run.practiceCorrect + (isPracticeRun && correct ? 1 : 0),
+      practiceAttempted: run.practiceAttempted + (isPracticeRun ? 1 : 0),
       usedFlowIds,
       recentTemplates,
       recentShapes,
@@ -1767,7 +1934,43 @@ export default function App() {
 
     if (nextFlowDone >= run.flowTarget) {
       if (run.puzzleTarget === 0) {
-        save(nextState);
+        if (!isPracticeRun) save(nextState);
+        const completedRun = {
+          ...run,
+          flowDone: nextFlowDone,
+          sprintScore: run.sprintScore + gain,
+          usedFlowIds,
+          recentTemplates,
+          recentShapes,
+          recentPatternTags,
+          flowStreak: nextStreak,
+          runDifficultySamples: nextRunDifficultySamples,
+          currentHints: 0,
+          currentFlow: undefined,
+          starsThisRound: run.starsThisRound + gain,
+          trainingRating: nextTrainingRating,
+          trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
+          trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+          practiceCorrect: run.practiceCorrect + (isPracticeRun && correct ? 1 : 0),
+          practiceAttempted: run.practiceAttempted + (isPracticeRun ? 1 : 0)
+        };
+        if (isPracticeRun) {
+          setRun(completedRun);
+          setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
+          setFeedbackTone(correct ? 'success' : 'error');
+          triggerPulse(correct ? 'success' : 'error');
+          triggerResultFlash(
+            correct ? 'success' : 'error',
+            correct ? 'Practice complete!' : 'Practice complete',
+            correct ? `+${gain} points` : `Answer: ${item.answer}`
+          );
+          setInput('');
+          setShowTutor(false);
+          setShowClarifyDialog(false);
+          setTutorStep(0);
+          setScreen('summary');
+          return;
+        }
         setRun({
           ...run,
           flowDone: nextFlowDone,
@@ -1780,7 +1983,12 @@ export default function App() {
           phase: 'boss',
           bossStage: 'intro',
           runDifficultySamples: nextRunDifficultySamples,
-          bonusChallenge: createBonusChallenge(run.gameMode, 'flow', nextSelectionRating, nextRunDifficultySamples),
+          bonusChallenge: createBonusChallenge(
+            run.gameMode === 'practice_mode' ? 'galaxy_mix' : run.gameMode,
+            'flow',
+            nextSelectionRating,
+            nextRunDifficultySamples
+          ),
           currentHints: 0,
           currentFlow: undefined,
           starsThisRound: run.starsThisRound + gain,
@@ -1803,7 +2011,7 @@ export default function App() {
         return;
       }
 
-      save(nextState);
+      if (!isPracticeRun) save(nextState);
       setRun({
         ...run,
         flowDone: nextFlowDone,
@@ -1821,7 +2029,9 @@ export default function App() {
         starsThisRound: run.starsThisRound + gain,
         trainingRating: nextTrainingRating,
         trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
-        trainingPuzzlesSolved: run.trainingPuzzlesSolved
+        trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+        practiceCorrect: run.practiceCorrect + (isPracticeRun && correct ? 1 : 0),
+        practiceAttempted: run.practiceAttempted + (isPracticeRun ? 1 : 0)
       });
       setFeedback(correct ? 'Awesome! Quick questions complete. Pick your first puzzle.' : `Nice try. ${item.solution_steps[0]}`);
       setFeedbackTone(correct ? 'success' : 'error');
@@ -1838,7 +2048,7 @@ export default function App() {
       return;
     }
 
-    save(nextState);
+    if (!isPracticeRun) save(nextState);
     const nextFlowPlan = getFlowSelectionPlan(nextRunSeed, nextSelectionRating);
     const nextFlowDifficultyCap = mergeMaxDifficultyCap(
       getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1),
@@ -1875,7 +2085,9 @@ export default function App() {
       starsThisRound: run.starsThisRound + gain,
       trainingRating: nextTrainingRating,
       trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
-      trainingPuzzlesSolved: run.trainingPuzzlesSolved
+      trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+      practiceCorrect: run.practiceCorrect + (isPracticeRun && correct ? 1 : 0),
+      practiceAttempted: run.practiceAttempted + (isPracticeRun ? 1 : 0)
     });
 
     setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
@@ -1895,33 +2107,115 @@ export default function App() {
   const submitPuzzle = () => {
     if (!run.currentPuzzle || !input.trim()) return;
 
+    const currentPuzzle = run.currentPuzzle;
     const isTrainingRun = isTrainingMode(run.gameMode);
-    const correct = isPuzzleAnswerCorrect(run.currentPuzzle, input);
-    const tier = getTier(run.currentPuzzle.difficulty);
+    const isPracticeRun = isPracticeMode(run.gameMode);
+    const correct = isPuzzleAnswerCorrect(currentPuzzle, input);
+    const tier = getTier(currentPuzzle.difficulty);
     const revealUsed = run.currentHints >= MAX_PUZZLE_HINTS;
     const hintPenalty = run.currentHints === 0 ? 0 : run.currentHints === 1 ? 8 : 16;
     const gain = correct ? Math.max(tier.puzzlePoints - hintPenalty, 10) : 0;
-    const updatedRating = isTrainingRun
+    const updatedRating = isTrainingRun || isPracticeRun
       ? state.skill.rating
-      : updateRating(state.skill.rating, run.currentPuzzle.difficulty, correct, state.skill.attemptsCount);
+      : updateRating(state.skill.rating, currentPuzzle.difficulty, correct, state.skill.attemptsCount);
 
     const usedPuzzleIds = new Set(run.usedPuzzleIds);
-    usedPuzzleIds.add(run.currentPuzzle.id);
+    usedPuzzleIds.add(currentPuzzle.id);
     const puzzleDone = run.puzzleDone + 1;
-    const nextRunDifficultySamples = [...run.runDifficultySamples, run.currentPuzzle.difficulty];
+    const nextRunDifficultySamples = [...run.runDifficultySamples, currentPuzzle.difficulty];
     const nextTrainingPuzzlesSolved = run.trainingPuzzlesSolved + (correct ? 1 : 0);
+    const nextPracticeCorrect = run.practiceCorrect + (isPracticeRun && correct ? 1 : 0);
+    const nextPracticeAttempted = run.practiceAttempted + (isPracticeRun ? 1 : 0);
+
+    if (isPracticeRun) {
+      if (puzzleDone >= run.puzzleTarget) {
+        setRun({
+          ...run,
+          brainScore: run.brainScore + gain,
+          puzzleDone,
+          usedPuzzleIds,
+          starsThisRound: run.starsThisRound + gain,
+          puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
+          puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
+          trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
+          runDifficultySamples: nextRunDifficultySamples,
+          currentHints: 0,
+          currentPuzzle: undefined,
+          currentPuzzleChoices: [],
+          practiceCorrect: nextPracticeCorrect,
+          practiceAttempted: nextPracticeAttempted
+        });
+        setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${currentPuzzle.core_answer}`);
+        setFeedbackTone(correct ? 'success' : 'error');
+        triggerPulse(correct ? 'success' : 'error');
+        triggerResultFlash(
+          correct ? 'success' : 'error',
+          correct ? 'Practice complete!' : 'Practice complete',
+          correct ? `+${gain} points` : `Answer: ${currentPuzzle.core_answer}`
+        );
+        setInput('');
+        setClarifyInput('');
+        setClarifyReply('');
+        setShowTutor(false);
+        setShowClarifyDialog(false);
+        setTutorStep(0);
+        setScreen('summary');
+        return;
+      }
+
+      const nextPuzzleRunSeed: RunState = {
+        ...run,
+        usedPuzzleIds,
+        trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
+        practiceCorrect: nextPracticeCorrect,
+        practiceAttempted: nextPracticeAttempted
+      };
+      setRun({
+        ...run,
+        brainScore: run.brainScore + gain,
+        puzzleDone,
+        usedPuzzleIds,
+        starsThisRound: run.starsThisRound + gain,
+        puzzlesSolvedThisRound: run.puzzlesSolvedThisRound + (correct ? 1 : 0),
+        puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
+        trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
+        runDifficultySamples: nextRunDifficultySamples,
+        phase: 'puzzle_pick',
+        currentHints: 0,
+        currentPuzzle: undefined,
+        currentPuzzleChoices: getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds),
+        practiceCorrect: nextPracticeCorrect,
+        practiceAttempted: nextPracticeAttempted
+      });
+
+      setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${currentPuzzle.core_answer}`);
+      setFeedbackTone(correct ? 'success' : 'error');
+      triggerPulse(correct ? 'success' : 'error');
+      triggerResultFlash(
+        correct ? 'success' : 'error',
+        correct ? 'Puzzle solved!' : 'Try another one',
+        correct ? `+${gain} points` : `Answer: ${currentPuzzle.core_answer}`
+      );
+      setInput('');
+      setClarifyInput('');
+      setClarifyReply('');
+      setShowTutor(false);
+      setShowClarifyDialog(false);
+      setTutorStep(0);
+      return;
+    }
 
     const streaks = updatePuzzleStreak(state.streaks, correct && !revealUsed);
     const museum = [...state.museum];
-    const idx = museum.findIndex((entry) => entry.puzzleId === run.currentPuzzle?.id);
+    const idx = museum.findIndex((entry) => entry.puzzleId === currentPuzzle.id);
     const previousEntry = idx >= 0 ? museum[idx] : undefined;
     const solved = Boolean(previousEntry?.solved) || correct;
     const extensionGain = correct ? (run.currentHints <= 1 ? 1 : 0) : 0;
     const entry = {
-      puzzleId: run.currentPuzzle.id,
-      title: run.currentPuzzle.title,
-      promptSnapshot: run.currentPuzzle.core_prompt,
-      hintsSnapshot: run.currentPuzzle.hint_ladder.slice(0, 3),
+      puzzleId: currentPuzzle.id,
+      title: currentPuzzle.title,
+      promptSnapshot: currentPuzzle.core_prompt,
+      hintsSnapshot: currentPuzzle.hint_ladder.slice(0, 3),
       solved,
       attempts: (previousEntry?.attempts ?? 0) + 1,
       extensionsCompleted: Math.max(previousEntry?.extensionsCompleted ?? 0, extensionGain),
@@ -1966,22 +2260,24 @@ export default function App() {
         bossStage: 'intro',
         runDifficultySamples: nextRunDifficultySamples,
         bonusChallenge: createBonusChallenge(
-          run.gameMode,
+          run.gameMode === 'practice_mode' ? 'galaxy_mix' : run.gameMode,
           'puzzle',
           isTrainingRun ? getActiveTrainingRating(run, state.skill.rating) : updatedRating,
           nextRunDifficultySamples
         ),
         currentHints: 0,
         currentPuzzle: undefined,
-        currentPuzzleChoices: []
+        currentPuzzleChoices: [],
+        practiceCorrect: run.practiceCorrect,
+        practiceAttempted: run.practiceAttempted
       });
-      setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${run.currentPuzzle.core_answer}`);
+      setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${currentPuzzle.core_answer}`);
       setFeedbackTone(correct ? 'success' : 'error');
       triggerPulse(correct ? 'success' : 'error');
       triggerResultFlash(
         correct ? 'success' : 'error',
         correct ? 'Puzzle solved!' : 'Almost there',
-        correct ? `+${gain} points` : `Answer: ${run.currentPuzzle.core_answer}`
+        correct ? `+${gain} points` : `Answer: ${currentPuzzle.core_answer}`
       );
       setInput('');
       setClarifyInput('');
@@ -2011,16 +2307,18 @@ export default function App() {
       phase: 'puzzle_pick',
       currentHints: 0,
       currentPuzzle: undefined,
-      currentPuzzleChoices: getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds)
+      currentPuzzleChoices: getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds),
+      practiceCorrect: run.practiceCorrect,
+      practiceAttempted: run.practiceAttempted
     });
 
-    setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${run.currentPuzzle.core_answer}`);
+    setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${currentPuzzle.core_answer}`);
     setFeedbackTone(correct ? 'success' : 'error');
     triggerPulse(correct ? 'success' : 'error');
     triggerResultFlash(
       correct ? 'success' : 'error',
       correct ? 'Puzzle solved!' : 'Try another one',
-      correct ? `+${gain} points` : `Answer: ${run.currentPuzzle.core_answer}`
+      correct ? `+${gain} points` : `Answer: ${currentPuzzle.core_answer}`
     );
     setInput('');
     setClarifyInput('');
@@ -2874,31 +3172,142 @@ export default function App() {
         </div>
       </button>
 
-      <section className="card mission-launch-card">
-        <p className="text-label mission-label">Choose your mission:</p>
-        <div className="mode-card-grid">
-          {(Object.keys(modeConfig) as GameMode[]).map((mode) => (
-            <button
-              key={mode}
-              className={`mode-card-option ${selectedMode === mode ? 'selected' : ''}`}
-              onClick={() => {
-                setSelectedMode(mode);
-                startRun(mode);
-              }}
-            >
-              <span className="mode-card-head">
-                <span className="mode-card-title">{modeConfig[mode].icon} {modeConfig[mode].name}</span>
-                <span className="mode-card-counts">
-                  {modeConfig[mode].flowTarget > 0 && modeConfig[mode].puzzleTarget > 0
-                    ? `⚡ ${modeConfig[mode].flowTarget} + 🧩 ${modeConfig[mode].puzzleTarget}`
-                    : modeConfig[mode].flowTarget > 0
-                      ? `⚡ ${modeConfig[mode].flowTarget}`
-                      : `🧩 ${modeConfig[mode].puzzleTarget}`}
+      <section className="card experience-switch-card">
+        <p className="text-label mission-label">Choose your top mode:</p>
+        <div className="experience-switch">
+          <button
+            type="button"
+            className={`experience-choice ${homeExperience === 'mission' ? 'selected' : ''}`}
+            onClick={() => setHomeExperience('mission')}
+          >
+            <span className="experience-title">🚀 Mission Mode</span>
+            <span className="experience-subtitle">Adaptive + gameified main mode</span>
+          </button>
+          <button
+            type="button"
+            className={`experience-choice ${homeExperience === 'practice' ? 'selected' : ''}`}
+            onClick={() => setHomeExperience('practice')}
+          >
+            <span className="experience-title">🧠 Practice Mode</span>
+            <span className="experience-subtitle">Target one skill at a time</span>
+          </button>
+        </div>
+      </section>
+
+      {homeExperience === 'mission' ? (
+        <section className="card mission-launch-card">
+          <p className="text-label mission-label">Mission Mode options:</p>
+          <div className="mode-card-grid">
+            {missionModeOptions.map((mode) => (
+              <button
+                key={mode}
+                className={`mode-card-option ${selectedMode === mode ? 'selected' : ''}`}
+                onClick={() => {
+                  setSelectedMode(mode);
+                  startRun(mode);
+                }}
+              >
+                <span className="mode-card-head">
+                  <span className="mode-card-title">{modeConfig[mode].icon} {modeConfig[mode].name}</span>
+                  <span className="mode-card-counts">
+                    {modeConfig[mode].flowTarget > 0 && modeConfig[mode].puzzleTarget > 0
+                      ? `⚡ ${modeConfig[mode].flowTarget} + 🧩 ${modeConfig[mode].puzzleTarget}`
+                      : modeConfig[mode].flowTarget > 0
+                        ? `⚡ ${modeConfig[mode].flowTarget}`
+                        : `🧩 ${modeConfig[mode].puzzleTarget}`}
+                  </span>
                 </span>
-              </span>
-              <span className="mode-card-subtitle">{modeConfig[mode].subtitle}</span>
-            </button>
-          ))}
+                <span className="mode-card-subtitle">{modeConfig[mode].subtitle}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="card practice-setup-card">
+          <div className="practice-setup-head">
+            <p className="text-label mission-label">Practice setup</p>
+            <p className="muted practice-setup-copy">Starts focused. No mixed distractions.</p>
+          </div>
+
+          <div className="practice-topic-groups">
+            {(['fast_math', 'puzzles'] as PracticeTopicFamily[]).map((family) => (
+              <div key={family} className="practice-topic-group">
+                <p className="practice-group-label">{family === 'fast_math' ? 'Fast Math' : 'Puzzles'}</p>
+                <div className="chips practice-chip-row">
+                  {practiceTopics
+                    .filter((topic) => topic.family === family)
+                    .map((topic) => (
+                      <button
+                        key={topic.key}
+                        type="button"
+                        className={`btn btn-secondary chip-btn ${practiceTopicKey === topic.key ? 'selected' : ''}`}
+                        onClick={() => setPracticeTopicKey(topic.key)}
+                      >
+                        {topic.label}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="practice-picker-grid">
+            <div className="practice-picker">
+              <p className="practice-picker-label">Difficulty</p>
+              <div className="chips practice-chip-row compact">
+                {PRACTICE_DIFFICULTY_OPTIONS.map((difficultyOption) => (
+                  <button
+                    key={difficultyOption.key}
+                    type="button"
+                    className={`btn btn-secondary chip-btn ${practiceDifficulty === difficultyOption.key ? 'selected' : ''}`}
+                    onClick={() => setPracticeDifficulty(difficultyOption.key)}
+                  >
+                    {difficultyOption.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="practice-picker">
+              <p className="practice-picker-label">Session length</p>
+              <div className="chips practice-chip-row compact">
+                {PRACTICE_SESSION_LENGTH_OPTIONS.map((lengthOption) => (
+                  <button
+                    key={`length-${lengthOption}`}
+                    type="button"
+                    className={`btn btn-secondary chip-btn ${practiceSessionLength === lengthOption ? 'selected' : ''}`}
+                    onClick={() => setPracticeSessionLength(lengthOption)}
+                  >
+                    {lengthOption} questions
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button className="btn btn-primary btn-primary-main" onClick={startPracticeSession}>
+            🧠 Start Practice
+          </button>
+          <p className="muted practice-summary-line">
+            Topic: {selectedPracticeTopic.label} • {toPracticeDifficultyLabel(practiceDifficulty)} • {practiceSessionLength} questions
+          </p>
+        </section>
+      )}
+
+      <section className="card secondary-actions-card">
+        <p className="text-label mission-label">More</p>
+        <div className="secondary-actions-grid">
+          <button className="secondary-mini-card" onClick={() => setScreen('scores')}>
+            <span className="secondary-mini-title">Star Board</span>
+            <span className="secondary-mini-subtitle">See galaxy rankings</span>
+          </button>
+          <button className="secondary-mini-card" onClick={() => setScreen('museum')}>
+            <span className="secondary-mini-title">Trophy Galaxy</span>
+            <span className="secondary-mini-subtitle">Puzzle collection</span>
+          </button>
+          <button className="secondary-mini-card" onClick={openCaptainEditor}>
+            <span className="secondary-mini-title">Captain Profile</span>
+            <span className="secondary-mini-subtitle">Name + character</span>
+          </button>
         </div>
       </section>
 
@@ -3215,26 +3624,65 @@ export default function App() {
         <span className="tag">Game Complete</span>
       </section>
       <section className="card">
+        {run.gameMode === 'practice_mode' && run.practiceConfig && (
+          <p className="muted practice-summary-header">
+            Practice: {run.practiceConfig.topicLabel} • {toPracticeDifficultyLabel(run.practiceConfig.difficulty)} • {run.practiceConfig.sessionLength} questions
+          </p>
+        )}
         <div className="stats-grid">
           <div className="stat-card">
             <span className="stat-value">{run.starsThisRound}</span>
-            <span className="stat-label">Stars This Round</span>
+            <span className="stat-label">{run.gameMode === 'practice_mode' ? 'Practice Score' : 'Stars This Round'}</span>
           </div>
           <div className="stat-card">
-            <span className="stat-value">{run.gameMode === 'rocket_rush' ? run.flowDone : run.puzzleDone}</span>
-            <span className="stat-label">{run.gameMode === 'rocket_rush' ? 'Math solved' : 'Puzzle cards solved'}</span>
+            <span className="stat-value">
+              {run.gameMode === 'rocket_rush' || run.gameMode === 'galaxy_mix' || run.gameMode === 'training_mode'
+                ? run.flowDone
+                : run.gameMode === 'practice_mode'
+                  ? run.practiceConfig?.topicDomain === 'flow'
+                    ? run.flowDone
+                    : run.puzzleDone
+                  : run.puzzleDone}
+            </span>
+            <span className="stat-label">
+              {run.gameMode === 'puzzle_orbit'
+                ? 'Puzzle cards solved'
+                : run.gameMode === 'practice_mode'
+                  ? run.practiceConfig?.topicDomain === 'flow'
+                    ? 'Practice questions solved'
+                    : 'Practice puzzles solved'
+                  : 'Math solved'}
+            </span>
           </div>
+          {run.gameMode === 'practice_mode' ? (
+            <div className="stat-card">
+              <span className="stat-value">{run.practiceCorrect}/{run.practiceAttempted}</span>
+              <span className="stat-label">Correct</span>
+            </div>
+          ) : (
+            <div className="stat-card">
+              <span className="stat-value">{state.totals.bestRunStars}</span>
+              <span className="stat-label">Best Run</span>
+            </div>
+          )}
           <div className="stat-card">
-            <span className="stat-value">{state.totals.bestRunStars}</span>
-            <span className="stat-label">Best Run</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value accent">{state.streaks.dailyStreak}</span>
-            <span className="stat-label">Day streak</span>
+            <span className="stat-value accent">{run.gameMode === 'practice_mode' ? `${practiceAccuracy}%` : state.streaks.dailyStreak}</span>
+            <span className="stat-label">{run.gameMode === 'practice_mode' ? 'Accuracy' : 'Day streak'}</span>
           </div>
         </div>
         <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>Play Again</button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              if (run.gameMode === 'practice_mode' && run.practiceConfig) {
+                startRun('practice_mode', { practiceConfig: run.practiceConfig });
+                return;
+              }
+              startRun(selectedMode);
+            }}
+          >
+            Play Again
+          </button>
           <button className="btn btn-secondary" onClick={() => setScreen('scores')}>💫 Stars</button>
         </div>
       </section>
