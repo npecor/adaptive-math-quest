@@ -33,6 +33,15 @@ type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
 type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode';
+type ResultFlashState = {
+  tone: FeedbackTone;
+  title: string;
+  detail: string;
+  icon: string;
+  token: number;
+  durationMs: number;
+  createdAtMs: number;
+};
 type PlayerCharacter = {
   id: string;
   emoji: string;
@@ -91,6 +100,7 @@ const TRAINING_EARLY_MAX_DIFFICULTY = 880;
 const TRAINING_MID_MAX_DIFFICULTY = 950;
 const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
+const RESULT_FLASH_DURATION_MS = 1750;
 const SHOW_TROPHY_ACTIVITY_CARD = false;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -1201,7 +1211,7 @@ export default function App() {
   const [feedback, setFeedback] = useState('');
   const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>('info');
   const [resultPulse, setResultPulse] = useState<FeedbackTone | null>(null);
-  const [resultFlash, setResultFlash] = useState<{ tone: FeedbackTone; title: string; detail: string; icon: string } | null>(null);
+  const [resultFlash, setResultFlash] = useState<ResultFlashState | null>(null);
   const resultFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [clarifyInput, setClarifyInput] = useState('');
   const [clarifyReply, setClarifyReply] = useState('');
@@ -1225,7 +1235,7 @@ export default function App() {
     return '';
   });
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('all_time');
-  const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline'>('offline');
+  const [leaderboardStatus, setLeaderboardStatus] = useState<'online' | 'offline' | 'loading'>('loading');
   const [networkLeaderboardRowsByMode, setNetworkLeaderboardRowsByMode] = useState<
     Partial<Record<LeaderboardMode, LeaderboardRow[] | null>>
   >({});
@@ -1420,11 +1430,13 @@ export default function App() {
     }
 
     const icon = tone === 'success' ? '🎉' : tone === 'error' ? '💫' : '🚀';
-    setResultFlash({ tone, title, detail, icon });
+    const token = Date.now();
+    const durationMs = RESULT_FLASH_DURATION_MS;
+    setResultFlash({ tone, title, detail, icon, token, durationMs, createdAtMs: Date.now() });
     resultFlashTimeoutRef.current = setTimeout(() => {
-      setResultFlash(null);
+      setResultFlash((active) => (active?.token === token ? null : active));
       resultFlashTimeoutRef.current = null;
-    }, 1750);
+    }, durationMs);
   };
 
   useEffect(() => {
@@ -1433,6 +1445,25 @@ export default function App() {
       if (celebrateCharacterTimeoutRef.current) clearTimeout(celebrateCharacterTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!resultFlash) return;
+    const safetyTimer = window.setTimeout(() => {
+      setResultFlash((active) => (active?.token === resultFlash.token ? null : active));
+    }, resultFlash.durationMs + 1200);
+    return () => window.clearTimeout(safetyTimer);
+  }, [resultFlash]);
+
+  useEffect(() => {
+    if (!resultFlash) return;
+    const staleGuard = window.setInterval(() => {
+      const age = Date.now() - resultFlash.createdAtMs;
+      if (age >= resultFlash.durationMs + 1600) {
+        setResultFlash((active) => (active?.token === resultFlash.token ? null : active));
+      }
+    }, 250);
+    return () => window.clearInterval(staleGuard);
+  }, [resultFlash]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1561,6 +1592,7 @@ export default function App() {
     const modeForRequest = leaderboardMode;
     const loadLeaderboardRows = async () => {
       try {
+        setLeaderboardStatus('loading');
         setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: null }));
         const rows = await fetchLeaderboard(modeForRequest, 50);
         if (!active) return;
@@ -2422,6 +2454,7 @@ export default function App() {
   const leaderboardMetricIcon = leaderboardMode === 'all_time' ? '☄️' : leaderboardMode === 'best_run' ? '🚀' : '🏆';
   const leaderboardMetricLabel = leaderboardMode === 'all_time' ? 'Stars' : leaderboardMode === 'best_run' ? 'Best Run' : 'Trophies';
   const networkLeaderboardRows = networkLeaderboardRowsByMode[leaderboardMode] ?? null;
+  const isLeaderboardLoading = screen === 'scores' && leaderboardStatus === 'loading' && networkLeaderboardRows === null;
 
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
@@ -2438,9 +2471,14 @@ export default function App() {
         extensionsSolved: state.totals.extensionsSolved
       }
     );
-    const sourceRows = networkLeaderboardRows && networkLeaderboardRows.length > 0 ? networkLeaderboardRows : fallbackRows;
+    let sourceRows: LeaderboardRow[] = [];
+    if (networkLeaderboardRows && networkLeaderboardRows.length > 0) {
+      sourceRows = networkLeaderboardRows;
+    } else if (leaderboardStatus === 'offline') {
+      sourceRows = fallbackRows;
+    }
     return filterLeaderboardRowsForMode(sourceRows, leaderboardMode);
-  }, [leaderboardMode, networkLeaderboardRows, state.totals, state.user]);
+  }, [leaderboardMode, leaderboardStatus, networkLeaderboardRows, state.totals, state.user]);
 
   const leaderboard = useMemo(() => {
     const youUserId = state.user?.userId;
@@ -2462,6 +2500,7 @@ export default function App() {
   }, [leaderboardMode, leaderboardSourceRows, state.user]);
 
   const pinnedYouRow = useMemo(() => {
+    if (isLeaderboardLoading) return null;
     if (!state.user) return null;
     if (!canJoinGlobalLeaderboard) return null;
     if (leaderboard.some((entry) => entry.isYou)) return null;
@@ -2500,7 +2539,7 @@ export default function App() {
       isBot: found.isBot,
       isYou: true
     };
-  }, [canJoinGlobalLeaderboard, leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
+  }, [canJoinGlobalLeaderboard, isLeaderboardLoading, leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
 
   const podiumLeaders = useMemo(
     () =>
@@ -2981,7 +3020,7 @@ export default function App() {
                 className="btn btn-secondary utility-btn"
                 onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
               >
-                <span aria-hidden="true">🧠</span> Help
+                <span aria-hidden="true">🧠</span> Give me a hint
               </button>
             </div>
             {renderCoachPanel(currentFlowCoachPlan, currentFlowCoachVisual, 'Coach', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
@@ -3061,7 +3100,7 @@ export default function App() {
                   openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
                 }
               >
-                <span aria-hidden="true">🧠</span> Help
+                <span aria-hidden="true">🧠</span> Give me a hint
               </button>
             </div>
             <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
@@ -3143,7 +3182,7 @@ export default function App() {
                       openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
                     }
                   >
-                    <span aria-hidden="true">🧠</span> Help
+                    <span aria-hidden="true">🧠</span> Give me a hint
                   </button>
                 </div>
                 {renderCoachPanel(currentBonusCoachPlan, null, 'Mini Boss Coach', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))}
@@ -3270,57 +3309,69 @@ export default function App() {
         </div>
       </section>
 
-      <section className="card podium-wrap leaderboard-podium">
-        {podiumLeaders.map((entry) => (
-          <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
-            <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
-            <strong>#{entry.rank}</strong>
-            <span className="podium-name" title={entry.name}>{entry.name}</span>
-            <small className="podium-score">{entry.primaryValue}</small>
-            <div className="podium-bar" aria-hidden="true" />
-          </div>
-        ))}
-      </section>
+      {isLeaderboardLoading ? (
+        <section className="card podium-wrap leaderboard-loading-state">
+          <p className="muted">Loading Star Board...</p>
+        </section>
+      ) : (
+        <section className="card podium-wrap leaderboard-podium">
+          {podiumLeaders.map((entry) => (
+            <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
+              <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
+              <strong>#{entry.rank}</strong>
+              <span className="podium-name" title={entry.name}>{entry.name}</span>
+              <small className="podium-score">{entry.primaryValue}</small>
+              <div className="podium-bar" aria-hidden="true" />
+            </div>
+          ))}
+        </section>
+      )}
 
-      <section className="list-container scoreboard-list">
-        <div className="leaderboard-list-head">
-          <span>Rank &amp; Player</span>
-          <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
-        </div>
-        {leaderboard.map((entry) => (
-          <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
-            <div className="rank-row-left">
-              <span className="rank-number">#{entry.rank}</span>
-              <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-                <span className="row-main">
-                  <span className="row-name-line">
-                    <span className="row-name" title={entry.name}>{entry.name}</span>
-                    {entry.isYou && <span className="you-chip">YOU</span>}
-                  </span>
-                </span>
-              </div>
-              <span className="row-score">{entry.primaryValue}</span>
-            </div>
-        ))}
-        {pinnedYouRow && (
-          <>
-            <p className="muted pinned-you-label">Your rank</p>
-            <div className="rank-row scoreboard-row me pinned">
+      {!isLeaderboardLoading && (
+        <section className="list-container scoreboard-list">
+          <div className="leaderboard-list-head">
+            <span>Rank &amp; Player</span>
+            <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
+          </div>
+          {leaderboard.length === 0 && (
+            <div className="empty-state">No leaderboard entries yet for this tab.</div>
+          )}
+          {leaderboard.map((entry) => (
+            <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
               <div className="rank-row-left">
-                <span className="rank-number">#{pinnedYouRow.rank}</span>
-                <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
-                <span className="row-main">
-                  <span className="row-name-line">
-                    <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
-                    <span className="you-chip">YOU</span>
+                <span className="rank-number">#{entry.rank}</span>
+                <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
+                  <span className="row-main">
+                    <span className="row-name-line">
+                      <span className="row-name" title={entry.name}>{entry.name}</span>
+                      {entry.isYou && <span className="you-chip">YOU</span>}
+                    </span>
                   </span>
-                </span>
+                </div>
+                <span className="row-score">{entry.primaryValue}</span>
               </div>
-              <span className="row-score">{pinnedYouRow.primaryValue}</span>
-            </div>
-          </>
-        )}
-      </section>
+          ))}
+          {pinnedYouRow && (
+            <>
+              <p className="muted pinned-you-label">Your rank</p>
+              <div className="rank-row scoreboard-row me pinned">
+                <div className="rank-row-left">
+                  <span className="rank-number">#{pinnedYouRow.rank}</span>
+                  <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
+                  <span className="row-main">
+                    <span className="row-name-line">
+                      <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
+                      <span className="you-chip">YOU</span>
+                    </span>
+                  </span>
+                </div>
+                <span className="row-score">{pinnedYouRow.primaryValue}</span>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
     </>
   );
 
@@ -3483,8 +3534,25 @@ export default function App() {
     <div className={`cosmic-root brand-${brandVariant}`}>
       <div className="parallax-bg bg-one" />
       {resultFlash && (
-        <div className={`result-flash ${resultFlash.tone}`}>
-          <div className="result-flash-card">
+        <div
+          className={`result-flash ${resultFlash.tone}`}
+          role="status"
+          aria-live="polite"
+          onClick={() => setResultFlash((active) => (active?.token === resultFlash.token ? null : active))}
+          onAnimationEnd={(event) => {
+            if (event.target !== event.currentTarget) return;
+            setResultFlash((active) => (active?.token === resultFlash.token ? null : active));
+          }}
+        >
+          <div className="result-flash-card" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="result-flash-close"
+              aria-label="Dismiss feedback"
+              onClick={() => setResultFlash((active) => (active?.token === resultFlash.token ? null : active))}
+            >
+              ✕
+            </button>
             <div className="result-flash-character">
               <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
             </div>

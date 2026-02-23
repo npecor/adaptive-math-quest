@@ -79,13 +79,14 @@ p {
   inset: 0;
   display: grid;
   place-items: center;
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 500;
   background: radial-gradient(circle at 50% 45%, rgba(15, 23, 42, 0.34), rgba(15, 23, 42, 0.06));
   animation: flash-overlay 1750ms ease both;
 }
 
 .result-flash-card {
+  position: relative;
   min-width: 220px;
   max-width: 78vw;
   border-radius: var(--radius-lg);
@@ -96,6 +97,23 @@ p {
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   backdrop-filter: blur(7px);
   animation: result-pop 1750ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.result-flash-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(15, 23, 42, 0.45);
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
 .result-flash.success .result-flash-card {
@@ -1540,6 +1558,7 @@ p {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  justify-content: center;
 }
 
 .puzzle-helper-actions {
@@ -1547,26 +1566,28 @@ p {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  justify-content: center;
 }
 
 .utility-btn {
   width: auto;
   flex: 0 0 auto;
-  min-height: 28px;
+  min-height: 36px;
+  min-width: 170px;
   height: auto;
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
   font-family: var(--font-body);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.01em;
   text-transform: none;
-  opacity: 0.76;
+  opacity: 0.92;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  border-radius: 8px;
+  gap: 6px;
+  border-radius: 10px;
 }
 
 .helper-actions .utility-btn:only-child {
@@ -2140,6 +2161,12 @@ p {
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   align-items: end;
+}
+
+.leaderboard-loading-state {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
 }
 
 .scoreboard-header .text-title {
