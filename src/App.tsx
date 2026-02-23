@@ -1186,7 +1186,9 @@ const BrandMark = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <span className={`brand-mark size-${size}`} aria-hidden="true">
     <span className="brand-mark-planet" />
     <span className="brand-mark-ring" />
-    <span className="brand-mark-moon" />
+    <span className="brand-mark-moon-orbit">
+      <span className="brand-mark-moon" />
+    </span>
   </span>
 );
 
@@ -3311,7 +3313,18 @@ export default function App() {
 
       {isLeaderboardLoading ? (
         <section className="card podium-wrap leaderboard-loading-state">
-          <p className="muted">Loading Star Board...</p>
+          <div className="leaderboard-loading-fleet" aria-hidden="true">
+            <span className="leaderboard-loading-character">
+              <CharacterAvatar characterId="animal-axo-naut" size="sm" />
+            </span>
+            <span className="leaderboard-loading-character delay-1">
+              <CharacterAvatar characterId="animal-jelly-jet" size="sm" />
+            </span>
+            <span className="leaderboard-loading-character delay-2">
+              <CharacterAvatar characterId="entity-black-hole" size="sm" />
+            </span>
+          </div>
+          <p className="muted">Scanning the galaxy for top captains...</p>
         </section>
       ) : (
         <section className="card podium-wrap leaderboard-podium">

@@ -329,11 +329,13 @@ p {
   border-radius: 999px;
   filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.24));
   flex-shrink: 0;
+  --moon-orbit-radius: 21px;
+  --moon-size: 7px;
 }
 
-.brand-mark.size-sm { width: 24px; height: 24px; }
-.brand-mark.size-md { width: 36px; height: 36px; }
-.brand-mark.size-lg { width: 120px; height: 120px; }
+.brand-mark.size-sm { width: 24px; height: 24px; --moon-orbit-radius: 14px; --moon-size: 5px; }
+.brand-mark.size-md { width: 36px; height: 36px; --moon-orbit-radius: 21px; --moon-size: 7px; }
+.brand-mark.size-lg { width: 120px; height: 120px; --moon-orbit-radius: 70px; --moon-size: 24px; }
 
 .brand-mark-planet {
   position: absolute;
@@ -356,24 +358,42 @@ p {
   box-shadow: 0 0 9px rgba(0, 242, 255, 0.25);
 }
 
-.brand-mark-moon {
+.brand-mark-moon-orbit {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 20%;
+  width: 0;
+  height: 0;
+  animation: brand-moon-orbit 7.6s linear infinite;
+}
+
+.brand-mark-moon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--moon-size);
   aspect-ratio: 1;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff 0%, var(--brand-yellow) 90%);
   box-shadow: 0 0 8px rgba(245, 166, 35, 0.58);
-  animation: brand-moon-orbit 7.6s linear infinite;
+  transform: translate(-50%, -50%);
 }
 
 @keyframes brand-moon-orbit {
-  0% { transform: rotate(0deg) translateX(72%) rotate(0deg) scale(0.78); z-index: 1; }
+  0% {
+    transform: rotate(0deg) translateX(var(--moon-orbit-radius)) rotate(0deg) scale(0.78);
+    z-index: 1;
+  }
   49% { z-index: 1; }
-  50% { transform: rotate(180deg) translateX(72%) rotate(-180deg) scale(1.06); z-index: 3; }
+  50% {
+    transform: rotate(180deg) translateX(var(--moon-orbit-radius)) rotate(-180deg) scale(1.06);
+    z-index: 3;
+  }
   99% { z-index: 3; }
-  100% { transform: rotate(360deg) translateX(72%) rotate(-360deg) scale(0.78); z-index: 1; }
+  100% {
+    transform: rotate(360deg) translateX(var(--moon-orbit-radius)) rotate(-360deg) scale(0.78);
+    z-index: 1;
+  }
 }
 
 .avatar {
@@ -2166,7 +2186,35 @@ p {
 .leaderboard-loading-state {
   min-height: 180px;
   display: grid;
-  place-items: center;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+}
+
+.leaderboard-loading-fleet {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+}
+
+.leaderboard-loading-character {
+  display: inline-flex;
+  animation: leaderboard-floaty-load 2.4s ease-in-out infinite;
+}
+
+.leaderboard-loading-character.delay-1 {
+  animation-delay: 0.35s;
+}
+
+.leaderboard-loading-character.delay-2 {
+  animation-delay: 0.7s;
+}
+
+@keyframes leaderboard-floaty-load {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
 }
 
 .scoreboard-header .text-title {
