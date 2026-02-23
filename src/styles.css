@@ -329,17 +329,19 @@ p {
   border-radius: 999px;
   filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.24));
   flex-shrink: 0;
-  --moon-orbit-radius: 21px;
+  --moon-orbit-x: 28px;
+  --moon-orbit-scale: 0.3;
   --moon-size: 7px;
 }
 
-.brand-mark.size-sm { width: 24px; height: 24px; --moon-orbit-radius: 14px; --moon-size: 5px; }
-.brand-mark.size-md { width: 36px; height: 36px; --moon-orbit-radius: 21px; --moon-size: 7px; }
-.brand-mark.size-lg { width: 120px; height: 120px; --moon-orbit-radius: 70px; --moon-size: 24px; }
+.brand-mark.size-sm { width: 24px; height: 24px; --moon-orbit-x: 18.6px; --moon-orbit-scale: 0.295; --moon-size: 5px; }
+.brand-mark.size-md { width: 36px; height: 36px; --moon-orbit-x: 27.9px; --moon-orbit-scale: 0.297; --moon-size: 7px; }
+.brand-mark.size-lg { width: 120px; height: 120px; --moon-orbit-x: 93px; --moon-orbit-scale: 0.297; --moon-size: 24px; }
 
 .brand-mark-planet {
   position: absolute;
   inset: 0;
+  z-index: 2;
   border-radius: 50%;
   background:
     radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.92) 0%, rgba(0, 242, 255, 0.85) 18%, rgba(76, 29, 149, 0.94) 60%, rgba(11, 30, 82, 1) 100%);
@@ -353,6 +355,7 @@ p {
   width: 155%;
   height: 46%;
   border-radius: 50%;
+  z-index: 1;
   transform: translate(-50%, -50%) rotate(16deg);
   border: 1.2px solid rgba(0, 242, 255, 0.45);
   box-shadow: 0 0 9px rgba(0, 242, 255, 0.25);
@@ -364,6 +367,7 @@ p {
   top: 50%;
   width: 0;
   height: 0;
+  z-index: 3;
   animation: brand-moon-orbit 7.6s linear infinite;
 }
 
@@ -377,23 +381,24 @@ p {
   background: radial-gradient(circle at 35% 30%, #fff 0%, var(--brand-yellow) 90%);
   box-shadow: 0 0 8px rgba(245, 166, 35, 0.58);
   transform: translate(-50%, -50%);
+  animation: brand-moon-visibility 7.6s linear infinite;
 }
 
 @keyframes brand-moon-orbit {
   0% {
-    transform: rotate(0deg) translateX(var(--moon-orbit-radius)) rotate(0deg) scale(0.78);
-    z-index: 1;
+    transform: rotate(16deg) scaleY(var(--moon-orbit-scale)) rotate(0deg) translateX(var(--moon-orbit-x)) rotate(0deg) scale(0.78);
   }
-  49% { z-index: 1; }
   50% {
-    transform: rotate(180deg) translateX(var(--moon-orbit-radius)) rotate(-180deg) scale(1.06);
-    z-index: 3;
+    transform: rotate(16deg) scaleY(var(--moon-orbit-scale)) rotate(180deg) translateX(var(--moon-orbit-x)) rotate(-180deg) scale(1.06);
   }
-  99% { z-index: 3; }
   100% {
-    transform: rotate(360deg) translateX(var(--moon-orbit-radius)) rotate(-360deg) scale(0.78);
-    z-index: 1;
+    transform: rotate(16deg) scaleY(var(--moon-orbit-scale)) rotate(360deg) translateX(var(--moon-orbit-x)) rotate(-360deg) scale(0.78);
   }
+}
+
+@keyframes brand-moon-visibility {
+  0%, 46% { opacity: 0; }
+  52%, 100% { opacity: 1; }
 }
 
 .avatar {
@@ -1760,6 +1765,32 @@ p {
   gap: 8px;
 }
 
+.coach-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.coach-close-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  background: rgba(15, 23, 42, 0.42);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.coach-close-btn:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #f0f9ff;
+}
+
 .coach-mode-tab {
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 8px;
@@ -2184,37 +2215,37 @@ p {
 }
 
 .leaderboard-loading-state {
-  min-height: 180px;
+  min-height: 220px;
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .leaderboard-loading-fleet {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 10px;
-  min-height: 54px;
+  position: relative;
+  width: min(100%, 360px);
+  height: 140px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), rgba(15, 23, 42, 0));
+  overflow: hidden;
 }
 
 .leaderboard-loading-character {
-  display: inline-flex;
-  animation: leaderboard-floaty-load 2.4s ease-in-out infinite;
-}
-
-.leaderboard-loading-character.delay-1 {
-  animation-delay: 0.35s;
-}
-
-.leaderboard-loading-character.delay-2 {
-  animation-delay: 0.7s;
+  position: absolute;
+  left: var(--load-x, 50%);
+  top: var(--load-y, 50%);
+  display: inline-grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  animation: leaderboard-floaty-load var(--load-duration, 2.8s) ease-in-out infinite;
+  animation-delay: var(--load-delay, 0s);
+  filter: drop-shadow(0 6px 10px rgba(2, 6, 23, 0.35));
 }
 
 @keyframes leaderboard-floaty-load {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-8px); }
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) rotate(-2deg); }
+  50% { transform: translate(-50%, -50%) translateY(-9px) rotate(2deg); }
 }
 
 .scoreboard-header .text-title {

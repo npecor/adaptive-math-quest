@@ -116,6 +116,18 @@ const playerCharacters: PlayerCharacter[] = [
   { id: 'entity-black-hole', emoji: '🕳️', name: 'Black Hole', vibe: 'Tiny singularity buddy', kind: 'animal' },
   { id: 'animal-cosmo-cat', emoji: '🐱', name: 'Cosmo Cat', vibe: 'Solar flares + mischief', kind: 'animal' }
 ];
+const leaderboardLoadingSpots = [
+  { x: 10, y: 18, delay: 0, duration: 2.6 },
+  { x: 27, y: 34, delay: 0.25, duration: 2.8 },
+  { x: 45, y: 16, delay: 0.5, duration: 2.4 },
+  { x: 63, y: 30, delay: 0.8, duration: 2.9 },
+  { x: 83, y: 20, delay: 1.1, duration: 2.7 },
+  { x: 16, y: 58, delay: 0.35, duration: 2.5 },
+  { x: 34, y: 74, delay: 0.65, duration: 3.1 },
+  { x: 52, y: 56, delay: 0.95, duration: 2.7 },
+  { x: 70, y: 72, delay: 1.3, duration: 2.9 },
+  { x: 88, y: 60, delay: 1.55, duration: 2.6 }
+] as const;
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
   'astro-cactus-cadet': { base: '#d9f99d', accent: '#84cc16', trim: '#fef08a', mark: '#365314' },
@@ -2643,7 +2655,17 @@ export default function App() {
 
     return (
       <div className="tutor-panel coach-panel">
-        <p className="tutor-label">{panelLabel}</p>
+        <div className="coach-panel-head">
+          <p className="tutor-label">{panelLabel}</p>
+          <button
+            type="button"
+            className="coach-close-btn"
+            aria-label="Close hint"
+            onClick={() => setShowTutor(false)}
+          >
+            ✕
+          </button>
+        </div>
         <div className="coach-mode-tabs" role="tablist" aria-label="Coach mode">
           <button
             type="button"
@@ -2730,9 +2752,6 @@ export default function App() {
         )}
 
         {coachPlan.checkTip && <p className="coach-check-tip">Check: {coachPlan.checkTip}</p>}
-        <button className="btn btn-secondary" onClick={() => setShowTutor(false)}>
-          Close
-        </button>
       </div>
     );
   };
@@ -3314,17 +3333,22 @@ export default function App() {
       {isLeaderboardLoading ? (
         <section className="card podium-wrap leaderboard-loading-state">
           <div className="leaderboard-loading-fleet" aria-hidden="true">
-            <span className="leaderboard-loading-character">
-              <CharacterAvatar characterId="animal-axo-naut" size="sm" />
-            </span>
-            <span className="leaderboard-loading-character delay-1">
-              <CharacterAvatar characterId="animal-jelly-jet" size="sm" />
-            </span>
-            <span className="leaderboard-loading-character delay-2">
-              <CharacterAvatar characterId="entity-black-hole" size="sm" />
-            </span>
+            {playerCharacters.map((character, index) => {
+              const spot = leaderboardLoadingSpots[index % leaderboardLoadingSpots.length];
+              const style = {
+                '--load-x': `${spot.x}%`,
+                '--load-y': `${spot.y}%`,
+                '--load-delay': `${spot.delay}s`,
+                '--load-duration': `${spot.duration}s`
+              } as CSSProperties;
+              return (
+                <span key={character.id} className="leaderboard-loading-character" style={style}>
+                  <CharacterAvatar characterId={character.id} size="sm" />
+                </span>
+              );
+            })}
           </div>
-          <p className="muted">Scanning the galaxy for top captains...</p>
+          <p className="muted">Loading Star Board...</p>
         </section>
       ) : (
         <section className="card podium-wrap leaderboard-podium">
