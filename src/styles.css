@@ -2245,19 +2245,27 @@ p {
   animation: leaderboard-floaty-load var(--load-duration, 2.8s) ease-in-out infinite;
   animation-delay: var(--load-delay, 0s);
   filter: drop-shadow(0 6px 10px rgba(2, 6, 23, 0.35));
+  z-index: 1;
 }
 
 .leaderboard-loading-message {
   position: absolute;
   left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: rgba(224, 242, 254, 0.94);
   letter-spacing: 0.02em;
   text-shadow: 0 0 8px rgba(14, 165, 233, 0.35);
+  z-index: 3;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  box-shadow: 0 8px 22px rgba(2, 6, 23, 0.34), 0 0 0 6px rgba(15, 23, 42, 0.22);
 }
 
 .leaderboard-loading-preview {

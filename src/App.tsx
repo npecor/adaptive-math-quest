@@ -117,16 +117,18 @@ const playerCharacters: PlayerCharacter[] = [
   { id: 'animal-cosmo-cat', emoji: '🐱', name: 'Cosmo Cat', vibe: 'Solar flares + mischief', kind: 'animal' }
 ];
 const leaderboardLoadingSpots = [
-  { x: 10, y: 18, delay: 0, duration: 2.6 },
-  { x: 27, y: 34, delay: 0.25, duration: 2.8 },
-  { x: 45, y: 16, delay: 0.5, duration: 2.4 },
-  { x: 63, y: 30, delay: 0.8, duration: 2.9 },
-  { x: 83, y: 20, delay: 1.1, duration: 2.7 },
-  { x: 16, y: 58, delay: 0.35, duration: 2.5 },
-  { x: 34, y: 74, delay: 0.65, duration: 3.1 },
-  { x: 52, y: 56, delay: 0.95, duration: 2.7 },
-  { x: 70, y: 72, delay: 1.3, duration: 2.9 },
-  { x: 88, y: 60, delay: 1.55, duration: 2.6 }
+  { x: 8, y: 14, delay: 0, duration: 2.6 },
+  { x: 22, y: 26, delay: 0.25, duration: 2.8 },
+  { x: 38, y: 13, delay: 0.5, duration: 2.4 },
+  { x: 62, y: 14, delay: 0.8, duration: 2.9 },
+  { x: 78, y: 26, delay: 1.1, duration: 2.7 },
+  { x: 92, y: 14, delay: 1.25, duration: 2.5 },
+  { x: 10, y: 84, delay: 0.35, duration: 2.5 },
+  { x: 26, y: 72, delay: 0.65, duration: 3.1 },
+  { x: 42, y: 86, delay: 0.95, duration: 2.7 },
+  { x: 58, y: 86, delay: 1.3, duration: 2.9 },
+  { x: 74, y: 72, delay: 1.55, duration: 2.6 },
+  { x: 90, y: 84, delay: 1.75, duration: 2.7 }
 ] as const;
 const leaderboardLoadingSeeds = [
   { userId: 'seed-1', name: 'Nova', avatarId: 'animal-axo-naut', allTimeStars: 476, bestRunStars: 188, trophiesEarned: 6 },
