@@ -128,6 +128,15 @@ const leaderboardLoadingSpots = [
   { x: 70, y: 72, delay: 1.3, duration: 2.9 },
   { x: 88, y: 60, delay: 1.55, duration: 2.6 }
 ] as const;
+const leaderboardLoadingSeeds = [
+  { userId: 'seed-1', name: 'Nova', avatarId: 'animal-axo-naut', allTimeStars: 476, bestRunStars: 188, trophiesEarned: 6 },
+  { userId: 'seed-2', name: 'Mathilde', avatarId: 'animal-stardust-fish', allTimeStars: 4045, bestRunStars: 660, trophiesEarned: 9 },
+  { userId: 'seed-3', name: 'Dill', avatarId: 'animal-cosmo-cat', allTimeStars: 850, bestRunStars: 172, trophiesEarned: 5 },
+  { userId: 'seed-4', name: 'Cyber', avatarId: 'astro-bot', allTimeStars: 412, bestRunStars: 159, trophiesEarned: 5 },
+  { userId: 'seed-5', name: 'Comet_X', avatarId: 'animal-stardust-fish', allTimeStars: 338, bestRunStars: 149, trophiesEarned: 3 },
+  { userId: 'seed-6', name: 'Mochi', avatarId: 'animal-moon-mochi', allTimeStars: 276, bestRunStars: 121, trophiesEarned: 2 },
+  { userId: 'seed-7', name: 'Axo', avatarId: 'animal-axo-naut', allTimeStars: 244, bestRunStars: 109, trophiesEarned: 2 }
+] as const;
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
   'astro-cactus-cadet': { base: '#d9f99d', accent: '#84cc16', trim: '#fef08a', mark: '#365314' },
@@ -2513,6 +2522,29 @@ export default function App() {
     }));
   }, [leaderboardMode, leaderboardSourceRows, state.user]);
 
+  const loadingLeaderboard = useMemo(
+    () =>
+      leaderboardLoadingSeeds.map((seed, index) => ({
+        rank: index + 1,
+        userId: seed.userId,
+        name: seed.name,
+        avatarId: seed.avatarId,
+        primaryValue:
+          leaderboardMode === 'all_time'
+            ? seed.allTimeStars
+            : leaderboardMode === 'best_run'
+              ? seed.bestRunStars
+              : seed.trophiesEarned,
+        allTimeStars: seed.allTimeStars,
+        bestRunStars: seed.bestRunStars,
+        trophiesEarned: seed.trophiesEarned,
+        extensionsSolved: 0,
+        isBot: true,
+        isYou: false
+      })),
+    [leaderboardMode]
+  );
+
   const pinnedYouRow = useMemo(() => {
     if (isLeaderboardLoading) return null;
     if (!state.user) return null;
@@ -2555,12 +2587,13 @@ export default function App() {
     };
   }, [canJoinGlobalLeaderboard, isLeaderboardLoading, leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
 
+  const activeLeaderboard = isLeaderboardLoading ? loadingLeaderboard : leaderboard;
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
-        .map((rank) => leaderboard.find((entry) => entry.rank === rank))
-        .filter((entry): entry is (typeof leaderboard)[number] => entry !== undefined),
-    [leaderboard]
+        .map((rank) => activeLeaderboard.find((entry) => entry.rank === rank))
+        .filter((entry): entry is (typeof activeLeaderboard)[number] => entry !== undefined),
+    [activeLeaderboard]
   );
 
   const hideBottomNav =
@@ -2761,6 +2794,16 @@ export default function App() {
       window.localStorage.setItem(LANDING_SEEN_STORAGE_KEY, '1');
     }
     setScreen(state.user ? 'home' : 'onboarding');
+  };
+
+  const renderWinnerCrown = (rank: number, className = '') => {
+    if (rank < 1 || rank > 3) return null;
+    const label = rank === 1 ? 'First place' : rank === 2 ? 'Second place' : 'Third place';
+    return (
+      <span className={`winner-crown crown-${rank} ${className}`.trim()} role="img" aria-label={label} title={label}>
+        👑
+      </span>
+    );
   };
 
   const landing = (
@@ -3331,7 +3374,7 @@ export default function App() {
       </section>
 
       {isLeaderboardLoading ? (
-        <section className="card podium-wrap leaderboard-loading-state">
+        <section className="card leaderboard-loading-state leaderboard-loading-hero">
           <div className="leaderboard-loading-fleet" aria-hidden="true">
             {playerCharacters.map((character, index) => {
               const spot = leaderboardLoadingSpots[index % leaderboardLoadingSpots.length];
@@ -3347,67 +3390,68 @@ export default function App() {
                 </span>
               );
             })}
+            <p className="leaderboard-loading-message">Loading Star Board...</p>
           </div>
-          <p className="muted">Loading Star Board...</p>
         </section>
-      ) : (
-        <section className="card podium-wrap leaderboard-podium">
-          {podiumLeaders.map((entry) => (
-            <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
-              <div className="podium-avatar"><CharacterAvatar characterId={entry.avatarId} size="md" /></div>
-              <strong>#{entry.rank}</strong>
-              <span className="podium-name" title={entry.name}>{entry.name}</span>
-              <small className="podium-score">{entry.primaryValue}</small>
-              <div className="podium-bar" aria-hidden="true" />
-            </div>
-          ))}
-        </section>
-      )}
+      ) : null}
 
-      {!isLeaderboardLoading && (
-        <section className="list-container scoreboard-list">
-          <div className="leaderboard-list-head">
-            <span>Rank &amp; Player</span>
-            <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
+      <section className={`card podium-wrap leaderboard-podium ${isLeaderboardLoading ? 'leaderboard-loading-preview' : ''}`}>
+        {podiumLeaders.map((entry) => (
+          <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
+            <div className="podium-avatar">
+              {renderWinnerCrown(entry.rank, 'podium-crown')}
+              <CharacterAvatar characterId={entry.avatarId} size="md" />
+            </div>
+            <strong>#{entry.rank}</strong>
+            <span className="podium-name" title={entry.name}>{entry.name}</span>
+            <small className="podium-score">{entry.primaryValue}</small>
+            <div className="podium-bar" aria-hidden="true" />
           </div>
-          {leaderboard.length === 0 && (
-            <div className="empty-state">No leaderboard entries yet for this tab.</div>
-          )}
-          {leaderboard.map((entry) => (
-            <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
+        ))}
+      </section>
+
+      <section className={`list-container scoreboard-list ${isLeaderboardLoading ? 'leaderboard-loading-preview' : ''}`}>
+        <div className="leaderboard-list-head">
+          <span>Rank &amp; Player</span>
+          <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
+        </div>
+        {!isLeaderboardLoading && activeLeaderboard.length === 0 && (
+          <div className="empty-state">No leaderboard entries yet for this tab.</div>
+        )}
+        {activeLeaderboard.map((entry) => (
+          <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
+            <div className="rank-row-left">
+              <span className="rank-number">{renderWinnerCrown(entry.rank, 'rank-crown')}#{entry.rank}</span>
+              <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
+                <span className="row-main">
+                  <span className="row-name-line">
+                    <span className="row-name" title={entry.name}>{entry.name}</span>
+                    {entry.isYou && <span className="you-chip">YOU</span>}
+                  </span>
+                </span>
+              </div>
+              <span className="row-score">{entry.primaryValue}</span>
+            </div>
+        ))}
+        {!isLeaderboardLoading && pinnedYouRow && (
+          <>
+            <p className="muted pinned-you-label">Your rank</p>
+            <div className="rank-row scoreboard-row me pinned">
               <div className="rank-row-left">
-                <span className="rank-number">#{entry.rank}</span>
-                <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-                  <span className="row-main">
-                    <span className="row-name-line">
-                      <span className="row-name" title={entry.name}>{entry.name}</span>
-                      {entry.isYou && <span className="you-chip">YOU</span>}
-                    </span>
+                <span className="rank-number">{renderWinnerCrown(pinnedYouRow.rank, 'rank-crown')}#{pinnedYouRow.rank}</span>
+                <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
+                <span className="row-main">
+                  <span className="row-name-line">
+                    <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
+                    <span className="you-chip">YOU</span>
                   </span>
-                </div>
-                <span className="row-score">{entry.primaryValue}</span>
+                </span>
               </div>
-          ))}
-          {pinnedYouRow && (
-            <>
-              <p className="muted pinned-you-label">Your rank</p>
-              <div className="rank-row scoreboard-row me pinned">
-                <div className="rank-row-left">
-                  <span className="rank-number">#{pinnedYouRow.rank}</span>
-                  <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
-                  <span className="row-main">
-                    <span className="row-name-line">
-                      <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
-                      <span className="you-chip">YOU</span>
-                    </span>
-                  </span>
-                </div>
-                <span className="row-score">{pinnedYouRow.primaryValue}</span>
-              </div>
-            </>
-          )}
-        </section>
-      )}
+              <span className="row-score">{pinnedYouRow.primaryValue}</span>
+            </div>
+          </>
+        )}
+      </section>
 
     </>
   );
