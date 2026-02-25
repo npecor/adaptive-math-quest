@@ -2215,75 +2215,151 @@ p {
 }
 
 .leaderboard-loading-state {
-  min-height: 220px;
+  min-height: 330px;
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.leaderboard-loading-hero {
-  margin-bottom: 2px;
-}
-
-.leaderboard-loading-fleet {
+.leaderboard-cosmic-loader {
   position: relative;
-  width: min(100%, 360px);
-  height: 140px;
-  border-radius: 14px;
-  background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), rgba(15, 23, 42, 0));
   overflow: hidden;
 }
 
-.leaderboard-loading-character {
+.leaderboard-loader-stars {
   position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle at 50% 45%, rgba(14, 165, 233, 0.14), transparent 72%);
+}
+
+.leaderboard-loader-star {
+  position: relative;
   left: var(--load-x, 50%);
   top: var(--load-y, 50%);
-  display: inline-grid;
+  display: block;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(248, 250, 252, 0.85);
+  opacity: 0.6;
+  animation: leaderboard-star-twinkle var(--load-duration, 3.2s) ease-in-out infinite;
+}
+
+.leaderboard-loader-galaxy {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: grid;
   place-items: center;
-  transform: translate(-50%, -50%);
-  animation: leaderboard-floaty-load var(--load-duration, 2.8s) ease-in-out infinite;
-  animation-delay: var(--load-delay, 0s);
-  filter: drop-shadow(0 6px 10px rgba(2, 6, 23, 0.35));
   z-index: 1;
 }
 
-.leaderboard-loading-message {
+.leaderboard-loader-core {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.78), 0 0 60px rgba(14, 165, 233, 0.56);
+}
+
+.leaderboard-loader-orbit {
   position: absolute;
+  border: 2px solid rgba(14, 165, 233, 0.2);
+  border-radius: 50%;
+  animation: leaderboard-loader-rotate linear infinite;
+}
+
+.leaderboard-loader-orbit.orbit-1 {
+  width: 100px;
+  height: 100px;
+  animation-duration: 4s;
+}
+
+.leaderboard-loader-orbit.orbit-2 {
+  width: 160px;
+  height: 160px;
+  animation-duration: 8s;
+  border-color: rgba(217, 70, 239, 0.15);
+}
+
+.leaderboard-loader-orbit.orbit-3 {
+  width: 220px;
+  height: 220px;
+  animation-duration: 12s;
+}
+
+.leaderboard-loader-planet {
+  position: absolute;
+  top: -6px;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.leaderboard-loader-planet.planet-1 {
+  background: var(--color-accent-sky);
+  color: var(--color-accent-sky);
+}
+
+.leaderboard-loader-planet.planet-2 {
+  background: var(--color-accent-pink);
+  color: var(--color-accent-pink);
+  left: 20%;
+  top: 15%;
+}
+
+.leaderboard-loading-message {
+  position: relative;
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  color: rgba(224, 242, 254, 0.94);
-  letter-spacing: 0.02em;
-  text-shadow: 0 0 8px rgba(14, 165, 233, 0.35);
-  z-index: 3;
-  white-space: nowrap;
-  padding: 8px 14px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(248, 250, 252, 0.92);
+  min-height: 20px;
+  z-index: 1;
+}
+
+.leaderboard-loading-progress {
+  position: relative;
+  width: min(100%, 280px);
+  height: 6px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.68);
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  box-shadow: 0 8px 22px rgba(2, 6, 23, 0.34), 0 0 0 6px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 1;
 }
 
-.leaderboard-loading-preview {
-  filter: blur(3px);
-  opacity: 0.56;
-  pointer-events: none;
-  user-select: none;
-  animation: leaderboard-loading-soft-pulse 1.8s ease-in-out infinite;
+.leaderboard-loading-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-accent-sky), var(--color-accent-pink));
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.6);
+  animation: leaderboard-loader-fill 5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes leaderboard-loading-soft-pulse {
-  0%, 100% { opacity: 0.52; }
-  50% { opacity: 0.64; }
+@keyframes leaderboard-loader-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-@keyframes leaderboard-floaty-load {
-  0%, 100% { transform: translate(-50%, -50%) translateY(0) rotate(-2deg); }
-  50% { transform: translate(-50%, -50%) translateY(-9px) rotate(2deg); }
+@keyframes leaderboard-star-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+@keyframes leaderboard-loader-fill {
+  0% { width: 0%; }
+  100% { width: 100%; }
 }
 
 .scoreboard-header .text-title {

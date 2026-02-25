@@ -130,14 +130,12 @@ const leaderboardLoadingSpots = [
   { x: 74, y: 72, delay: 1.55, duration: 2.6 },
   { x: 90, y: 84, delay: 1.75, duration: 2.7 }
 ] as const;
-const leaderboardLoadingSeeds = [
-  { userId: 'seed-1', name: 'Nova', avatarId: 'animal-axo-naut', allTimeStars: 476, bestRunStars: 188, trophiesEarned: 6 },
-  { userId: 'seed-2', name: 'Mathilde', avatarId: 'animal-stardust-fish', allTimeStars: 4045, bestRunStars: 660, trophiesEarned: 9 },
-  { userId: 'seed-3', name: 'Dill', avatarId: 'animal-cosmo-cat', allTimeStars: 850, bestRunStars: 172, trophiesEarned: 5 },
-  { userId: 'seed-4', name: 'Cyber', avatarId: 'astro-bot', allTimeStars: 412, bestRunStars: 159, trophiesEarned: 5 },
-  { userId: 'seed-5', name: 'Comet_X', avatarId: 'animal-stardust-fish', allTimeStars: 338, bestRunStars: 149, trophiesEarned: 3 },
-  { userId: 'seed-6', name: 'Mochi', avatarId: 'animal-moon-mochi', allTimeStars: 276, bestRunStars: 121, trophiesEarned: 2 },
-  { userId: 'seed-7', name: 'Axo', avatarId: 'animal-axo-naut', allTimeStars: 244, bestRunStars: 109, trophiesEarned: 2 }
+const LEADERBOARD_MODES: LeaderboardMode[] = ['all_time', 'best_run', 'trophies'];
+const STARBOARD_LOADING_MESSAGES = [
+  'Scanning the galaxy for scores...',
+  'Calculating cosmic rankings...',
+  'Syncing with deep space nodes...',
+  'Finalizing star positions...'
 ] as const;
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
@@ -1264,6 +1262,10 @@ export default function App() {
   const [networkLeaderboardRowsByMode, setNetworkLeaderboardRowsByMode] = useState<
     Partial<Record<LeaderboardMode, LeaderboardRow[] | null>>
   >({});
+  const [leaderboardLoadStateByMode, setLeaderboardLoadStateByMode] = useState<
+    Partial<Record<LeaderboardMode, 'loading' | 'done'>>
+  >({});
+  const [leaderboardLoadingMessageIndex, setLeaderboardLoadingMessageIndex] = useState(0);
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
@@ -1603,38 +1605,65 @@ export default function App() {
     return () => window.cancelAnimationFrame(rafId);
   }, [screen]);
 
-  useLayoutEffect(() => {
-    if (screen !== 'scores') return;
-    setNetworkLeaderboardRowsByMode((prev) => {
-      if (prev[leaderboardMode] == null) return prev;
-      return { ...prev, [leaderboardMode]: null };
-    });
-  }, [leaderboardMode, screen]);
-
   useEffect(() => {
     if (screen !== 'scores') return;
     let active = true;
-    const modeForRequest = leaderboardMode;
+    const modesToLoad = LEADERBOARD_MODES.filter((mode) => !leaderboardLoadStateByMode[mode]);
+    const anyLoading = LEADERBOARD_MODES.some((mode) => leaderboardLoadStateByMode[mode] === 'loading');
+    const allDone = LEADERBOARD_MODES.every((mode) => leaderboardLoadStateByMode[mode] === 'done');
+
+    if (allDone) {
+      const anyRows = LEADERBOARD_MODES.some((mode) => (networkLeaderboardRowsByMode[mode]?.length ?? 0) > 0);
+      setLeaderboardStatus(anyRows ? 'online' : 'offline');
+      return;
+    }
+
+    if (modesToLoad.length === 0) {
+      if (anyLoading) setLeaderboardStatus('loading');
+      return;
+    }
+
     const loadLeaderboardRows = async () => {
-      try {
-        setLeaderboardStatus('loading');
-        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: null }));
-        const rows = await fetchLeaderboard(modeForRequest, 50);
-        if (!active) return;
-        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: rows }));
-        setLeaderboardStatus('online');
-      } catch {
-        if (!active) return;
-        setNetworkLeaderboardRowsByMode((prev) => ({ ...prev, [modeForRequest]: null }));
-        setLeaderboardStatus('offline');
-        // Keep app usable with local rivals when backend is unavailable.
-      }
+      setLeaderboardStatus('loading');
+      setLeaderboardLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of modesToLoad) next[mode] = 'loading';
+        return next;
+      });
+
+      const results = await Promise.allSettled(
+        modesToLoad.map(async (mode) => ({ mode, rows: await fetchLeaderboard(mode, 50) }))
+      );
+      if (!active) return;
+
+      let anySuccess = false;
+      setNetworkLeaderboardRowsByMode((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            next[result.value.mode] = result.value.rows;
+            anySuccess = true;
+          } else {
+            const mode = modesToLoad[results.indexOf(result)];
+            if (mode) next[mode] = null;
+          }
+        }
+        return next;
+      });
+
+      setLeaderboardLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of modesToLoad) next[mode] = 'done';
+        return next;
+      });
+      setLeaderboardStatus(anySuccess ? 'online' : 'offline');
     };
+
     loadLeaderboardRows();
     return () => {
       active = false;
     };
-  }, [screen, leaderboardMode, state.user?.userId, state.totals]);
+  }, [screen, leaderboardLoadStateByMode, networkLeaderboardRowsByMode]);
 
   useEffect(() => {
     lastSubmittedStatsRef.current = '';
@@ -2481,6 +2510,17 @@ export default function App() {
   const networkLeaderboardRows = networkLeaderboardRowsByMode[leaderboardMode] ?? null;
   const isLeaderboardLoading = screen === 'scores' && leaderboardStatus === 'loading' && networkLeaderboardRows === null;
 
+  useEffect(() => {
+    if (!isLeaderboardLoading) {
+      setLeaderboardLoadingMessageIndex(0);
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setLeaderboardLoadingMessageIndex((prev) => (prev + 1) % STARBOARD_LOADING_MESSAGES.length);
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [isLeaderboardLoading]);
+
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
@@ -2524,29 +2564,6 @@ export default function App() {
     }));
   }, [leaderboardMode, leaderboardSourceRows, state.user]);
 
-  const loadingLeaderboard = useMemo(
-    () =>
-      leaderboardLoadingSeeds.map((seed, index) => ({
-        rank: index + 1,
-        userId: seed.userId,
-        name: seed.name,
-        avatarId: seed.avatarId,
-        primaryValue:
-          leaderboardMode === 'all_time'
-            ? seed.allTimeStars
-            : leaderboardMode === 'best_run'
-              ? seed.bestRunStars
-              : seed.trophiesEarned,
-        allTimeStars: seed.allTimeStars,
-        bestRunStars: seed.bestRunStars,
-        trophiesEarned: seed.trophiesEarned,
-        extensionsSolved: 0,
-        isBot: true,
-        isYou: false
-      })),
-    [leaderboardMode]
-  );
-
   const pinnedYouRow = useMemo(() => {
     if (isLeaderboardLoading) return null;
     if (!state.user) return null;
@@ -2589,13 +2606,12 @@ export default function App() {
     };
   }, [canJoinGlobalLeaderboard, isLeaderboardLoading, leaderboard, leaderboardMode, leaderboardSourceRows, state.totals, state.user]);
 
-  const activeLeaderboard = isLeaderboardLoading ? loadingLeaderboard : leaderboard;
   const podiumLeaders = useMemo(
     () =>
       [2, 1, 3]
-        .map((rank) => activeLeaderboard.find((entry) => entry.rank === rank))
-        .filter((entry): entry is (typeof activeLeaderboard)[number] => entry !== undefined),
-    [activeLeaderboard]
+        .map((rank) => leaderboard.find((entry) => entry.rank === rank))
+        .filter((entry): entry is (typeof leaderboard)[number] => entry !== undefined),
+    [leaderboard]
   );
 
   const hideBottomNav =
@@ -3376,84 +3392,94 @@ export default function App() {
       </section>
 
       {isLeaderboardLoading ? (
-        <section className="card leaderboard-loading-state leaderboard-loading-hero">
-          <div className="leaderboard-loading-fleet" aria-hidden="true">
-            {playerCharacters.map((character, index) => {
-              const spot = leaderboardLoadingSpots[index % leaderboardLoadingSpots.length];
-              const style = {
-                '--load-x': `${spot.x}%`,
-                '--load-y': `${spot.y}%`,
-                '--load-delay': `${spot.delay}s`,
-                '--load-duration': `${spot.duration}s`
-              } as CSSProperties;
-              return (
-                <span key={character.id} className="leaderboard-loading-character" style={style}>
-                  <CharacterAvatar characterId={character.id} size="sm" />
-                </span>
-              );
-            })}
-            <p className="leaderboard-loading-message">Loading Star Board...</p>
+        <section className="card leaderboard-loading-state leaderboard-cosmic-loader">
+          <div className="leaderboard-loader-stars" aria-hidden="true">
+            {leaderboardLoadingSpots.map((spot, index) => (
+              <span
+                key={`loader-star-${index}`}
+                className="leaderboard-loader-star"
+                style={{ '--load-x': `${spot.x}%`, '--load-y': `${spot.y}%`, '--load-duration': `${spot.duration + 1.2}s` } as CSSProperties}
+              />
+            ))}
+          </div>
+          <div className="leaderboard-loader-galaxy" aria-hidden="true">
+            <span className="leaderboard-loader-core" />
+            <span className="leaderboard-loader-orbit orbit-1">
+              <span className="leaderboard-loader-planet planet-1" />
+            </span>
+            <span className="leaderboard-loader-orbit orbit-2">
+              <span className="leaderboard-loader-planet planet-2" />
+            </span>
+            <span className="leaderboard-loader-orbit orbit-3" />
+          </div>
+          <p className="leaderboard-loading-message">{STARBOARD_LOADING_MESSAGES[leaderboardLoadingMessageIndex]}</p>
+          <div className="leaderboard-loading-progress" aria-hidden="true">
+            <span className="leaderboard-loading-progress-fill" />
           </div>
         </section>
       ) : null}
 
-      <section className={`card podium-wrap leaderboard-podium ${isLeaderboardLoading ? 'leaderboard-loading-preview' : ''}`}>
-        {podiumLeaders.map((entry) => (
-          <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
-            <div className="podium-avatar">
-              {renderWinnerCrown(entry.rank, 'podium-crown')}
-              <CharacterAvatar characterId={entry.avatarId} size="md" />
+      {!isLeaderboardLoading && (
+        <section className="card podium-wrap leaderboard-podium">
+          {podiumLeaders.map((entry) => (
+            <div key={entry.userId} className={`podium-item rank-${entry.rank}`}>
+              <div className="podium-avatar">
+                {renderWinnerCrown(entry.rank, 'podium-crown')}
+                <CharacterAvatar characterId={entry.avatarId} size="md" />
+              </div>
+              <strong>#{entry.rank}</strong>
+              <span className="podium-name" title={entry.name}>{entry.name}</span>
+              <small className="podium-score">{entry.primaryValue}</small>
+              <div className="podium-bar" aria-hidden="true" />
             </div>
-            <strong>#{entry.rank}</strong>
-            <span className="podium-name" title={entry.name}>{entry.name}</span>
-            <small className="podium-score">{entry.primaryValue}</small>
-            <div className="podium-bar" aria-hidden="true" />
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
 
-      <section className={`list-container scoreboard-list ${isLeaderboardLoading ? 'leaderboard-loading-preview' : ''}`}>
-        <div className="leaderboard-list-head">
-          <span>Rank &amp; Player</span>
-          <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
-        </div>
-        {!isLeaderboardLoading && activeLeaderboard.length === 0 && (
-          <div className="empty-state">No leaderboard entries yet for this tab.</div>
-        )}
-        {activeLeaderboard.map((entry) => (
-          <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
-            <div className="rank-row-left">
-              <span className="rank-number">{renderWinnerCrown(entry.rank, 'rank-crown')}#{entry.rank}</span>
-              <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
-                <span className="row-main">
-                  <span className="row-name-line">
-                    <span className="row-name" title={entry.name}>{entry.name}</span>
-                    {entry.isYou && <span className="you-chip">YOU</span>}
-                  </span>
-                </span>
-              </div>
-              <span className="row-score">{entry.primaryValue}</span>
-            </div>
-        ))}
-        {!isLeaderboardLoading && pinnedYouRow && (
-          <>
-            <p className="muted pinned-you-label">Your rank</p>
-            <div className="rank-row scoreboard-row me pinned">
+      {!isLeaderboardLoading && (
+        <section className="list-container scoreboard-list">
+          <div className="leaderboard-list-head">
+            <span>Rank &amp; Player</span>
+            <span>{leaderboardMetricIcon} {leaderboardMetricLabel}</span>
+          </div>
+          {leaderboard.length === 0 && (
+            <div className="empty-state">No leaderboard entries yet for this tab.</div>
+          )}
+          {leaderboard.map((entry) => (
+            <div key={entry.userId} className={`rank-row scoreboard-row ${entry.isYou ? 'me' : ''} ${entry.rank <= 3 ? 'top' : ''}`}>
               <div className="rank-row-left">
-                <span className="rank-number">{renderWinnerCrown(pinnedYouRow.rank, 'rank-crown')}#{pinnedYouRow.rank}</span>
-                <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
-                <span className="row-main">
-                  <span className="row-name-line">
-                    <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
-                    <span className="you-chip">YOU</span>
+                <span className="rank-number">{renderWinnerCrown(entry.rank, 'rank-crown')}#{entry.rank}</span>
+                <span className="row-avatar"><CharacterAvatar characterId={entry.avatarId} size="sm" /></span>
+                  <span className="row-main">
+                    <span className="row-name-line">
+                      <span className="row-name" title={entry.name}>{entry.name}</span>
+                      {entry.isYou && <span className="you-chip">YOU</span>}
+                    </span>
                   </span>
-                </span>
+                </div>
+                <span className="row-score">{entry.primaryValue}</span>
               </div>
-              <span className="row-score">{pinnedYouRow.primaryValue}</span>
-            </div>
-          </>
-        )}
-      </section>
+          ))}
+          {pinnedYouRow && (
+            <>
+              <p className="muted pinned-you-label">Your rank</p>
+              <div className="rank-row scoreboard-row me pinned">
+                <div className="rank-row-left">
+                  <span className="rank-number">{renderWinnerCrown(pinnedYouRow.rank, 'rank-crown')}#{pinnedYouRow.rank}</span>
+                  <span className="row-avatar"><CharacterAvatar characterId={pinnedYouRow.avatarId} size="sm" /></span>
+                  <span className="row-main">
+                    <span className="row-name-line">
+                      <span className="row-name" title={pinnedYouRow.name}>{pinnedYouRow.name}</span>
+                      <span className="you-chip">YOU</span>
+                    </span>
+                  </span>
+                </div>
+                <span className="row-score">{pinnedYouRow.primaryValue}</span>
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
     </>
   );
