@@ -3046,23 +3046,43 @@ export default function App() {
   };
 
   const createInviteLink = async () => {
+    const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
     const inviteUrl =
       typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}?challenge=invite`
+        ? `${window.location.origin}${window.location.pathname}?challenge=${inviteCode}`
         : 'Challenge link ready';
     try {
+      if (typeof navigator !== 'undefined' && navigator.share && isMobileViewport) {
+        await navigator.share({
+          title: 'Galaxy Genius Challenge',
+          text: 'Join my challenge in Galaxy Genius!',
+          url: inviteUrl
+        });
+        setFeedback('Share sheet opened.');
+        setFeedbackTone('success');
+        triggerPulse('success');
+        triggerResultFlash('success', 'Invite ready!', 'Share sheet opened.');
+        return;
+      }
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(inviteUrl);
         setFeedback('Invite link copied.');
+        setFeedbackTone('success');
+        triggerPulse('success');
+        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
       } else {
-        setFeedback(`Share this link: ${inviteUrl}`);
+        if (typeof window !== 'undefined') window.prompt('Copy your challenge invite link:', inviteUrl);
+        setFeedback('Invite link ready.');
+        setFeedbackTone('info');
+        triggerPulse('info');
+        triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the prompt.');
       }
-      setFeedbackTone('success');
-      triggerPulse('success');
     } catch {
-      setFeedback(`Share this link: ${inviteUrl}`);
+      if (typeof window !== 'undefined') window.prompt('Copy your challenge invite link:', inviteUrl);
+      setFeedback('Invite link ready.');
       setFeedbackTone('info');
       triggerPulse('info');
+      triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the prompt.');
     }
   };
 
@@ -3580,14 +3600,14 @@ export default function App() {
             <div className="helper-actions run-secondary-actions">
               {run.experience === 'practice' && (
                 <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
-                  Tweaks
+                  <span aria-hidden="true">⚙️</span> Tweaks
                 </button>
               )}
               <button
                 className="btn btn-secondary utility-btn"
                 onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
               >
-                Ask Coach
+                <span aria-hidden="true">🧠</span> Ask Coach
               </button>
             </div>
             {renderCoachPanel(currentFlowCoachPlan, currentFlowCoachVisual, 'Coach', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
@@ -3655,7 +3675,7 @@ export default function App() {
             <div className="helper-actions puzzle-helper-actions run-secondary-actions">
               {run.experience === 'practice' && (
                 <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
-                  Tweaks
+                  <span aria-hidden="true">⚙️</span> Tweaks
                 </button>
               )}
               <button
@@ -3664,7 +3684,7 @@ export default function App() {
                   openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
                 }
               >
-                Ask Coach
+                <span aria-hidden="true">🧠</span> Ask Coach
               </button>
             </div>
             <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
@@ -3738,7 +3758,7 @@ export default function App() {
                       openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
                     }
                   >
-                    Ask Coach
+                    <span aria-hidden="true">🧠</span> Ask Coach
                   </button>
                 </div>
                 {renderCoachPanel(currentBonusCoachPlan, null, 'Mini Boss Coach', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))}
