@@ -1490,6 +1490,7 @@ export default function App() {
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false
   );
   const [isTextEntryFocused, setIsTextEntryFocused] = useState(false);
+  const [isBottomNavAutoHidden, setIsBottomNavAutoHidden] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
   const lastSubmittedStatsRef = useRef('');
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
@@ -1860,6 +1861,50 @@ export default function App() {
       document.removeEventListener('focusout', onFocusOut);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || screen === 'run' || isTextEntryFocused) {
+      setIsBottomNavAutoHidden(false);
+      return;
+    }
+
+    const container = appContainerRef.current;
+    if (!container) return;
+
+    let lastTop = container.scrollTop;
+    let rafId: number | null = null;
+    const downThreshold = 14;
+    const upThreshold = 10;
+
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        const nextTop = container.scrollTop;
+        const delta = nextTop - lastTop;
+
+        if (nextTop <= 10) {
+          setIsBottomNavAutoHidden(false);
+          lastTop = nextTop;
+          return;
+        }
+
+        if (delta > downThreshold) {
+          setIsBottomNavAutoHidden(true);
+        } else if (delta < -upThreshold) {
+          setIsBottomNavAutoHidden(false);
+        }
+
+        lastTop = nextTop;
+      });
+    };
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
+  }, [isMobileViewport, isTextEntryFocused, screen]);
 
   useLayoutEffect(() => {
     resetScrollToTop();
@@ -3066,7 +3111,7 @@ export default function App() {
 
   const hideBottomNav =
     isMobileViewport &&
-    (screen === 'run' || isTextEntryFocused);
+    (screen === 'run' || isTextEntryFocused || isBottomNavAutoHidden);
   const showPracticePinnedCta = screen === 'home' && homeMode === 'practice';
   const showGamePhasesPanel = false;
   const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
