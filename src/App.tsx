@@ -1554,6 +1554,26 @@ export default function App() {
   };
   const runSubjectLabel =
     practiceSubjects.find((subject) => subject.id === run.practiceSubjectId)?.title ?? 'Mixed Practice';
+  const practiceStartLabel =
+    activePracticeSubject.id === PRACTICE_DEFAULT_SUBJECT_ID
+      ? 'Start Mixed Practice'
+      : `Start ${activePracticeSubject.title} Practice`;
+  const runQuestionCountTotal = Math.max(runTargetTotal, 1);
+  const runQuestionPosition =
+    run.phase === 'flow'
+      ? Math.min(run.flowDone + 1, runQuestionCountTotal)
+      : run.phase === 'puzzle' || run.phase === 'puzzle_pick'
+        ? Math.min(run.flowTarget + run.puzzleDone + 1, runQuestionCountTotal)
+        : runQuestionCountTotal;
+  const runExperienceLabel = `${run.experience === 'practice' ? 'Practice' : 'Challenge'} • Question ${runQuestionPosition} of ${runQuestionCountTotal}`;
+  const runPracticeSubject =
+    practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
+    practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+    practiceSubjects[0];
+  const getRunPracticeQuestionEstimate = (minutes: TweakTimeMinutes) => {
+    const targets = getPracticeTargets(runPracticeSubject.kind, minutes);
+    return targets.flowTarget + targets.puzzleTarget;
+  };
   const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
   const getNewPlayerFlowDifficultyCap = (attemptsCount: number) =>
     state.totals.runsPlayed === 0 && attemptsCount < NEW_PLAYER_ONRAMP_ATTEMPTS
@@ -2926,6 +2946,31 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [isLeaderboardLoading]);
 
+  useEffect(() => {
+    if (screen !== 'run') return;
+    const hasOverlayOpen = showTweaksSheet || showTutor || showClarifyDialog || bonusResult !== null;
+    if (!hasOverlayOpen || typeof document === 'undefined') return;
+    const { body, documentElement } = document;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyTouchAction = body.style.touchAction;
+    const prevHtmlOverflow = documentElement.style.overflow;
+    body.style.overflow = 'hidden';
+    body.style.touchAction = 'none';
+    documentElement.style.overflow = 'hidden';
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      body.style.touchAction = prevBodyTouchAction;
+      documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [screen, showTweaksSheet, showTutor, showClarifyDialog, bonusResult]);
+
+  useEffect(() => {
+    if (!resultFlash && !bonusResult) return;
+    setShowTweaksSheet(false);
+    setShowTutor(false);
+    setShowClarifyDialog(false);
+  }, [resultFlash, bonusResult]);
+
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
@@ -3153,12 +3198,24 @@ export default function App() {
   };
 
   const openCoach = (mode: 'quick' | 'steps', maxCount: number) => {
+    setShowTweaksSheet(false);
+    setShowClarifyDialog(false);
     setShowTutor(true);
     setCoachMode(mode);
     if (mode === 'steps') {
       setTutorStep(0);
     }
     markCoachUse(1, maxCount);
+  };
+
+  const openTweaksSheet = () => {
+    setShowTutor(false);
+    setShowClarifyDialog(false);
+    setShowTweaksSheet(true);
+  };
+
+  const closeTweaksSheet = () => {
+    setShowTweaksSheet(false);
   };
 
   const renderCoachPanel = (
@@ -3566,7 +3623,7 @@ export default function App() {
           </section>
           <div className="practice-pinned-cta">
             <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
-              Start Practice
+              {practiceStartLabel}
             </button>
           </div>
         </>
@@ -3579,9 +3636,7 @@ export default function App() {
     <>
       <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
         <div className="run-experience-row">
-          <p className="text-label run-experience-label">
-            {run.experience === 'practice' ? 'Practice - In Progress' : 'Challenge - In Progress'}
-          </p>
+          <p className="text-label run-experience-label">{runExperienceLabel}</p>
           {run.experience === 'practice' && <span className="tag">{runSubjectLabel}</span>}
         </div>
         {run.phase === 'flow' && run.currentFlow && (
@@ -3627,7 +3682,7 @@ export default function App() {
             </div>
             <div className="helper-actions run-secondary-actions">
               {run.experience === 'practice' && (
-                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
+                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={openTweaksSheet}>
                   <span aria-hidden="true">⚙️</span> Tweaks
                 </button>
               )}
@@ -3844,15 +3899,16 @@ export default function App() {
             type="button"
             className="sheet-backdrop"
             aria-label="Close tweaks"
-            onClick={() => setShowTweaksSheet(false)}
+            onClick={closeTweaksSheet}
           />
           <section className="card tweaks-sheet" role="dialog" aria-modal="true" aria-label="Practice tweaks">
             <div className="tweaks-sheet-head">
               <h3 className="text-title">Practice Tweaks</h3>
-              <button type="button" className="text-cta" onClick={() => setShowTweaksSheet(false)}>Done</button>
+              <button type="button" className="text-cta" onClick={closeTweaksSheet}>Done</button>
             </div>
             <div className="tweaks-section">
               <p className="text-label">Difficulty</p>
+              <p className="muted">Adaptive adjusts as you go.</p>
               <div className="chips tweaks-chip-wrap">
                 {TWEAK_DIFFICULTY_OPTIONS.map((difficulty) => (
                   <button
@@ -3861,13 +3917,13 @@ export default function App() {
                     className={`btn btn-secondary chip-btn ${run.tweakDifficulty === difficulty ? 'selected' : ''}`}
                     onClick={() => updatePracticeDifficulty(difficulty)}
                   >
-                    {difficulty === 'adaptive' ? 'Adaptive' : difficulty}
+                    {difficulty === 'adaptive' ? 'Adaptive (default)' : difficulty}
                   </button>
                 ))}
               </div>
             </div>
             <div className="tweaks-section">
-              <p className="text-label">Time</p>
+              <p className="text-label">Session length (target questions)</p>
               <div className="chips tweaks-chip-wrap">
                 {PRACTICE_TIME_OPTIONS.map((minutes) => (
                   <button
@@ -3876,7 +3932,7 @@ export default function App() {
                     className={`btn btn-secondary chip-btn ${run.tweakTimeMinutes === minutes ? 'selected' : ''}`}
                     onClick={() => updatePracticeTime(minutes)}
                   >
-                    {minutes} min
+                    {minutes} min (~{getRunPracticeQuestionEstimate(minutes)} questions)
                   </button>
                 ))}
               </div>
@@ -4318,7 +4374,7 @@ export default function App() {
         {screen === 'run' && (
           <section className="run-progress-inline" aria-label="Orbit progress">
             <div className="flow-progress-head compact">
-              <p className="text-label">Question {Math.min(runDoneTotal + 1, runTargetTotal)} of {runTargetTotal}</p>
+              <p className="text-label">{runExperienceLabel}</p>
             </div>
             <div className="flow-meter-wrap compact">
               <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
