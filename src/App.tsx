@@ -170,6 +170,11 @@ const STARBOARD_LOADING_MESSAGES = [
 ] as const;
 const PRACTICE_FLOW_TARGET_BY_TIME: Record<TweakTimeMinutes, number> = { 5: 6, 10: 10, 15: 14 };
 const PRACTICE_PUZZLE_TARGET_BY_TIME: Record<TweakTimeMinutes, number> = { 5: 3, 10: 5, 15: 7 };
+const PRACTICE_MIXED_TARGETS_BY_TIME: Record<TweakTimeMinutes, { flowTarget: number; puzzleTarget: number }> = {
+  5: { flowTarget: 4, puzzleTarget: 2 },
+  10: { flowTarget: 7, puzzleTarget: 4 },
+  15: { flowTarget: 10, puzzleTarget: 6 }
+};
 const difficultyTargetRatingByLabel: Record<DifficultyLabel, number> = {
   Rookie: 820,
   Easy: 900,
@@ -315,9 +320,11 @@ const applyDifficultyOverride = (rating: number, difficulty: TweakDifficulty): n
   difficulty === 'adaptive' ? rating : difficultyTargetRatingByLabel[difficulty];
 
 const getPracticeTargets = (subjectKind: PracticeSubject['kind'], timeMinutes: TweakTimeMinutes) =>
-  subjectKind === 'puzzle'
-    ? { flowTarget: 0, puzzleTarget: PRACTICE_PUZZLE_TARGET_BY_TIME[timeMinutes] }
-    : { flowTarget: PRACTICE_FLOW_TARGET_BY_TIME[timeMinutes], puzzleTarget: 0 };
+  subjectKind === 'mixed'
+    ? PRACTICE_MIXED_TARGETS_BY_TIME[timeMinutes]
+    : subjectKind === 'puzzle'
+      ? { flowTarget: 0, puzzleTarget: PRACTICE_PUZZLE_TARGET_BY_TIME[timeMinutes] }
+      : { flowTarget: PRACTICE_FLOW_TARGET_BY_TIME[timeMinutes], puzzleTarget: 0 };
 
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
@@ -592,7 +599,7 @@ const getClarifyingReply = (puzzle: PuzzleItem, question: string, hintsShown: nu
   }
 
   if (q.includes('format') || q.includes('type') || q.includes('answer')) {
-    return 'Tap one answer choice, then lock your answer.';
+    return 'Tap one answer choice, then hit Blast Off!';
   }
 
   if (q.includes('stuck') || q.includes('hint') || q.includes('help')) {
@@ -1618,11 +1625,15 @@ export default function App() {
   };
   const getPuzzleSelectionPlan = (runState: RunState, fallbackRating: number) => {
     if (!isTrainingMode(runState.gameMode)) {
+      const ratingOverride =
+        runState.experience === 'practice'
+          ? applyDifficultyOverride(fallbackRating, runState.tweakDifficulty)
+          : fallbackRating;
       const options: Parameters<typeof generateAdaptivePuzzleChoices>[3] = {};
       if (runState.experience === 'practice' && runState.practicePuzzleTypeFilter?.length) {
         options.allowedPuzzleTypes = runState.practicePuzzleTypeFilter;
       }
-      return { rating: applyDifficultyOverride(fallbackRating, runState.tweakDifficulty), options };
+      return { rating: ratingOverride, options };
     }
     const flowTrainingRating = getActiveTrainingRating(runState, fallbackRating);
     const hardUnlocked = getTrainingHardUnlock(runState);
@@ -2099,7 +2110,13 @@ export default function App() {
         }
       );
     }
-    else seeded.currentPuzzleChoices = getPuzzleChoices(seeded, state.skill.rating, seeded.usedPuzzleIds);
+    else {
+      const ratingOverride =
+        seeded.experience === 'practice'
+          ? applyDifficultyOverride(state.skill.rating, seeded.tweakDifficulty)
+          : state.skill.rating;
+      seeded.currentPuzzleChoices = getPuzzleChoices(seeded, ratingOverride, seeded.usedPuzzleIds);
+    }
 
     setPendingBonusFinish(null);
     setBonusResult(null);
@@ -2118,7 +2135,12 @@ export default function App() {
 
   const startPracticeRun = () => {
     const subject = activePracticeSubject;
-    const mode: GameMode = subject.kind === 'puzzle' ? 'puzzle_orbit' : 'rocket_rush';
+    const mode: GameMode =
+      subject.kind === 'puzzle'
+        ? 'puzzle_orbit'
+        : subject.kind === 'mixed'
+          ? 'galaxy_mix'
+          : 'rocket_rush';
     setHomeMode('practice');
     startRun(mode, {
       experience: 'practice',
@@ -2153,7 +2175,11 @@ export default function App() {
   };
 
   const setupPuzzlePick = () => {
-    const choices = getPuzzleChoices(run, state.skill.rating, run.usedPuzzleIds);
+    const ratingOverride =
+      run.experience === 'practice'
+        ? applyDifficultyOverride(state.skill.rating, run.tweakDifficulty)
+        : state.skill.rating;
+    const choices = getPuzzleChoices(run, ratingOverride, run.usedPuzzleIds);
     setRun({ ...run, phase: 'puzzle_pick', currentPuzzleChoices: choices, currentHints: 0, currentPuzzle: undefined });
     setInput('');
     setClarifyInput('');
@@ -3010,6 +3036,7 @@ export default function App() {
     [run.currentPuzzle?.id]
   );
   const puzzleHasChoices = puzzleChoiceOptions.length > 0;
+  const puzzleInputMode = run.currentPuzzle ? getPuzzleInputMode(run.currentPuzzle) : 'short_text';
   const currentPuzzleCoachPlan = run.currentPuzzle ? buildPuzzleCoachPlan(run.currentPuzzle) : null;
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
@@ -3026,6 +3053,7 @@ export default function App() {
     () => getBonusChoiceOptions(activeBonus),
     [activeBonus.id]
   );
+  const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
   const openCaptainEditor = () => {
@@ -3552,7 +3580,7 @@ export default function App() {
       <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
         <div className="run-experience-row">
           <p className="text-label run-experience-label">
-            {run.experience === 'practice' ? 'Practice - In Progress' : 'Challenge - Match Live'}
+            {run.experience === 'practice' ? 'Practice - In Progress' : 'Challenge - In Progress'}
           </p>
           {run.experience === 'practice' && <span className="tag">{runSubjectLabel}</span>}
         </div>
@@ -3620,7 +3648,17 @@ export default function App() {
           <>
             <h3>Pick Puzzle Card {run.puzzleDone + 1}/{run.puzzleTarget}</h3>
             <div className="puzzle-grid">
-              {(run.currentPuzzleChoices.length ? run.currentPuzzleChoices : getPuzzleChoices(run, state.skill.rating, run.usedPuzzleIds)).map((puzzle) => (
+              {(
+                run.currentPuzzleChoices.length
+                  ? run.currentPuzzleChoices
+                  : getPuzzleChoices(
+                      run,
+                      run.experience === 'practice'
+                        ? applyDifficultyOverride(state.skill.rating, run.tweakDifficulty)
+                        : state.skill.rating,
+                      run.usedPuzzleIds
+                    )
+              ).map((puzzle) => (
                 <button key={puzzle.id} className="puzzle-card" onClick={() => selectPuzzle(puzzle)}>
                   <span className="emoji">{getPuzzleEmoji(puzzle)}</span>
                   <strong>{puzzle.title}</strong>
@@ -3653,6 +3691,14 @@ export default function App() {
                   </button>
                 ))}
               </div>
+            ) : puzzleInputMode === 'long_text' ? (
+              <textarea
+                className="math-input text-area-input"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Explain your answer"
+                rows={4}
+              />
             ) : (
               <input
                 className="math-input"
@@ -3730,6 +3776,14 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+                ) : bonusInputMode === 'long_text' ? (
+                  <textarea
+                    className="math-input text-area-input"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    placeholder="Explain your mini boss answer"
+                    rows={4}
+                  />
                 ) : (
                   <input
                     className="math-input"
