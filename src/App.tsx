@@ -246,6 +246,114 @@ const expectsNumericInput = (primaryAnswer: string, acceptAnswers?: string[]): b
   return acceptAnswers.every((answer) => parseLooseNumber(answer) !== null);
 };
 
+const cleanChoiceMarker = (text: string) =>
+  text
+    .replace(/^\s*[A-Z]\)\s*/g, '')
+    .replace(/\s+[A-Z]\)\s+/g, ' ')
+    .trim();
+
+const shuffleChoices = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
+
+const uniqueChoices = (choices: string[]) => {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const choice of choices) {
+    const cleaned = cleanChoiceMarker(choice);
+    if (!cleaned) continue;
+    const key = normalize(cleaned);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(cleaned);
+  }
+  return deduped;
+};
+
+const formatChoiceNumber = (value: number) => (Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2))));
+
+const buildNumericChoices = (answer: string, acceptAnswers: string[] = [], count = 4): string[] | null => {
+  const answerNumber = parseLooseNumber(answer);
+  if (answerNumber === null) return null;
+
+  const targetCount = Math.max(2, count);
+  const answerText = formatChoiceNumber(answerNumber);
+  const seen = new Set<string>([normalize(answerText)]);
+  const choices = [answerText];
+
+  for (const accept of acceptAnswers) {
+    const parsed = parseLooseNumber(accept);
+    if (parsed === null) continue;
+    const formatted = formatChoiceNumber(parsed);
+    const key = normalize(formatted);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    choices.push(formatted);
+    if (choices.length >= targetCount) return shuffleChoices(choices.slice(0, targetCount));
+  }
+
+  const magnitude = Math.max(1, Math.round(Math.abs(answerNumber)));
+  const deltas = uniqueChoices(
+    [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      Math.max(2, Math.round(magnitude * 0.1)),
+      Math.max(3, Math.round(magnitude * 0.2))
+    ].map(String)
+  ).map((value) => Number(value));
+
+  for (const delta of deltas) {
+    const variants = [answerNumber + delta, answerNumber - delta];
+    for (const variant of variants) {
+      const formatted = formatChoiceNumber(variant);
+      const key = normalize(formatted);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      choices.push(formatted);
+      if (choices.length >= targetCount) return shuffleChoices(choices.slice(0, targetCount));
+    }
+  }
+
+  let fallbackStep = 7;
+  while (choices.length < targetCount) {
+    const variant = answerNumber + fallbackStep;
+    const formatted = formatChoiceNumber(variant);
+    const key = normalize(formatted);
+    if (!seen.has(key)) {
+      seen.add(key);
+      choices.push(formatted);
+    }
+    fallbackStep += 3;
+  }
+
+  return shuffleChoices(choices.slice(0, targetCount));
+};
+
+const deriveChoiceOptions = (
+  answer: string,
+  acceptAnswers: string[] = [],
+  explicitChoices?: string[],
+  count = 4
+): string[] => {
+  const explicit = uniqueChoices(explicitChoices ?? []);
+  if (explicit.length > 0) return explicit;
+
+  const normalized = normalize(answer);
+  if (normalized === 'yes' || normalized === 'no') return ['Yes', 'No'];
+  if (normalized === 'always' || normalized === 'sometimes' || normalized === 'never') {
+    return ['Always', 'Sometimes', 'Never'];
+  }
+
+  const numericChoices = buildNumericChoices(answer, acceptAnswers, count);
+  if (numericChoices?.length) return numericChoices;
+
+  return uniqueChoices([answer, ...acceptAnswers]);
+};
+
 const getTier = (
   difficulty: number,
   explicitTier?: DifficultyLabel
@@ -259,25 +367,11 @@ const getTier = (
   return { label, icon: '🧑‍🚀', flowPoints: 10, puzzlePoints: 30 };
 };
 
-const getPuzzleAnswerChoices = (answer: string): string[] | null => {
-  const normalized = normalize(answer);
-  if (normalized === 'yes' || normalized === 'no') return ['Yes', 'No'];
-  if (normalized === 'always' || normalized === 'sometimes' || normalized === 'never') {
-    return ['Always', 'Sometimes', 'Never'];
-  }
-  return null;
-};
+const getFlowChoiceOptions = (item: FlowItem): string[] =>
+  deriveChoiceOptions(item.answer, item.accept_answers ?? [], item.choices, 4);
 
-const getPuzzleChoiceOptions = (puzzle: PuzzleItem): string[] => {
-  if (puzzle.choices?.length) return puzzle.choices;
-  return getPuzzleAnswerChoices(puzzle.core_answer) ?? [];
-};
-
-const cleanChoiceMarker = (text: string) =>
-  text
-    .replace(/^\s*[A-Z]\)\s*/g, '')
-    .replace(/\s+[A-Z]\)\s+/g, ' ')
-    .trim();
+const getPuzzleChoiceOptions = (puzzle: PuzzleItem): string[] =>
+  deriveChoiceOptions(puzzle.core_answer, puzzle.accept_answers ?? [], puzzle.choices, 4);
 
 const cleanPuzzlePromptDisplay = (prompt: string) =>
   prompt
@@ -285,27 +379,14 @@ const cleanPuzzlePromptDisplay = (prompt: string) =>
     .map((line) => cleanChoiceMarker(line))
     .join('\n');
 
-const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long_text' => {
-  if (puzzle.answer_type) return puzzle.answer_type;
-  if (getPuzzleAnswerChoices(puzzle.core_answer)) return 'choice';
-  return 'short_text';
-};
+const getPuzzleInputMode = (puzzle: PuzzleItem): 'choice' | 'short_text' | 'long_text' =>
+  getPuzzleChoiceOptions(puzzle).length > 0 ? 'choice' : puzzle.answer_type ?? 'short_text';
 
-const getBonusInputMode = (bonus: BonusChallenge): 'choice' | 'short_text' | 'long_text' => {
-  if (bonus.answerType) return bonus.answerType;
-  if (bonus.choices.length > 0) return 'choice';
-  return 'short_text';
-};
+const getBonusChoiceOptions = (bonus: BonusChallenge): string[] =>
+  deriveChoiceOptions(bonus.answer, bonus.acceptAnswers ?? [], bonus.choices, 4);
 
-const getBonusChoiceOptions = (bonus: BonusChallenge): string[] => {
-  const deduped = Array.from(new Set(bonus.choices));
-  if (deduped.length <= 3) return deduped;
-
-  const answerIdx = deduped.findIndex((choice) => normalize(choice) === normalize(bonus.answer));
-  const answerChoice = answerIdx >= 0 ? deduped[answerIdx] : deduped[0];
-  const distractors = deduped.filter((choice) => normalize(choice) !== normalize(answerChoice));
-  return [answerChoice, ...distractors.slice(0, 2)];
-};
+const getBonusInputMode = (bonus: BonusChallenge): 'choice' | 'short_text' | 'long_text' =>
+  getBonusChoiceOptions(bonus).length > 0 ? 'choice' : bonus.answerType ?? 'short_text';
 
 const getPuzzlePlainLanguage = (puzzle: PuzzleItem): string => {
   const prompt = puzzle.core_prompt;
@@ -361,8 +442,7 @@ const getClarifyingReply = (puzzle: PuzzleItem, question: string, hintsShown: nu
 
   if (q.includes('format') || q.includes('type') || q.includes('answer')) {
     if (mode === 'choice') return 'Tap one of the answer buttons, then hit Blast Off!';
-    if (mode === 'long_text') return 'Write one short explanation sentence, then hit Blast Off!';
-    return 'Type a short answer, then hit Blast Off!';
+    return 'Tap one answer choice, then hit Blast Off!';
   }
 
   if (q.includes('stuck') || q.includes('hint') || q.includes('help')) {
@@ -2709,9 +2789,11 @@ export default function App() {
   const showGamePhasesPanel = false;
   const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
-  const flowHasChoices = (run.currentFlow?.choices?.length ?? 0) > 0;
+  const flowChoiceOptions = run.currentFlow ? getFlowChoiceOptions(run.currentFlow) : [];
+  const flowHasChoices = flowChoiceOptions.length > 0;
   const puzzleInputMode = run.currentPuzzle ? getPuzzleInputMode(run.currentPuzzle) : 'short_text';
   const puzzleHasChoices = puzzleInputMode === 'choice';
+  const puzzleChoiceOptions = run.currentPuzzle ? getPuzzleChoiceOptions(run.currentPuzzle) : [];
   const currentPuzzleCoachPlan = run.currentPuzzle ? buildPuzzleCoachPlan(run.currentPuzzle) : null;
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
@@ -2724,8 +2806,8 @@ export default function App() {
     hintLadder: activeBonus.hintLadder,
     solutionSteps: activeBonus.solutionSteps
   });
-  const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
+  const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
   const openCaptainEditor = () => {
@@ -3155,7 +3237,7 @@ export default function App() {
 
             {flowHasChoices && (
               <div className="chips">
-                {run.currentFlow.choices!.map((choice) => (
+                {flowChoiceOptions.map((choice) => (
                   <button
                     key={choice}
                     className={`btn btn-secondary chip-btn ${input === choice ? 'selected' : ''}`}
@@ -3227,7 +3309,7 @@ export default function App() {
             </div>
             {puzzleHasChoices ? (
               <div className="chips">
-                {getPuzzleChoiceOptions(run.currentPuzzle).map((choice) => (
+                {puzzleChoiceOptions.map((choice) => (
                   <button
                     key={choice}
                     className={`btn btn-secondary chip-btn ${normalize(input) === normalize(choice) ? 'selected' : ''}`}
