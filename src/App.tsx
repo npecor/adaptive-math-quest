@@ -131,6 +131,9 @@ const leaderboardLoadingSpots = [
   { x: 90, y: 84, delay: 1.75, duration: 2.7 }
 ] as const;
 const LEADERBOARD_MODES: LeaderboardMode[] = ['all_time', 'best_run', 'trophies'];
+const LEADERBOARD_INITIAL_LIMIT = 15;
+const LEADERBOARD_BACKGROUND_LIMIT = 50;
+const LEADERBOARD_LOADING_FAILSAFE_MS = 15000;
 const STARBOARD_LOADING_MESSAGES = [
   'Scanning the galaxy for scores...',
   'Calculating cosmic rankings...',
@@ -1265,6 +1268,11 @@ export default function App() {
   const [leaderboardLoadStateByMode, setLeaderboardLoadStateByMode] = useState<
     Partial<Record<LeaderboardMode, 'loading' | 'done'>>
   >({});
+  const [leaderboardFullLoadStateByMode, setLeaderboardFullLoadStateByMode] = useState<
+    Partial<Record<LeaderboardMode, 'loading' | 'done'>>
+  >({});
+  const leaderboardFetchInFlightRef = useRef(false);
+  const leaderboardFullFetchInFlightRef = useRef(false);
   const [leaderboardLoadingMessageIndex, setLeaderboardLoadingMessageIndex] = useState(0);
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
@@ -1607,45 +1615,46 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== 'scores') return;
-    let active = true;
-    const modesToLoad = LEADERBOARD_MODES.filter((mode) => !leaderboardLoadStateByMode[mode]);
-    const anyLoading = LEADERBOARD_MODES.some((mode) => leaderboardLoadStateByMode[mode] === 'loading');
-    const allDone = LEADERBOARD_MODES.every((mode) => leaderboardLoadStateByMode[mode] === 'done');
+    if (leaderboardFetchInFlightRef.current) return;
 
+    const allDone = LEADERBOARD_MODES.every((mode) => leaderboardLoadStateByMode[mode] === 'done');
     if (allDone) {
       const anyRows = LEADERBOARD_MODES.some((mode) => (networkLeaderboardRowsByMode[mode]?.length ?? 0) > 0);
       setLeaderboardStatus(anyRows ? 'online' : 'offline');
       return;
     }
 
+    const modesToLoad = LEADERBOARD_MODES.filter((mode) => leaderboardLoadStateByMode[mode] !== 'done');
     if (modesToLoad.length === 0) {
-      if (anyLoading) setLeaderboardStatus('loading');
+      setLeaderboardStatus('loading');
       return;
     }
 
-    const loadLeaderboardRows = async () => {
-      setLeaderboardStatus('loading');
-      setLeaderboardLoadStateByMode((prev) => {
-        const next = { ...prev };
-        for (const mode of modesToLoad) next[mode] = 'loading';
-        return next;
-      });
+    leaderboardFetchInFlightRef.current = true;
+    setLeaderboardStatus('loading');
+    setLeaderboardLoadStateByMode((prev) => {
+      const next = { ...prev };
+      for (const mode of modesToLoad) next[mode] = 'loading';
+      return next;
+    });
 
+    const loadLeaderboardRows = async () => {
       const results = await Promise.allSettled(
-        modesToLoad.map(async (mode) => ({ mode, rows: await fetchLeaderboard(mode, 50) }))
+        modesToLoad.map(async (mode) => ({ mode, rows: await fetchLeaderboard(mode, LEADERBOARD_INITIAL_LIMIT) }))
       );
-      if (!active) return;
 
       let anySuccess = false;
       setNetworkLeaderboardRowsByMode((prev) => {
         const next = { ...prev };
-        for (const result of results) {
+        for (let index = 0; index < results.length; index += 1) {
+          const result = results[index];
+          const mode = modesToLoad[index];
+          if (!mode) continue;
           if (result.status === 'fulfilled') {
             next[result.value.mode] = result.value.rows;
             anySuccess = true;
           } else {
-            const mode = modesToLoad[results.indexOf(result)];
-            if (mode) next[mode] = null;
+            next[mode] = null;
           }
         }
         return next;
@@ -1657,13 +1666,93 @@ export default function App() {
         return next;
       });
       setLeaderboardStatus(anySuccess ? 'online' : 'offline');
+      leaderboardFetchInFlightRef.current = false;
     };
 
-    loadLeaderboardRows();
-    return () => {
-      active = false;
-    };
+    loadLeaderboardRows().catch(() => {
+      setLeaderboardLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of modesToLoad) next[mode] = 'done';
+        return next;
+      });
+      setLeaderboardStatus('offline');
+      leaderboardFetchInFlightRef.current = false;
+    });
   }, [screen, leaderboardLoadStateByMode, networkLeaderboardRowsByMode]);
+
+  useEffect(() => {
+    if (screen !== 'scores') return;
+    if (leaderboardFullFetchInFlightRef.current) return;
+    const initialLoadDone = LEADERBOARD_MODES.every((mode) => leaderboardLoadStateByMode[mode] === 'done');
+    if (!initialLoadDone) return;
+
+    const modesToHydrate = LEADERBOARD_MODES.filter((mode) => leaderboardFullLoadStateByMode[mode] !== 'done');
+    if (modesToHydrate.length === 0) return;
+
+    leaderboardFullFetchInFlightRef.current = true;
+    setLeaderboardFullLoadStateByMode((prev) => {
+      const next = { ...prev };
+      for (const mode of modesToHydrate) next[mode] = 'loading';
+      return next;
+    });
+
+    const hydrateLeaderboardRows = async () => {
+      const results = await Promise.allSettled(
+        modesToHydrate.map(async (mode) => ({ mode, rows: await fetchLeaderboard(mode, LEADERBOARD_BACKGROUND_LIMIT) }))
+      );
+
+      setNetworkLeaderboardRowsByMode((prev) => {
+        const next = { ...prev };
+        for (let index = 0; index < results.length; index += 1) {
+          const result = results[index];
+          if (result.status === 'fulfilled') {
+            next[result.value.mode] = result.value.rows;
+          }
+        }
+        return next;
+      });
+
+      setLeaderboardFullLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of modesToHydrate) next[mode] = 'done';
+        return next;
+      });
+      leaderboardFullFetchInFlightRef.current = false;
+    };
+
+    hydrateLeaderboardRows().catch(() => {
+      setLeaderboardFullLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of modesToHydrate) next[mode] = 'done';
+        return next;
+      });
+      leaderboardFullFetchInFlightRef.current = false;
+    });
+  }, [screen, leaderboardLoadStateByMode, leaderboardFullLoadStateByMode]);
+
+  useEffect(() => {
+    if (screen !== 'scores' || leaderboardStatus !== 'loading') return;
+    const timerId = globalThis.setTimeout(() => {
+      leaderboardFetchInFlightRef.current = false;
+      leaderboardFullFetchInFlightRef.current = false;
+      setLeaderboardLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of LEADERBOARD_MODES) {
+          if (next[mode] !== 'done') next[mode] = 'done';
+        }
+        return next;
+      });
+      setLeaderboardFullLoadStateByMode((prev) => {
+        const next = { ...prev };
+        for (const mode of LEADERBOARD_MODES) {
+          if (next[mode] !== 'done') next[mode] = 'done';
+        }
+        return next;
+      });
+      setLeaderboardStatus((current) => (current === 'loading' ? 'offline' : current));
+    }, LEADERBOARD_LOADING_FAILSAFE_MS);
+    return () => globalThis.clearTimeout(timerId);
+  }, [screen, leaderboardStatus]);
 
   useEffect(() => {
     lastSubmittedStatsRef.current = '';
