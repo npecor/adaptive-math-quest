@@ -44,6 +44,9 @@ type PracticeSubject = {
   subtitle: string;
   icon: string;
   kind: 'flow' | 'puzzle' | 'mixed';
+  accent: string;
+  glow: string;
+  soft: string;
   templates?: string[];
   puzzleTypes?: PuzzleType[];
 };
@@ -176,15 +179,104 @@ const difficultyTargetRatingByLabel: Record<DifficultyLabel, number> = {
   Master: 1460
 };
 const practiceSubjects: PracticeSubject[] = [
-  { id: PRACTICE_DEFAULT_SUBJECT_ID, title: 'Mixed Practice', subtitle: 'All topics', icon: '◉', kind: 'mixed' },
-  { id: 'add_subtract', title: 'Add & Subtract', subtitle: 'Fast sums', icon: '+', kind: 'flow', templates: ['add_sub'] },
-  { id: 'multiply_divide', title: 'Multiply & Divide', subtitle: 'Math facts', icon: '×', kind: 'flow', templates: ['mult_div'] },
-  { id: 'fractions', title: 'Fractions', subtitle: 'Compare & solve', icon: '÷', kind: 'flow', templates: ['fraction_compare'] },
-  { id: 'algebra', title: 'Algebra', subtitle: 'Solve for x', icon: 'x', kind: 'flow', templates: ['equation_1', 'equation_2'] },
-  { id: 'percents', title: 'Percents', subtitle: 'Part of whole', icon: '%', kind: 'flow', templates: ['percent'] },
-  { id: 'geometry', title: 'Geometry', subtitle: 'Shapes & space', icon: '△', kind: 'flow', templates: ['geometry'] },
-  { id: 'logic_puzzles', title: 'Logic Puzzles', subtitle: 'Think it through', icon: '✦', kind: 'puzzle', puzzleTypes: ['logic', 'constraint'] },
-  { id: 'ratios', title: 'Ratios', subtitle: 'Scale & compare', icon: '▣', kind: 'flow', templates: ['ratio'] }
+  {
+    id: PRACTICE_DEFAULT_SUBJECT_ID,
+    title: 'Mixed Practice',
+    subtitle: 'All topics',
+    icon: '🌌',
+    kind: 'mixed',
+    accent: '#38bdf8',
+    glow: 'rgba(56, 189, 248, 0.35)',
+    soft: 'rgba(56, 189, 248, 0.18)'
+  },
+  {
+    id: 'add_subtract',
+    title: 'Add & Subtract',
+    subtitle: 'Fast sums',
+    icon: '➕',
+    kind: 'flow',
+    accent: '#2dd4bf',
+    glow: 'rgba(45, 212, 191, 0.32)',
+    soft: 'rgba(45, 212, 191, 0.16)',
+    templates: ['add_sub']
+  },
+  {
+    id: 'multiply_divide',
+    title: 'Multiply & Divide',
+    subtitle: 'Math facts',
+    icon: '✖️',
+    kind: 'flow',
+    accent: '#a78bfa',
+    glow: 'rgba(167, 139, 250, 0.34)',
+    soft: 'rgba(167, 139, 250, 0.16)',
+    templates: ['mult_div']
+  },
+  {
+    id: 'fractions',
+    title: 'Fractions',
+    subtitle: 'Compare & solve',
+    icon: '🍰',
+    kind: 'flow',
+    accent: '#34d399',
+    glow: 'rgba(52, 211, 153, 0.32)',
+    soft: 'rgba(52, 211, 153, 0.16)',
+    templates: ['fraction_compare']
+  },
+  {
+    id: 'algebra',
+    title: 'Algebra',
+    subtitle: 'Solve for x',
+    icon: '🧮',
+    kind: 'flow',
+    accent: '#f472b6',
+    glow: 'rgba(244, 114, 182, 0.34)',
+    soft: 'rgba(244, 114, 182, 0.16)',
+    templates: ['equation_1', 'equation_2']
+  },
+  {
+    id: 'percents',
+    title: 'Percents',
+    subtitle: 'Part of whole',
+    icon: '📊',
+    kind: 'flow',
+    accent: '#f59e0b',
+    glow: 'rgba(245, 158, 11, 0.34)',
+    soft: 'rgba(245, 158, 11, 0.16)',
+    templates: ['percent']
+  },
+  {
+    id: 'geometry',
+    title: 'Geometry',
+    subtitle: 'Shapes & space',
+    icon: '📐',
+    kind: 'flow',
+    accent: '#60a5fa',
+    glow: 'rgba(96, 165, 250, 0.34)',
+    soft: 'rgba(96, 165, 250, 0.16)',
+    templates: ['geometry']
+  },
+  {
+    id: 'logic_puzzles',
+    title: 'Logic Puzzles',
+    subtitle: 'Think it through',
+    icon: '🧩',
+    kind: 'puzzle',
+    accent: '#c084fc',
+    glow: 'rgba(192, 132, 252, 0.34)',
+    soft: 'rgba(192, 132, 252, 0.16)',
+    puzzleTypes: ['logic', 'constraint']
+  },
+  {
+    id: 'ratios',
+    title: 'Ratios',
+    subtitle: 'Scale & compare',
+    icon: '⚖️',
+    kind: 'flow',
+    accent: '#fb7185',
+    glow: 'rgba(251, 113, 133, 0.34)',
+    soft: 'rgba(251, 113, 133, 0.16)',
+    templates: ['ratio']
+  }
 ];
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
@@ -1423,7 +1515,6 @@ export default function App() {
   const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const scratchpadFieldId = useId();
   const scratchpadPlaceholder = 'You can work through the problem here. This will not be used for scoring.';
-  const explorerLevel = Math.floor(state.totals.allTimeStars / 250) + 1;
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = Boolean(state.user);
   const onboardingCadetName = nameInput.trim() || 'Cadet';
@@ -2905,12 +2996,19 @@ export default function App() {
   const hideBottomNav =
     isMobileViewport &&
     (screen === 'run' || isTextEntryFocused);
+  const showPracticePinnedCta = screen === 'home' && homeMode === 'practice';
   const showGamePhasesPanel = false;
   const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
-  const flowChoiceOptions = run.currentFlow ? getFlowChoiceOptions(run.currentFlow) : [];
+  const flowChoiceOptions = useMemo(
+    () => (run.currentFlow ? getFlowChoiceOptions(run.currentFlow) : []),
+    [run.currentFlow?.id]
+  );
   const flowHasChoices = flowChoiceOptions.length > 0;
-  const puzzleChoiceOptions = run.currentPuzzle ? getPuzzleChoiceOptions(run.currentPuzzle) : [];
+  const puzzleChoiceOptions = useMemo(
+    () => (run.currentPuzzle ? getPuzzleChoiceOptions(run.currentPuzzle) : []),
+    [run.currentPuzzle?.id]
+  );
   const puzzleHasChoices = puzzleChoiceOptions.length > 0;
   const currentPuzzleCoachPlan = run.currentPuzzle ? buildPuzzleCoachPlan(run.currentPuzzle) : null;
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
@@ -2924,7 +3022,10 @@ export default function App() {
     hintLadder: activeBonus.hintLadder,
     solutionSteps: activeBonus.solutionSteps
   });
-  const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
+  const bonusChoiceOptions = useMemo(
+    () => getBonusChoiceOptions(activeBonus),
+    [activeBonus.id]
+  );
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
   const openCaptainEditor = () => {
@@ -2932,6 +3033,16 @@ export default function App() {
     setNameInput(state.user.username);
     setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
     setScreen('onboarding');
+  };
+
+  const openHomeTab = () => {
+    setScreen('home');
+    setHomeMode('practice');
+  };
+
+  const openBattlesTab = () => {
+    setScreen('home');
+    setHomeMode('challenge');
   };
 
   const createInviteLink = async () => {
@@ -2957,9 +3068,9 @@ export default function App() {
 
   const renderScratchpad = (idSuffix: string) => {
     const fieldId = `${scratchpadFieldId}-${idSuffix}`;
-    const shouldShowInput = !isMobileViewport || scratchpadExpanded;
+    const shouldShowInput = scratchpadExpanded;
     return (
-      <div className={`scratchpad-wrap ${isMobileViewport && !scratchpadExpanded ? 'collapsed' : ''}`}>
+      <div className={`scratchpad-wrap ${!scratchpadExpanded ? 'collapsed' : ''}`}>
         <button
           type="button"
           className="scratchpad-toggle"
@@ -2968,7 +3079,7 @@ export default function App() {
           aria-controls={fieldId}
         >
           <span className="scratchpad-label">Scratchpad</span>
-          {isMobileViewport && <span className="scratchpad-toggle-text">{shouldShowInput ? 'Hide' : 'Show'}</span>}
+          <span className="scratchpad-toggle-text">{shouldShowInput ? 'Hide' : 'Show'}</span>
         </button>
         {shouldShowInput && (
           <textarea
@@ -3284,13 +3395,6 @@ export default function App() {
 
   const home = (
     <>
-      <section className="section-header mission-header">
-        <div className="section-head-copy">
-          <h2 className="text-title">Mission Control</h2>
-        </div>
-        <span className="tag">Explorer Level {explorerLevel}</span>
-      </section>
-
       <section className="card home-mode-shell">
         <div className="home-primary-toggle" role="tablist" aria-label="Game mode">
           <button
@@ -3316,7 +3420,12 @@ export default function App() {
 
       {homeMode === 'challenge' ? (
         <>
-          <section className="card home-hero challenge-home-hero">
+          <button
+            className="card home-hero home-hero-button challenge-home-hero"
+            onClick={openCaptainEditor}
+            aria-label="Edit profile"
+            type="button"
+          >
             <div className="home-hero-head">
               <div className="home-hero-main">
                 <div className="selected-player-avatar home-hero-avatar">
@@ -3326,11 +3435,9 @@ export default function App() {
                   <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
                 </div>
               </div>
-              <button className="text-cta home-inline-link" type="button" onClick={openCaptainEditor}>
-                Edit profile
-              </button>
+              <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
             </div>
-          </section>
+          </button>
 
           <section className="card challenge-home-card challenge-home-card-primary">
             <h3 className="text-title">Solo Challenge</h3>
@@ -3384,30 +3491,39 @@ export default function App() {
                   type="button"
                   className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
                   onClick={() => setSelectedPracticeSubjectId(subject.id)}
+                  style={
+                    {
+                      '--subject-accent': subject.accent,
+                      '--subject-glow': subject.glow,
+                      '--subject-soft': subject.soft
+                    } as CSSProperties
+                  }
                 >
-                  {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && selectedPracticeSubjectId === subject.id && (
-                    <span className="practice-subject-selected-tag">Selected</span>
+                  <span className="practice-subject-top">
+                    <span className="practice-subject-icon-wrap">
+                      <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
+                    </span>
+                    {selectedPracticeSubjectId === subject.id && (
+                      <span className="practice-subject-check" aria-hidden="true">✓</span>
+                    )}
+                  </span>
+                  {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && (
+                    <span className="practice-subject-mixed-label">Mixed Set</span>
                   )}
-                  <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
                   <span className="practice-subject-title">{subject.title}</span>
                   <span className="practice-subject-subtitle">{subject.subtitle}</span>
                 </button>
               ))}
             </div>
-            <div className="btn-row">
-              <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
-                Start Practice
-              </button>
-            </div>
           </section>
+          <div className="practice-pinned-cta">
+            <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
+              Start Practice
+            </button>
+          </div>
         </>
       )}
 
-      <section className="home-secondary-links">
-        <button className="text-cta" type="button" onClick={() => setScreen('scores')}>Open Star Board</button>
-        <button className="text-cta" type="button" onClick={() => setScreen('museum')}>View Trophy Galaxy</button>
-        <button className="text-cta" type="button" onClick={openCaptainEditor}>Character & Profile</button>
-      </section>
     </>
   );
 
@@ -3458,7 +3574,7 @@ export default function App() {
 
             <div className="btn-row">
               <button className="btn btn-primary btn-primary-main" onClick={onSubmitFlow} disabled={!input.trim()}>
-                Lock Answer
+                Blast Off!
               </button>
             </div>
             <div className="helper-actions run-secondary-actions">
@@ -3533,7 +3649,7 @@ export default function App() {
 
             <div className="btn-row">
               <button className="btn btn-primary btn-primary-main" onClick={submitPuzzle} disabled={!input.trim()}>
-                Lock Answer
+                Blast Off!
               </button>
             </div>
             <div className="helper-actions puzzle-helper-actions run-secondary-actions">
@@ -4105,7 +4221,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="app-container" ref={appContainerRef}>
+      <div className={`app-container ${showPracticePinnedCta ? 'with-practice-cta' : ''}`} ref={appContainerRef}>
         <header className="top-bar">
           <button
             type="button"
@@ -4149,17 +4265,37 @@ export default function App() {
       </div>
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
-        <button className={`nav-item ${screen === 'home' ? 'active' : ''}`} onClick={() => setScreen('home')} aria-label="Home">
+        <button
+          className={`nav-item ${screen === 'home' && homeMode === 'practice' ? 'active' : ''}`}
+          onClick={openHomeTab}
+          aria-label="Home"
+        >
           <span className="nav-icon">🏠</span>
           <span className="nav-label">Home</span>
         </button>
-        <button className={`nav-item ${screen === 'museum' ? 'active' : ''}`} onClick={() => setScreen('museum')} aria-label="Trophies">
-          <span className="nav-icon">🏆</span>
-          <span className="nav-label">Trophies</span>
+        <button
+          className={`nav-item ${screen === 'run' || (screen === 'home' && homeMode === 'challenge') ? 'active' : ''}`}
+          onClick={openBattlesTab}
+          aria-label="Battles"
+        >
+          <span className="nav-icon">⚔️</span>
+          <span className="nav-label">Battles</span>
         </button>
-        <button className={`nav-item ${screen === 'scores' ? 'active' : ''}`} onClick={() => setScreen('scores')} aria-label="Stars">
-          <span className="nav-icon">💫</span>
-          <span className="nav-label">Stars</span>
+        <button
+          className={`nav-item ${screen === 'scores' ? 'active' : ''}`}
+          onClick={() => setScreen('scores')}
+          aria-label="Rankings"
+        >
+          <span className="nav-icon">🏆</span>
+          <span className="nav-label">Rankings</span>
+        </button>
+        <button
+          className="nav-item"
+          onClick={openCaptainEditor}
+          aria-label="Profile"
+        >
+          <span className="nav-icon">👤</span>
+          <span className="nav-label">Profile</span>
         </button>
       </nav>
     </div>
