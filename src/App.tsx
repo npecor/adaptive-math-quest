@@ -33,6 +33,20 @@ type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
 type CoachVisualData = { kind?: 'bars' | 'fraction_line'; title: string; caption: string; rows: CoachVisualRow[]; guide?: string[] };
 type GameMode = 'galaxy_mix' | 'rocket_rush' | 'puzzle_orbit' | 'training_mode';
+type HomeMode = 'practice' | 'challenge';
+type RunExperience = HomeMode;
+type PuzzleType = NonNullable<PuzzleItem['puzzleType']>;
+type TweakDifficulty = 'adaptive' | DifficultyLabel;
+type TweakTimeMinutes = 5 | 10 | 15;
+type PracticeSubject = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  kind: 'flow' | 'puzzle' | 'mixed';
+  templates?: string[];
+  puzzleTypes?: PuzzleType[];
+};
 type ResultFlashState = {
   tone: FeedbackTone;
   title: string;
@@ -54,6 +68,7 @@ interface RunState {
   phase: 'flow' | 'puzzle_pick' | 'puzzle' | 'boss';
   bossStage: 'intro' | 'question' | 'result';
   gameMode: GameMode;
+  experience: RunExperience;
   flowTarget: number;
   puzzleTarget: number;
   flowDone: number;
@@ -78,6 +93,11 @@ interface RunState {
   trainingRating: number;
   trainingQuestionsAnswered: number;
   trainingPuzzlesSolved: number;
+  practiceSubjectId: string;
+  practiceTemplateFilter?: string[];
+  practicePuzzleTypeFilter?: PuzzleType[];
+  tweakDifficulty: TweakDifficulty;
+  tweakTimeMinutes: TweakTimeMinutes;
 }
 
 type PendingBonusFinish = {
@@ -88,6 +108,11 @@ type PendingBonusFinish = {
 
 const FLOW_TARGET = 8;
 const PUZZLE_TARGET = 3;
+const PRACTICE_DEFAULT_SUBJECT_ID = 'mixed_practice';
+const PRACTICE_DEFAULT_DIFFICULTY: TweakDifficulty = 'adaptive';
+const PRACTICE_DEFAULT_TIME: TweakTimeMinutes = 10;
+const PRACTICE_TIME_OPTIONS: readonly TweakTimeMinutes[] = [5, 10, 15];
+const TWEAK_DIFFICULTY_OPTIONS: readonly TweakDifficulty[] = ['adaptive', 'Rookie', 'Easy', 'Medium', 'Hard', 'Expert', 'Master'];
 const MAX_PUZZLE_HINTS = 3;
 const NEW_PLAYER_ONRAMP_ATTEMPTS = 6;
 const NEW_PLAYER_FLOW_MAX_DIFFICULTY = 1049; // Easy/Medium cap
@@ -140,6 +165,27 @@ const STARBOARD_LOADING_MESSAGES = [
   'Syncing with deep space nodes...',
   'Finalizing star positions...'
 ] as const;
+const PRACTICE_FLOW_TARGET_BY_TIME: Record<TweakTimeMinutes, number> = { 5: 6, 10: 10, 15: 14 };
+const PRACTICE_PUZZLE_TARGET_BY_TIME: Record<TweakTimeMinutes, number> = { 5: 3, 10: 5, 15: 7 };
+const difficultyTargetRatingByLabel: Record<DifficultyLabel, number> = {
+  Rookie: 820,
+  Easy: 900,
+  Medium: 1030,
+  Hard: 1180,
+  Expert: 1325,
+  Master: 1460
+};
+const practiceSubjects: PracticeSubject[] = [
+  { id: PRACTICE_DEFAULT_SUBJECT_ID, title: 'Mixed Practice', subtitle: 'All topics', icon: '◉', kind: 'mixed' },
+  { id: 'add_subtract', title: 'Add & Subtract', subtitle: 'Fast sums', icon: '+', kind: 'flow', templates: ['add_sub'] },
+  { id: 'multiply_divide', title: 'Multiply & Divide', subtitle: 'Math facts', icon: '×', kind: 'flow', templates: ['mult_div'] },
+  { id: 'fractions', title: 'Fractions', subtitle: 'Compare & solve', icon: '÷', kind: 'flow', templates: ['fraction_compare'] },
+  { id: 'algebra', title: 'Algebra', subtitle: 'Solve for x', icon: 'x', kind: 'flow', templates: ['equation_1', 'equation_2'] },
+  { id: 'percents', title: 'Percents', subtitle: 'Part of whole', icon: '%', kind: 'flow', templates: ['percent'] },
+  { id: 'geometry', title: 'Geometry', subtitle: 'Shapes & space', icon: '△', kind: 'flow', templates: ['geometry'] },
+  { id: 'logic_puzzles', title: 'Logic Puzzles', subtitle: 'Think it through', icon: '✦', kind: 'puzzle', puzzleTypes: ['logic', 'constraint'] },
+  { id: 'ratios', title: 'Ratios', subtitle: 'Scale & compare', icon: '▣', kind: 'flow', templates: ['ratio'] }
+];
 const defaultCharacterId = playerCharacters[0].id;
 const characterPaletteById: Record<string, { base: string; accent: string; trim: string; mark: string }> = {
   'astro-cactus-cadet': { base: '#d9f99d', accent: '#84cc16', trim: '#fef08a', mark: '#365314' },
@@ -173,10 +219,19 @@ const modeConfig: Record<GameMode, { name: string; icon: string; subtitle: strin
   training_mode: { name: 'Training Mode', icon: '🛰️', subtitle: 'Starts easy and ramps up.', flowTarget: FLOW_TARGET, puzzleTarget: PUZZLE_TARGET }
 };
 
+const applyDifficultyOverride = (rating: number, difficulty: TweakDifficulty): number =>
+  difficulty === 'adaptive' ? rating : difficultyTargetRatingByLabel[difficulty];
+
+const getPracticeTargets = (subjectKind: PracticeSubject['kind'], timeMinutes: TweakTimeMinutes) =>
+  subjectKind === 'puzzle'
+    ? { flowTarget: 0, puzzleTarget: PRACTICE_PUZZLE_TARGET_BY_TIME[timeMinutes] }
+    : { flowTarget: PRACTICE_FLOW_TARGET_BY_TIME[timeMinutes], puzzleTarget: 0 };
+
 const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   phase: modeConfig[mode].flowTarget > 0 ? 'flow' : 'puzzle_pick',
   bossStage: 'intro',
   gameMode: mode,
+  experience: 'challenge',
   flowTarget: modeConfig[mode].flowTarget,
   puzzleTarget: modeConfig[mode].puzzleTarget,
   flowDone: 0,
@@ -198,7 +253,12 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   puzzlesTriedThisRound: 0,
   trainingRating: TRAINING_START_RATING,
   trainingQuestionsAnswered: 0,
-  trainingPuzzlesSolved: 0
+  trainingPuzzlesSolved: 0,
+  practiceSubjectId: PRACTICE_DEFAULT_SUBJECT_ID,
+  practiceTemplateFilter: undefined,
+  practicePuzzleTypeFilter: undefined,
+  tweakDifficulty: PRACTICE_DEFAULT_DIFFICULTY,
+  tweakTimeMinutes: PRACTICE_DEFAULT_TIME
 });
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -423,7 +483,6 @@ const isPuzzleAnswerCorrect = (puzzle: PuzzleItem, rawInput: string): boolean =>
 
 const getClarifyingReply = (puzzle: PuzzleItem, question: string, hintsShown: number): string => {
   const q = normalize(question);
-  const mode = getPuzzleInputMode(puzzle);
   const nextHint = puzzle.hint_ladder[Math.min(hintsShown, puzzle.hint_ladder.length - 1)];
 
   if (
@@ -441,8 +500,7 @@ const getClarifyingReply = (puzzle: PuzzleItem, question: string, hintsShown: nu
   }
 
   if (q.includes('format') || q.includes('type') || q.includes('answer')) {
-    if (mode === 'choice') return 'Tap one of the answer buttons, then hit Blast Off!';
-    return 'Tap one answer choice, then hit Blast Off!';
+    return 'Tap one answer choice, then lock your answer.';
   }
 
   if (q.includes('stuck') || q.includes('hint') || q.includes('help')) {
@@ -1309,6 +1367,9 @@ export default function App() {
   });
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
+  const [homeMode, setHomeMode] = useState<HomeMode>('challenge');
+  const [selectedPracticeSubjectId, setSelectedPracticeSubjectId] = useState(PRACTICE_DEFAULT_SUBJECT_ID);
+  const [showTweaksSheet, setShowTweaksSheet] = useState(false);
   const [input, setInput] = useState('');
   const [scratchpad, setScratchpad] = useState('');
   const [scratchpadExpanded, setScratchpadExpanded] = useState(() =>
@@ -1330,9 +1391,7 @@ export default function App() {
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false
   );
   const [isTextEntryFocused, setIsTextEntryFocused] = useState(false);
-  const [homeNavRevealed, setHomeNavRevealed] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
-  const lastScrollYRef = useRef(0);
   const lastSubmittedStatsRef = useRef('');
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
@@ -1373,6 +1432,10 @@ export default function App() {
   const avgSessionPoints = state.totals.runsPlayed ? Math.round(state.totals.allTimeStars / state.totals.runsPlayed) : 0;
   const todayWeekday = new Date().getDay();
   const todayBarIndex = (todayWeekday + 6) % 7;
+  const activePracticeSubject =
+    practiceSubjects.find((subject) => subject.id === selectedPracticeSubjectId) ??
+    practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+    practiceSubjects[0];
 
   const totalScore = run.sprintScore + run.brainScore;
   const topBarPoints = screen === 'run' || screen === 'summary' ? totalScore : state.totals.allTimeStars;
@@ -1386,6 +1449,13 @@ export default function App() {
         Math.min(100, Math.round((state.totals.allTimePuzzleCorrect / state.totals.allTimePuzzleTries) * 100))
       )
     : 0;
+  const challengeStats = {
+    bestRun: state.totals.bestRunStars,
+    accuracy: puzzleSolveRate,
+    streak: state.streaks.dailyStreak
+  };
+  const runSubjectLabel =
+    practiceSubjects.find((subject) => subject.id === run.practiceSubjectId)?.title ?? 'Mixed Practice';
   const hasCadetSnapshot = state.totals.allTimeStars > 0 || state.streaks.dailyStreak > 0 || state.streaks.puzzleStreak > 0;
   const getNewPlayerFlowDifficultyCap = (attemptsCount: number) =>
     state.totals.runsPlayed === 0 && attemptsCount < NEW_PLAYER_ONRAMP_ATTEMPTS
@@ -1424,11 +1494,16 @@ export default function App() {
   };
   const getFlowSelectionPlan = (runState: RunState, fallbackRating: number) => {
     if (!isTrainingMode(runState.gameMode)) {
+      const baseRating = applyDifficultyOverride(fallbackRating, runState.tweakDifficulty);
+      const allowedTemplates =
+        runState.experience === 'practice' && runState.practiceTemplateFilter && runState.practiceTemplateFilter.length > 0
+          ? runState.practiceTemplateFilter
+          : undefined;
       return {
-        rating: fallbackRating,
+        rating: baseRating,
         targetProfile: 'default' as const,
         maxJumpFromPrev: undefined as number | undefined,
-        allowedTemplates: undefined as string[] | undefined,
+        allowedTemplates,
         maxDifficultyScore: undefined as number | undefined,
         forceSingleDigitAddSub: undefined as boolean | undefined
       };
@@ -1451,7 +1526,13 @@ export default function App() {
     return ['word', 'pattern', 'logic', 'spatial', 'constraint'];
   };
   const getPuzzleSelectionPlan = (runState: RunState, fallbackRating: number) => {
-    if (!isTrainingMode(runState.gameMode)) return { rating: fallbackRating, options: {} };
+    if (!isTrainingMode(runState.gameMode)) {
+      const options: Parameters<typeof generateAdaptivePuzzleChoices>[3] = {};
+      if (runState.experience === 'practice' && runState.practicePuzzleTypeFilter?.length) {
+        options.allowedPuzzleTypes = runState.practicePuzzleTypeFilter;
+      }
+      return { rating: applyDifficultyOverride(fallbackRating, runState.tweakDifficulty), options };
+    }
     const flowTrainingRating = getActiveTrainingRating(runState, fallbackRating);
     const hardUnlocked = getTrainingHardUnlock(runState);
     return {
@@ -1616,46 +1697,17 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== 'run') {
-      setScratchpadExpanded(true);
+      setScratchpadExpanded(false);
       return;
     }
-    setScratchpadExpanded(!isMobileViewport);
-  }, [screen, isMobileViewport, run.phase, run.currentFlow?.id, run.currentPuzzle?.id, run.bossStage, run.bonusChallenge?.id]);
+    setScratchpadExpanded(false);
+  }, [screen, isMobileViewport]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-    const getScrollY = () => Math.max(window.scrollY, appContainerRef.current?.scrollTop ?? 0);
-    const handleScroll = () => {
-      const y = getScrollY();
-      const delta = y - lastScrollYRef.current;
-      const minDelta = 6;
-
-      if (y <= 8) {
-        setHomeNavRevealed(false);
-      } else if (delta > minDelta) {
-        setHomeNavRevealed(true);
-      } else if (delta < -minDelta) {
-        setHomeNavRevealed(false);
-      }
-
-      lastScrollYRef.current = y;
-    };
-    lastScrollYRef.current = getScrollY();
-    setHomeNavRevealed(false);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    const container = appContainerRef.current;
-    container?.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      container?.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  useEffect(() => {
-    const y = Math.max(typeof window !== 'undefined' ? window.scrollY : 0, appContainerRef.current?.scrollTop ?? 0);
-    lastScrollYRef.current = y;
-    setHomeNavRevealed(false);
-  }, [screen]);
+    if (screen !== 'run' || run.experience !== 'practice') {
+      setShowTweaksSheet(false);
+    }
+  }, [screen, run.experience]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1904,9 +1956,33 @@ export default function App() {
     setScreen('summary');
   };
 
-  const startRun = (mode: GameMode = selectedMode) => {
+  const startRun = (
+    mode: GameMode = selectedMode,
+    options?: {
+      experience?: RunExperience;
+      practiceSubject?: PracticeSubject;
+      tweakDifficulty?: TweakDifficulty;
+      tweakTimeMinutes?: TweakTimeMinutes;
+    }
+  ) => {
     const streaks = updateDailyStreak(state.streaks);
+    const experience = options?.experience ?? (mode === 'galaxy_mix' ? 'challenge' : 'practice');
+    const practiceSubject = options?.practiceSubject ?? activePracticeSubject;
+    const tweakDifficulty = options?.tweakDifficulty ?? PRACTICE_DEFAULT_DIFFICULTY;
+    const tweakTimeMinutes = options?.tweakTimeMinutes ?? PRACTICE_DEFAULT_TIME;
     const seeded = newRun(mode);
+    seeded.experience = experience;
+    seeded.tweakDifficulty = tweakDifficulty;
+    seeded.tweakTimeMinutes = tweakTimeMinutes;
+    seeded.practiceSubjectId = practiceSubject.id;
+    seeded.practiceTemplateFilter = practiceSubject.templates;
+    seeded.practicePuzzleTypeFilter = practiceSubject.puzzleTypes;
+    if (experience === 'practice') {
+      const practiceTargets = getPracticeTargets(practiceSubject.kind, tweakTimeMinutes);
+      seeded.flowTarget = practiceTargets.flowTarget;
+      seeded.puzzleTarget = practiceTargets.puzzleTarget;
+    }
+    seeded.phase = seeded.flowTarget > 0 ? 'flow' : 'puzzle_pick';
     if (isTrainingMode(mode)) {
       seeded.trainingRating = getTrainingStartRating(state.skill.rating);
       seeded.trainingQuestionsAnswered = 0;
@@ -1937,9 +2013,52 @@ export default function App() {
     setPendingBonusFinish(null);
     setBonusResult(null);
     setRun(seeded);
+    setSelectedMode(mode);
     save({ ...state, streaks });
     setScreen('run');
+    setShowTweaksSheet(false);
     resetInputAndFeedback();
+  };
+
+  const startChallengeRun = () => {
+    setHomeMode('challenge');
+    startRun('galaxy_mix', { experience: 'challenge', tweakDifficulty: 'adaptive', tweakTimeMinutes: PRACTICE_DEFAULT_TIME });
+  };
+
+  const startPracticeRun = () => {
+    const subject = activePracticeSubject;
+    const mode: GameMode = subject.kind === 'puzzle' ? 'puzzle_orbit' : 'rocket_rush';
+    setHomeMode('practice');
+    startRun(mode, {
+      experience: 'practice',
+      practiceSubject: subject,
+      tweakDifficulty: PRACTICE_DEFAULT_DIFFICULTY,
+      tweakTimeMinutes: PRACTICE_DEFAULT_TIME
+    });
+  };
+
+  const applyRunTimeTweaks = (runState: RunState, nextTimeMinutes: TweakTimeMinutes): RunState => {
+    const selectedSubject =
+      practiceSubjects.find((subject) => subject.id === runState.practiceSubjectId) ??
+      practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+      practiceSubjects[0];
+    const nextTargets = getPracticeTargets(selectedSubject.kind, nextTimeMinutes);
+    const minFlowTarget = runState.flowDone + (runState.phase === 'flow' ? 1 : 0);
+    const minPuzzleTarget = runState.puzzleDone + (runState.phase === 'puzzle' || runState.phase === 'puzzle_pick' ? 1 : 0);
+    return {
+      ...runState,
+      tweakTimeMinutes: nextTimeMinutes,
+      flowTarget: Math.max(minFlowTarget, nextTargets.flowTarget),
+      puzzleTarget: Math.max(minPuzzleTarget, nextTargets.puzzleTarget)
+    };
+  };
+
+  const updatePracticeDifficulty = (difficulty: TweakDifficulty) => {
+    setRun((current) => ({ ...current, tweakDifficulty: difficulty }));
+  };
+
+  const updatePracticeTime = (nextTimeMinutes: TweakTimeMinutes) => {
+    setRun((current) => applyRunTimeTweaks(current, nextTimeMinutes));
   };
 
   const setupPuzzlePick = () => {
@@ -2785,15 +2904,14 @@ export default function App() {
 
   const hideBottomNav =
     isMobileViewport &&
-    (screen === 'run' || (screen === 'home' && !homeNavRevealed) || isTextEntryFocused);
+    (screen === 'run' || isTextEntryFocused);
   const showGamePhasesPanel = false;
   const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
   const flowChoiceOptions = run.currentFlow ? getFlowChoiceOptions(run.currentFlow) : [];
   const flowHasChoices = flowChoiceOptions.length > 0;
-  const puzzleInputMode = run.currentPuzzle ? getPuzzleInputMode(run.currentPuzzle) : 'short_text';
-  const puzzleHasChoices = puzzleInputMode === 'choice';
   const puzzleChoiceOptions = run.currentPuzzle ? getPuzzleChoiceOptions(run.currentPuzzle) : [];
+  const puzzleHasChoices = puzzleChoiceOptions.length > 0;
   const currentPuzzleCoachPlan = run.currentPuzzle ? buildPuzzleCoachPlan(run.currentPuzzle) : null;
   const currentFlowCoachVisual = run.currentFlow ? getCoachVisual(run.currentFlow) : null;
   const currentPuzzleCoachVisual = run.currentPuzzle ? getCoachVisual(run.currentPuzzle) : null;
@@ -2807,7 +2925,6 @@ export default function App() {
     solutionSteps: activeBonus.solutionSteps
   });
   const bonusChoiceOptions = getBonusChoiceOptions(activeBonus);
-  const bonusInputMode = getBonusInputMode(activeBonus);
   const bonusBefore = run.brainScore;
   const bonusAfter = bonusBefore * 2;
   const openCaptainEditor = () => {
@@ -2815,6 +2932,27 @@ export default function App() {
     setNameInput(state.user.username);
     setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
     setScreen('onboarding');
+  };
+
+  const createInviteLink = async () => {
+    const inviteUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}${window.location.pathname}?challenge=invite`
+        : 'Challenge link ready';
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteUrl);
+        setFeedback('Invite link copied.');
+      } else {
+        setFeedback(`Share this link: ${inviteUrl}`);
+      }
+      setFeedbackTone('success');
+      triggerPulse('success');
+    } catch {
+      setFeedback(`Share this link: ${inviteUrl}`);
+      setFeedbackTone('info');
+      triggerPulse('info');
+    }
   };
 
   const renderScratchpad = (idSuffix: string) => {
@@ -3152,72 +3290,123 @@ export default function App() {
         </div>
         <span className="tag">Explorer Level {explorerLevel}</span>
       </section>
-      <button className="card home-hero home-hero-button" onClick={openCaptainEditor} aria-label="Edit captain" type="button">
-        <div className="home-hero-head">
-          <div className="home-hero-main">
-            <div className="selected-player-avatar home-hero-avatar">
-              <CharacterAvatar characterId={homeCharacterId} size="lg" />
-            </div>
-            <div className="home-hero-copy">
-              <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
-            </div>
-          </div>
-          <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
-        </div>
-      </button>
 
-      <section className="card mission-launch-card">
-        <p className="text-label mission-label">Choose your mission:</p>
-        <div className="mode-card-grid">
-          {(Object.keys(modeConfig) as GameMode[]).map((mode) => (
-            <button
-              key={mode}
-              className={`mode-card-option ${selectedMode === mode ? 'selected' : ''}`}
-              onClick={() => {
-                setSelectedMode(mode);
-                startRun(mode);
-              }}
-            >
-              <span className="mode-card-head">
-                <span className="mode-card-title">{modeConfig[mode].icon} {modeConfig[mode].name}</span>
-                <span className="mode-card-counts">
-                  {modeConfig[mode].flowTarget > 0 && modeConfig[mode].puzzleTarget > 0
-                    ? `⚡ ${modeConfig[mode].flowTarget} + 🧩 ${modeConfig[mode].puzzleTarget}`
-                    : modeConfig[mode].flowTarget > 0
-                      ? `⚡ ${modeConfig[mode].flowTarget}`
-                      : `🧩 ${modeConfig[mode].puzzleTarget}`}
-                </span>
-              </span>
-              <span className="mode-card-subtitle">{modeConfig[mode].subtitle}</span>
+      <section className="card home-mode-shell">
+        <div className="home-primary-toggle" role="tablist" aria-label="Game mode">
+          <button
+            type="button"
+            className={`home-primary-toggle-btn ${homeMode === 'practice' ? 'selected' : ''}`}
+            role="tab"
+            aria-selected={homeMode === 'practice'}
+            onClick={() => setHomeMode('practice')}
+          >
+            🧠 Practice
+          </button>
+          <button
+            type="button"
+            className={`home-primary-toggle-btn ${homeMode === 'challenge' ? 'selected' : ''}`}
+            role="tab"
+            aria-selected={homeMode === 'challenge'}
+            onClick={() => setHomeMode('challenge')}
+          >
+            🚀 Challenge
+          </button>
+        </div>
+      </section>
+
+      {homeMode === 'challenge' ? (
+        <>
+          <section className="card home-hero challenge-home-hero">
+            <div className="home-hero-head">
+              <div className="home-hero-main">
+                <div className="selected-player-avatar home-hero-avatar">
+                  <CharacterAvatar characterId={homeCharacterId} size="lg" />
+                </div>
+                <div className="home-hero-copy">
+                  <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
+                </div>
+              </div>
+              <button className="text-cta home-inline-link" type="button" onClick={openCaptainEditor}>
+                Edit profile
+              </button>
+            </div>
+          </section>
+
+          <section className="card challenge-home-card challenge-home-card-primary">
+            <h3 className="text-title">Solo Challenge</h3>
+            <p className="muted">Your character is ready. Each game adjusts to your level.</p>
+            <button className="btn btn-primary" onClick={startChallengeRun}>
+              Start Challenge
             </button>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <section className="section-header">
-        <h3 className="text-title">Cosmic Snapshot</h3>
-        <span className="tag">Your mission stats</span>
-      </section>
+          <section className="card challenge-home-card">
+            <h3 className="text-title">Challenge a Friend</h3>
+            <p className="muted">Send a link and see who gets the higher score.</p>
+            <button className="btn btn-secondary" onClick={createInviteLink}>
+              Create Invite Link
+            </button>
+          </section>
 
-      <section className="card home-stats-card">
-        <div className="stats-grid stats-grid-embedded">
-          <div className="stat-card">
-            <span className="stat-value">{state.highs.bestTotal}</span>
-            <span className="stat-label">⭐ Best Score</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value accent">{state.streaks.dailyStreak}</span>
-            <span className="stat-label">🔥 Day Streak</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{puzzleSolveRate}%</span>
-            <span className="stat-label">🧠 Puzzles Solved</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{state.museum.length}</span>
-            <span className="stat-label">🏆 Trophies</span>
-          </div>
-        </div>
+          <section className="section-header">
+            <h3 className="text-title">{homeCadetName}'s Stats</h3>
+          </section>
+
+          <section className="card home-stats-card">
+            <div className="stats-grid stats-grid-embedded challenge-stats-grid">
+              <div className="stat-card">
+                <span className="stat-value">{challengeStats.bestRun}</span>
+                <span className="stat-label">Best Run</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-value">{challengeStats.accuracy}%</span>
+                <span className="stat-label">Accuracy</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-value accent">{challengeStats.streak}</span>
+                <span className="stat-label">Streak</span>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="card home-hero practice-home-hero">
+            <h3 className="home-hero-title">{homeCadetName}, what should we practice today?</h3>
+            <p className="home-hero-subtitle">Pick one… or just start with Mixed Practice.</p>
+          </section>
+
+          <section className="card practice-home-card">
+            <div className="practice-subject-grid">
+              {practiceSubjects.map((subject) => (
+                <button
+                  key={subject.id}
+                  type="button"
+                  className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
+                  onClick={() => setSelectedPracticeSubjectId(subject.id)}
+                >
+                  {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && selectedPracticeSubjectId === subject.id && (
+                    <span className="practice-subject-selected-tag">Selected</span>
+                  )}
+                  <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
+                  <span className="practice-subject-title">{subject.title}</span>
+                  <span className="practice-subject-subtitle">{subject.subtitle}</span>
+                </button>
+              ))}
+            </div>
+            <div className="btn-row">
+              <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
+                Start Practice
+              </button>
+            </div>
+          </section>
+        </>
+      )}
+
+      <section className="home-secondary-links">
+        <button className="text-cta" type="button" onClick={() => setScreen('scores')}>Open Star Board</button>
+        <button className="text-cta" type="button" onClick={() => setScreen('museum')}>View Trophy Galaxy</button>
+        <button className="text-cta" type="button" onClick={openCaptainEditor}>Character & Profile</button>
       </section>
     </>
   );
@@ -3225,6 +3414,12 @@ export default function App() {
   const runView = (
     <>
       <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
+        <div className="run-experience-row">
+          <p className="text-label run-experience-label">
+            {run.experience === 'practice' ? 'Practice - In Progress' : 'Challenge - Match Live'}
+          </p>
+          {run.experience === 'practice' && <span className="tag">{runSubjectLabel}</span>}
+        </div>
         {run.phase === 'flow' && run.currentFlow && (
           <>
             <div className="tier-row">
@@ -3235,7 +3430,7 @@ export default function App() {
               {flowPromptLines?.detail && <span className="math-display-line math-display-detail"><InlineMathText text={flowPromptLines.detail} /></span>}
             </h3>
 
-            {flowHasChoices && (
+            {flowHasChoices ? (
               <div className="chips">
                 {flowChoiceOptions.map((choice) => (
                   <button
@@ -3247,9 +3442,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            )}
-
-            {!flowHasChoices && (
+            ) : (
               <input
                 className="math-input"
                 inputMode={run.currentFlow.format === 'numeric_input' ? 'numeric' : 'text'}
@@ -3265,15 +3458,20 @@ export default function App() {
 
             <div className="btn-row">
               <button className="btn btn-primary btn-primary-main" onClick={onSubmitFlow} disabled={!input.trim()}>
-                <span aria-hidden="true">🚀</span> Blast Off!
+                Lock Answer
               </button>
             </div>
-            <div className="helper-actions">
+            <div className="helper-actions run-secondary-actions">
+              {run.experience === 'practice' && (
+                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
+                  Tweaks
+                </button>
+              )}
               <button
                 className="btn btn-secondary utility-btn"
                 onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
               >
-                <span aria-hidden="true">🧠</span> Give me a hint
+                Ask Coach
               </button>
             </div>
             {renderCoachPanel(currentFlowCoachPlan, currentFlowCoachVisual, 'Coach', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
@@ -3319,14 +3517,6 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            ) : puzzleInputMode === 'long_text' ? (
-              <textarea
-                className="math-input text-area-input"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Write your thinking in one short sentence"
-                rows={3}
-              />
             ) : (
               <input
                 className="math-input"
@@ -3343,17 +3533,22 @@ export default function App() {
 
             <div className="btn-row">
               <button className="btn btn-primary btn-primary-main" onClick={submitPuzzle} disabled={!input.trim()}>
-                <span aria-hidden="true">🚀</span> Blast Off!
+                Lock Answer
               </button>
             </div>
-            <div className="helper-actions puzzle-helper-actions">
+            <div className="helper-actions puzzle-helper-actions run-secondary-actions">
+              {run.experience === 'practice' && (
+                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
+                  Tweaks
+                </button>
+              )}
               <button
                 className="btn btn-secondary utility-btn"
                 onClick={() =>
                   openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
                 }
               >
-                <span aria-hidden="true">🧠</span> Give me a hint
+                Ask Coach
               </button>
             </div>
             <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
@@ -3387,7 +3582,7 @@ export default function App() {
                 <h3>Bonus Round: Mini Boss</h3>
                 <p className="muted">{activeBonus.title} • {activeBonus.label}</p>
                 <p className="puzzle-question-prompt"><InlineMathText text={activeBonus.prompt} /></p>
-                {bonusInputMode === 'choice' ? (
+                {bonusChoiceOptions.length > 0 ? (
                   <div className="chips">
                     {bonusChoiceOptions.map((choice) => (
                       <button
@@ -3399,14 +3594,6 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                ) : bonusInputMode === 'long_text' ? (
-                  <textarea
-                    className="math-input text-area-input"
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder="Write your strategy in one short sentence"
-                    rows={3}
-                  />
                 ) : (
                   <input
                     className="math-input"
@@ -3435,7 +3622,7 @@ export default function App() {
                       openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
                     }
                   >
-                    <span aria-hidden="true">🧠</span> Give me a hint
+                    Ask Coach
                   </button>
                 </div>
                 {renderCoachPanel(currentBonusCoachPlan, null, 'Mini Boss Coach', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))}
@@ -3461,6 +3648,52 @@ export default function App() {
         )}
 
       </section>
+      {run.experience === 'practice' && showTweaksSheet && (
+        <>
+          <button
+            type="button"
+            className="sheet-backdrop"
+            aria-label="Close tweaks"
+            onClick={() => setShowTweaksSheet(false)}
+          />
+          <section className="card tweaks-sheet" role="dialog" aria-modal="true" aria-label="Practice tweaks">
+            <div className="tweaks-sheet-head">
+              <h3 className="text-title">Practice Tweaks</h3>
+              <button type="button" className="text-cta" onClick={() => setShowTweaksSheet(false)}>Done</button>
+            </div>
+            <div className="tweaks-section">
+              <p className="text-label">Difficulty</p>
+              <div className="chips tweaks-chip-wrap">
+                {TWEAK_DIFFICULTY_OPTIONS.map((difficulty) => (
+                  <button
+                    key={difficulty}
+                    type="button"
+                    className={`btn btn-secondary chip-btn ${run.tweakDifficulty === difficulty ? 'selected' : ''}`}
+                    onClick={() => updatePracticeDifficulty(difficulty)}
+                  >
+                    {difficulty === 'adaptive' ? 'Adaptive' : difficulty}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="tweaks-section">
+              <p className="text-label">Time</p>
+              <div className="chips tweaks-chip-wrap">
+                {PRACTICE_TIME_OPTIONS.map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    className={`btn btn-secondary chip-btn ${run.tweakTimeMinutes === minutes ? 'selected' : ''}`}
+                    onClick={() => updatePracticeTime(minutes)}
+                  >
+                    {minutes} min
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
       {showGamePhasesPanel && (
         <section className="card">
           <div className="card-head-row">
@@ -3526,7 +3759,22 @@ export default function App() {
           </div>
         </div>
         <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => startRun(selectedMode)}>Play Again</button>
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              startRun(run.gameMode, {
+                experience: run.experience,
+                practiceSubject:
+                  practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
+                  practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+                  practiceSubjects[0],
+                tweakDifficulty: run.tweakDifficulty,
+                tweakTimeMinutes: run.tweakTimeMinutes
+              })
+            }
+          >
+            Play Again
+          </button>
           <button className="btn btn-secondary" onClick={() => setScreen('scores')}>💫 Stars</button>
         </div>
       </section>
@@ -3729,7 +3977,21 @@ export default function App() {
         {collectionRows.length === 0 && !showAttemptedPuzzles && (
           <div className="empty-state">
             <p>No trophies yet. Solve a puzzle to earn your first trophy.</p>
-            <button className="btn btn-primary" onClick={() => startRun('puzzle_orbit')}>Play a Puzzle</button>
+            <button
+              className="btn btn-primary"
+              onClick={() =>
+                startRun('puzzle_orbit', {
+                  experience: 'practice',
+                  practiceSubject:
+                    practiceSubjects.find((subject) => subject.id === 'logic_puzzles') ??
+                    practiceSubjects[0],
+                  tweakDifficulty: PRACTICE_DEFAULT_DIFFICULTY,
+                  tweakTimeMinutes: PRACTICE_DEFAULT_TIME
+                })
+              }
+            >
+              Play a Puzzle
+            </button>
           </div>
         )}
         {collectionRows.length === 0 && showAttemptedPuzzles && (
@@ -3866,7 +4128,7 @@ export default function App() {
         {screen === 'run' && (
           <section className="run-progress-inline" aria-label="Orbit progress">
             <div className="flow-progress-head compact">
-              <p className="text-label">Question {Math.min(runDoneTotal + 1, runTargetTotal)}/{runTargetTotal}</p>
+              <p className="text-label">Question {Math.min(runDoneTotal + 1, runTargetTotal)} of {runTargetTotal}</p>
             </div>
             <div className="flow-meter-wrap compact">
               <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>

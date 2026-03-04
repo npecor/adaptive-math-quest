@@ -4072,6 +4072,203 @@ p {
   line-height: 1.42;
 }
 
+.home-mode-shell {
+  padding: 10px;
+}
+
+.home-primary-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.home-primary-toggle-btn {
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.78);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.home-primary-toggle-btn.selected {
+  color: #0f172a;
+  border-color: rgba(103, 232, 249, 0.55);
+  background: linear-gradient(120deg, rgba(94, 234, 212, 0.95), rgba(56, 189, 248, 0.92));
+}
+
+.challenge-home-hero {
+  padding-bottom: 14px;
+}
+
+.home-inline-link {
+  margin-left: auto;
+}
+
+.challenge-home-card {
+  display: grid;
+  gap: 10px;
+}
+
+.challenge-home-card .btn {
+  width: 100%;
+}
+
+.challenge-home-card-primary {
+  border-color: rgba(56, 189, 248, 0.38);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(56, 189, 248, 0.18));
+}
+
+.challenge-stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.home-secondary-links {
+  margin: 6px var(--space-page) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.home-secondary-links .text-cta {
+  font-size: 12px;
+}
+
+.practice-home-hero {
+  gap: 6px;
+}
+
+.practice-home-card {
+  display: grid;
+  gap: 14px;
+}
+
+.practice-subject-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.practice-subject-tile {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.58);
+  color: var(--color-ink);
+  text-align: left;
+  padding: 12px;
+  min-height: 104px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.practice-subject-tile.mixed {
+  grid-column: 1 / -1;
+  min-height: 84px;
+}
+
+.practice-subject-tile.selected {
+  border-color: rgba(103, 232, 249, 0.75);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(56, 189, 248, 0.3));
+}
+
+.practice-subject-selected-tag {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.5);
+  background: rgba(191, 219, 254, 0.18);
+  color: #e0f2fe;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.practice-subject-icon {
+  font-size: 20px;
+  line-height: 1;
+  opacity: 0.95;
+}
+
+.practice-subject-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.practice-subject-subtitle {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.run-experience-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.run-experience-label {
+  margin: 0;
+}
+
+.run-secondary-actions {
+  justify-content: center;
+}
+
+.utility-btn-small {
+  min-width: 108px;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: rgba(2, 6, 23, 0.52);
+  backdrop-filter: blur(2px);
+  z-index: 120;
+}
+
+.tweaks-sheet {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  margin: 0 auto;
+  max-width: 430px;
+  z-index: 130;
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.52);
+  display: grid;
+  gap: 12px;
+}
+
+.tweaks-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tweaks-section {
+  display: grid;
+  gap: 8px;
+}
+
+.tweaks-chip-wrap .chip-btn {
+  min-width: 88px;
+}
+
 @keyframes home-avatar-float {
   0%, 100% {
     transform: translateY(0);
@@ -4237,6 +4434,29 @@ p {
 
   .mode-card-counts {
     font-size: 11px;
+  }
+
+  .challenge-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .home-secondary-links {
+    gap: 10px;
+  }
+
+  .practice-subject-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .practice-subject-title {
+    font-size: 17px;
+  }
+
+  .run-experience-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .section-header,
