@@ -4547,16 +4547,41 @@ p {
   }
 
   .challenge-stats-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .challenge-stats-grid .stat-card {
+    padding: 10px 8px;
+    gap: 3px;
+  }
+
+  .challenge-stats-grid .stat-value {
+    font-size: 21px;
+  }
+
+  .challenge-stats-grid .stat-label {
+    font-size: 10px;
+    letter-spacing: 0.02em;
   }
 
   .practice-subject-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .practice-subject-tile {
+    min-height: 96px;
+    padding: 10px;
+  }
+
+  .practice-subject-tile.mixed {
+    grid-column: 1 / -1;
+    min-height: 82px;
   }
 
   .practice-subject-title {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   .run-experience-row {
