@@ -27,7 +27,7 @@ import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'landing' | 'onboarding' | 'home' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'run' | 'summary' | 'scores' | 'museum';
 type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
@@ -1466,7 +1466,6 @@ export default function App() {
   });
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
-  const [homeMode, setHomeMode] = useState<HomeMode>('challenge');
   const [selectedPracticeSubjectId, setSelectedPracticeSubjectId] = useState(PRACTICE_DEFAULT_SUBJECT_ID);
   const [showTweaksSheet, setShowTweaksSheet] = useState(false);
   const [input, setInput] = useState('');
@@ -1870,9 +1869,16 @@ export default function App() {
     }
 
     const container = appContainerRef.current;
-    if (!container) return;
+    const getScrollTop = () => {
+      const containerTop = container?.scrollTop ?? 0;
+      const windowTop =
+        typeof window === 'undefined'
+          ? 0
+          : Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+      return Math.max(containerTop, windowTop, 0);
+    };
 
-    let lastTop = container.scrollTop;
+    let lastTop = getScrollTop();
     let rafId: number | null = null;
     const downThreshold = 14;
     const upThreshold = 10;
@@ -1881,7 +1887,7 @@ export default function App() {
       if (rafId !== null) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = null;
-        const nextTop = container.scrollTop;
+        const nextTop = getScrollTop();
         const delta = nextTop - lastTop;
 
         if (nextTop <= 10) {
@@ -1900,9 +1906,11 @@ export default function App() {
       });
     };
 
-    container.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    container?.addEventListener('scroll', onScroll, { passive: true });
     return () => {
-      container.removeEventListener('scroll', onScroll);
+      window.removeEventListener('scroll', onScroll);
+      container?.removeEventListener('scroll', onScroll);
       if (rafId !== null) window.cancelAnimationFrame(rafId);
     };
   }, [isMobileViewport, isTextEntryFocused, screen]);
@@ -2195,7 +2203,6 @@ export default function App() {
   };
 
   const startChallengeRun = () => {
-    setHomeMode('challenge');
     startRun('galaxy_mix', { experience: 'challenge', tweakDifficulty: 'adaptive', tweakTimeMinutes: PRACTICE_DEFAULT_TIME });
   };
 
@@ -2207,7 +2214,6 @@ export default function App() {
         : subject.kind === 'mixed'
           ? 'galaxy_mix'
           : 'rocket_rush';
-    setHomeMode('practice');
     startRun(mode, {
       experience: 'practice',
       practiceSubject: subject,
@@ -3113,7 +3119,6 @@ export default function App() {
   const hideBottomNav =
     isMobileViewport &&
     (screen === 'run' || isTextEntryFocused || isBottomNavAutoHidden);
-  const showPracticePinnedCta = screen === 'home' && homeMode === 'practice';
   const showGamePhasesPanel = false;
   const currentFlowCoachPlan = run.currentFlow ? buildFlowCoachPlan(run.currentFlow) : null;
   const flowPromptLines = run.currentFlow ? getFlowPromptLines(run.currentFlow) : null;
@@ -3156,12 +3161,10 @@ export default function App() {
 
   const openHomeTab = () => {
     setScreen('home');
-    setHomeMode('practice');
   };
 
-  const openBattlesTab = () => {
-    setScreen('home');
-    setHomeMode('challenge');
+  const openPracticeTab = () => {
+    setScreen('practice');
   };
 
   const createInviteLink = async () => {
@@ -3574,168 +3577,146 @@ export default function App() {
 
   const home = (
     <>
-      <section className="card home-mode-shell">
-        <div className="home-primary-toggle" role="tablist" aria-label="Game mode">
-          <button
-            type="button"
-            className={`home-primary-toggle-btn ${homeMode === 'practice' ? 'selected' : ''}`}
-            role="tab"
-            aria-selected={homeMode === 'practice'}
-            onClick={() => setHomeMode('practice')}
-          >
-            🧠 Practice
-          </button>
-          <button
-            type="button"
-            className={`home-primary-toggle-btn ${homeMode === 'challenge' ? 'selected' : ''}`}
-            role="tab"
-            aria-selected={homeMode === 'challenge'}
-            onClick={() => setHomeMode('challenge')}
-          >
-            🚀 Challenge
-          </button>
+      <button
+        className="card home-hero home-hero-button challenge-home-hero"
+        onClick={openCaptainEditor}
+        aria-label="Edit profile"
+        type="button"
+      >
+        <div className="home-hero-head">
+          <div className="home-hero-main">
+            <div className="selected-player-avatar home-hero-avatar">
+              <CharacterAvatar characterId={homeCharacterId} size="lg" />
+            </div>
+            <div className="home-hero-copy">
+              <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
+            </div>
+          </div>
+          <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
+        </div>
+      </button>
+
+      <section className="card challenge-home-card challenge-home-card-primary">
+        <h3 className="text-title">Solo Challenge</h3>
+        <p className="muted">Your character is ready. Each game adjusts to your level.</p>
+        <button className="btn btn-primary" onClick={startChallengeRun}>
+          Start Challenge
+        </button>
+        <button className="text-cta practice-instead-link" onClick={() => setScreen('practice')}>
+          Practice instead →
+        </button>
+      </section>
+
+      <section className="card challenge-home-card">
+        <h3 className="text-title">Challenge a Friend</h3>
+        <p className="muted">Send a link and see who gets the higher score.</p>
+        <button className="btn btn-secondary" onClick={createInviteLink}>
+          Create Invite Link
+        </button>
+        {latestInviteLink && (
+          <div className="invite-link-card" role="status" aria-live="polite">
+            <p className="invite-link-label">Invite link ready</p>
+            <div className="invite-link-row">
+              <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
+              <button
+                className="btn btn-secondary invite-link-copy-btn"
+                onClick={async () => {
+                  try {
+                    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(latestInviteLink);
+                    } else {
+                      const area = document.createElement('textarea');
+                      area.value = latestInviteLink;
+                      area.setAttribute('readonly', '');
+                      area.style.position = 'absolute';
+                      area.style.left = '-9999px';
+                      document.body.appendChild(area);
+                      area.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(area);
+                    }
+                    triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
+                  } catch {
+                    triggerResultFlash('info', 'Invite link ready!', 'Copy the URL from the invite field.');
+                  }
+                }}
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="section-header">
+        <h3 className="text-title">{homeCadetName}'s Stats</h3>
+      </section>
+
+      <section className="card home-stats-card">
+        <div className="stats-grid stats-grid-embedded challenge-stats-grid">
+          <div className="stat-card">
+            <span className="stat-value">{challengeStats.bestRun}</span>
+            <span className="stat-label">Best Run</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{challengeStats.accuracy}%</span>
+            <span className="stat-label">Accuracy</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value accent">{challengeStats.streak}</span>
+            <span className="stat-label">Streak</span>
+          </div>
         </div>
       </section>
 
-      {homeMode === 'challenge' ? (
-        <>
-          <button
-            className="card home-hero home-hero-button challenge-home-hero"
-            onClick={openCaptainEditor}
-            aria-label="Edit profile"
-            type="button"
-          >
-            <div className="home-hero-head">
-              <div className="home-hero-main">
-                <div className="selected-player-avatar home-hero-avatar">
-                  <CharacterAvatar characterId={homeCharacterId} size="lg" />
-                </div>
-                <div className="home-hero-copy">
-                  <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
-                </div>
-              </div>
-              <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
-            </div>
+    </>
+  );
+
+  const practice = (
+    <>
+      <section className="section-header practice-header-inline">
+        <h3 className="text-title">Practice</h3>
+        <p className="muted">Pick one focus or start with Mixed Practice.</p>
+      </section>
+
+      <section className="card practice-home-card">
+        <div className="practice-subject-grid">
+          {practiceSubjects.map((subject) => (
+            <button
+              key={subject.id}
+              type="button"
+              className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
+              onClick={() => setSelectedPracticeSubjectId(subject.id)}
+              style={
+                {
+                  '--subject-accent': subject.accent,
+                  '--subject-glow': subject.glow,
+                  '--subject-soft': subject.soft
+                } as CSSProperties
+              }
+            >
+              <span className="practice-subject-top">
+                <span className="practice-subject-icon-wrap">
+                  <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
+                </span>
+                {selectedPracticeSubjectId === subject.id && (
+                  <span className="practice-subject-check" aria-hidden="true">✓</span>
+                )}
+              </span>
+              {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && (
+                <span className="practice-subject-mixed-label">Mixed Set</span>
+              )}
+              <span className="practice-subject-title">{subject.title}</span>
+              <span className="practice-subject-subtitle">{subject.subtitle}</span>
+            </button>
+          ))}
+        </div>
+        <div className="practice-cta-inline">
+          <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
+            {practiceStartLabel}
           </button>
-
-          <section className="card challenge-home-card challenge-home-card-primary">
-            <h3 className="text-title">Solo Challenge</h3>
-            <p className="muted">Your character is ready. Each game adjusts to your level.</p>
-            <button className="btn btn-primary" onClick={startChallengeRun}>
-              Start Challenge
-            </button>
-          </section>
-
-          <section className="card challenge-home-card">
-            <h3 className="text-title">Challenge a Friend</h3>
-            <p className="muted">Send a link and see who gets the higher score.</p>
-            <button className="btn btn-secondary" onClick={createInviteLink}>
-              Create Invite Link
-            </button>
-            {latestInviteLink && (
-              <div className="invite-link-card" role="status" aria-live="polite">
-                <p className="invite-link-label">Invite link ready</p>
-                <div className="invite-link-row">
-                  <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
-                  <button
-                    className="btn btn-secondary invite-link-copy-btn"
-                    onClick={async () => {
-                      try {
-                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                          await navigator.clipboard.writeText(latestInviteLink);
-                        } else {
-                          const area = document.createElement('textarea');
-                          area.value = latestInviteLink;
-                          area.setAttribute('readonly', '');
-                          area.style.position = 'absolute';
-                          area.style.left = '-9999px';
-                          document.body.appendChild(area);
-                          area.select();
-                          document.execCommand('copy');
-                          document.body.removeChild(area);
-                        }
-                        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
-                      } catch {
-                        triggerResultFlash('info', 'Invite link ready!', 'Copy the URL from the invite field.');
-                      }
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="section-header">
-            <h3 className="text-title">{homeCadetName}'s Stats</h3>
-          </section>
-
-          <section className="card home-stats-card">
-            <div className="stats-grid stats-grid-embedded challenge-stats-grid">
-              <div className="stat-card">
-                <span className="stat-value">{challengeStats.bestRun}</span>
-                <span className="stat-label">Best Run</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{challengeStats.accuracy}%</span>
-                <span className="stat-label">Accuracy</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value accent">{challengeStats.streak}</span>
-                <span className="stat-label">Streak</span>
-              </div>
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <section className="card home-hero practice-home-hero">
-            <h3 className="home-hero-title">{homeCadetName}, what should we practice today?</h3>
-            <p className="home-hero-subtitle">Pick one… or just start with Mixed Practice.</p>
-          </section>
-
-          <section className="card practice-home-card">
-            <div className="practice-subject-grid">
-              {practiceSubjects.map((subject) => (
-                <button
-                  key={subject.id}
-                  type="button"
-                  className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
-                  onClick={() => setSelectedPracticeSubjectId(subject.id)}
-                  style={
-                    {
-                      '--subject-accent': subject.accent,
-                      '--subject-glow': subject.glow,
-                      '--subject-soft': subject.soft
-                    } as CSSProperties
-                  }
-                >
-                  <span className="practice-subject-top">
-                    <span className="practice-subject-icon-wrap">
-                      <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
-                    </span>
-                    {selectedPracticeSubjectId === subject.id && (
-                      <span className="practice-subject-check" aria-hidden="true">✓</span>
-                    )}
-                  </span>
-                  {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && (
-                    <span className="practice-subject-mixed-label">Mixed Set</span>
-                  )}
-                  <span className="practice-subject-title">{subject.title}</span>
-                  <span className="practice-subject-subtitle">{subject.subtitle}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-          <div className="practice-pinned-cta">
-            <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
-              {practiceStartLabel}
-            </button>
-          </div>
-        </>
-      )}
-
+        </div>
+      </section>
     </>
   );
 
@@ -4458,7 +4439,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`app-container ${showPracticePinnedCta ? 'with-practice-cta' : ''}`} ref={appContainerRef}>
+      <div className="app-container" ref={appContainerRef}>
         <header className="top-bar">
           <button
             type="button"
@@ -4495,6 +4476,7 @@ export default function App() {
         )}
 
         {screen === 'home' && home}
+        {screen === 'practice' && practice}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
         {screen === 'scores' && scores}
@@ -4503,7 +4485,7 @@ export default function App() {
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
         <button
-          className={`nav-item ${screen === 'home' && homeMode === 'practice' ? 'active' : ''}`}
+          className={`nav-item ${screen === 'home' ? 'active' : ''}`}
           onClick={openHomeTab}
           aria-label="Home"
         >
@@ -4511,12 +4493,12 @@ export default function App() {
           <span className="nav-label">Home</span>
         </button>
         <button
-          className={`nav-item ${screen === 'run' || (screen === 'home' && homeMode === 'challenge') ? 'active' : ''}`}
-          onClick={openBattlesTab}
-          aria-label="Battles"
+          className={`nav-item ${screen === 'practice' || (screen === 'run' && run.experience === 'practice') ? 'active' : ''}`}
+          onClick={openPracticeTab}
+          aria-label="Practice"
         >
-          <span className="nav-icon">⚔️</span>
-          <span className="nav-label">Battles</span>
+          <span className="nav-icon">🧠</span>
+          <span className="nav-label">Practice</span>
         </button>
         <button
           className={`nav-item ${screen === 'scores' ? 'active' : ''}`}
