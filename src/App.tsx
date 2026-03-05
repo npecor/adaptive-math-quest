@@ -10,7 +10,22 @@ import { buildBonusCoachPlan, buildFlowCoachPlan, buildPuzzleCoachPlan, type Coa
 import { difficultyLabelFromScore, type DifficultyLabel } from './lib/difficulty-tags';
 import { createBonusChallenge, fallbackBonusChallenge, type BonusChallenge } from './lib/bonus-generator';
 import { generateAdaptiveFlowItem } from './lib/flow-generator';
-import { fetchLeaderboard, registerPlayer, upsertScore, type LeaderboardMode, type LeaderboardRow } from './lib/leaderboard-api';
+import {
+  createMatch,
+  fetchLeaderboard,
+  fetchMatch,
+  joinMatch,
+  registerPlayer,
+  startMatch,
+  submitMatchResult,
+  upsertScore,
+  type LeaderboardMode,
+  type LeaderboardRow,
+  type MatchConfig,
+  type MatchResults,
+  type MatchSnapshot,
+  type MatchStatus
+} from './lib/leaderboard-api';
 import { generateAdaptivePuzzleChoices } from './lib/puzzle-generator';
 import {
   applyStarAward,
@@ -27,7 +42,7 @@ import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'match_lobby' | 'run' | 'summary' | 'scores' | 'museum';
 type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
@@ -91,6 +106,7 @@ interface RunState {
   runDifficultySamples: number[];
   bonusChallenge?: BonusChallenge;
   starsThisRound: number;
+  flowCorrectThisRound: number;
   puzzlesSolvedThisRound: number;
   puzzlesTriedThisRound: number;
   trainingRating: number;
@@ -101,7 +117,31 @@ interface RunState {
   practicePuzzleTypeFilter?: PuzzleType[];
   tweakDifficulty: TweakDifficulty;
   tweakTimeMinutes: TweakTimeMinutes;
+  friendMatchId?: string;
+  fixedFlowPlan?: FlowItem[];
+  fixedPuzzlePlan?: PuzzleItem[];
+  fixedFlowIndex?: number;
+  fixedPuzzleIndex?: number;
+  lockedMatchRating?: number;
+  lockedMatchSeed?: number;
+  lockedMatchConfig?: MatchConfig;
 }
+
+type FriendMatchState = {
+  matchId: string;
+  joinToken: string | null;
+  role: 'host' | 'guest';
+  status: MatchStatus;
+  hostPlayerId: string | null;
+  guestPlayerId: string | null;
+  startAt: number | null;
+  avgRatingLocked: number | null;
+  seedLocked: number | null;
+  challengeConfig: MatchConfig | null;
+  results: MatchResults | null;
+  startRequested?: boolean;
+  submitted?: boolean;
+};
 
 type PendingBonusFinish = {
   bossAttempted: boolean;
@@ -130,6 +170,7 @@ const LANDING_SEEN_STORAGE_KEY = 'galaxy-genius:landing-seen:v1';
 const ACTIVITY_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const RESULT_FLASH_DURATION_MS = 1750;
 const SHOW_TROPHY_ACTIVITY_CARD = false;
+const FRIEND_MATCH_POLL_MS = 1500;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const playerCharacters: PlayerCharacter[] = [
@@ -348,6 +389,7 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   runDifficultySamples: [],
   bonusChallenge: undefined,
   starsThisRound: 0,
+  flowCorrectThisRound: 0,
   puzzlesSolvedThisRound: 0,
   puzzlesTriedThisRound: 0,
   trainingRating: TRAINING_START_RATING,
@@ -357,7 +399,15 @@ const newRun = (mode: GameMode = 'galaxy_mix'): RunState => ({
   practiceTemplateFilter: undefined,
   practicePuzzleTypeFilter: undefined,
   tweakDifficulty: PRACTICE_DEFAULT_DIFFICULTY,
-  tweakTimeMinutes: PRACTICE_DEFAULT_TIME
+  tweakTimeMinutes: PRACTICE_DEFAULT_TIME,
+  friendMatchId: undefined,
+  fixedFlowPlan: undefined,
+  fixedPuzzlePlan: undefined,
+  fixedFlowIndex: 0,
+  fixedPuzzleIndex: 0,
+  lockedMatchRating: undefined,
+  lockedMatchSeed: undefined,
+  lockedMatchConfig: undefined
 });
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -412,6 +462,27 @@ const cleanChoiceMarker = (text: string) =>
     .trim();
 
 const shuffleChoices = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
+
+const createSeededRandom = (seed: number) => {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), t | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const withSeededRandom = <T,>(seed: number, fn: () => T): T => {
+  const originalRandom = Math.random;
+  const seededRandom = createSeededRandom(seed);
+  Math.random = seededRandom;
+  try {
+    return fn();
+  } finally {
+    Math.random = originalRandom;
+  }
+};
 
 const uniqueChoices = (choices: string[]) => {
   const seen = new Set<string>();
@@ -1491,6 +1562,7 @@ export default function App() {
   const [isTextEntryFocused, setIsTextEntryFocused] = useState(false);
   const [isBottomNavAutoHidden, setIsBottomNavAutoHidden] = useState(false);
   const appContainerRef = useRef<HTMLDivElement | null>(null);
+  const matchJoinAttemptRef = useRef<string | null>(null);
   const lastSubmittedStatsRef = useRef('');
   const [nameInput, setNameInput] = useState(() => loadState().user?.username ?? '');
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => {
@@ -1516,6 +1588,9 @@ export default function App() {
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
   const [latestInviteLink, setLatestInviteLink] = useState<string | null>(null);
+  const [friendMatch, setFriendMatch] = useState<FriendMatchState | null>(null);
+  const [friendMatchStartMs, setFriendMatchStartMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [pendingBonusFinish, setPendingBonusFinish] = useState<PendingBonusFinish | null>(null);
   const [bonusResult, setBonusResult] = useState<{ correct: boolean; answer: string } | null>(null);
   const [celebratingCharacterId, setCelebratingCharacterId] = useState<string | null>(null);
@@ -1567,6 +1642,8 @@ export default function App() {
         ? Math.min(run.flowTarget + run.puzzleDone + 1, runQuestionCountTotal)
         : runQuestionCountTotal;
   const runExperienceLabel = `${run.experience === 'practice' ? 'Practice' : 'Challenge'} • Question ${runQuestionPosition} of ${runQuestionCountTotal}`;
+  const matchCountdownSeconds = friendMatch?.startAt ? Math.max(0, Math.ceil((friendMatch.startAt - nowMs) / 1000)) : null;
+  const friendMatchResults = friendMatch?.results && run.friendMatchId === friendMatch.matchId ? friendMatch.results : null;
   const runPracticeSubject =
     practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
     practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
@@ -2106,6 +2183,94 @@ export default function App() {
     return generateAdaptivePuzzleChoices(puzzlePlan.rating, usedPuzzleIds, 2, puzzlePlan.options);
   };
 
+  const buildLockedFriendMatchPlan = (seed: number, lockedRating: number, config: MatchConfig) =>
+    withSeededRandom(seed, () => {
+      const flowPlan: FlowItem[] = [];
+      const puzzlePlan: PuzzleItem[] = [];
+      const usedFlowIds = new Set<string>();
+      const usedPuzzleIds = new Set<string>();
+      let previousDifficulty: number | undefined;
+      let flowStreak = 0;
+      const recentTemplates: string[] = [];
+      const recentShapes: string[] = [];
+      const recentPatternTags: string[] = [];
+
+      for (let index = 0; index < Math.max(0, config.flowTarget); index += 1) {
+        const nextFlow = generateAdaptiveFlowItem(
+          lockedRating,
+          usedFlowIds,
+          previousDifficulty,
+          recentTemplates,
+          recentShapes,
+          recentPatternTags,
+          flowStreak
+        );
+        flowPlan.push(nextFlow);
+        usedFlowIds.add(nextFlow.id);
+        previousDifficulty = nextFlow.difficulty;
+        recentTemplates.push(nextFlow.template);
+        if (recentTemplates.length > 6) recentTemplates.shift();
+        recentShapes.push(nextFlow.shapeSignature);
+        if (recentShapes.length > 6) recentShapes.shift();
+        const patternTags = nextFlow.tags.filter((tag) => tag.startsWith('pattern:'));
+        recentPatternTags.push(...patternTags);
+        while (recentPatternTags.length > 6) recentPatternTags.shift();
+        flowStreak = Math.min(flowStreak + 1, 8);
+      }
+
+      for (let index = 0; index < Math.max(0, config.puzzleTarget); index += 1) {
+        const pick = generateAdaptivePuzzleChoices(lockedRating, usedPuzzleIds, 1);
+        if (!pick[0]) break;
+        puzzlePlan.push(pick[0]);
+        usedPuzzleIds.add(pick[0].id);
+      }
+
+      const runDifficultySamples = [
+        ...flowPlan.map((item) => item.difficulty),
+        ...puzzlePlan.map((item) => item.difficulty)
+      ];
+      const bonusChallenge = createBonusChallenge('galaxy_mix', 'puzzle', lockedRating, runDifficultySamples);
+
+      return { flowPlan, puzzlePlan, bonusChallenge };
+    });
+
+  const startFriendChallengeRun = (snapshot: MatchSnapshot) => {
+    if (!snapshot.challengeConfig || snapshot.seedLocked === null || snapshot.avgRatingLocked === null) return;
+    const { flowPlan, puzzlePlan, bonusChallenge } = buildLockedFriendMatchPlan(
+      snapshot.seedLocked,
+      snapshot.avgRatingLocked,
+      snapshot.challengeConfig
+    );
+
+    const seeded = newRun('galaxy_mix');
+    seeded.experience = 'challenge';
+    seeded.flowTarget = snapshot.challengeConfig.flowTarget;
+    seeded.puzzleTarget = snapshot.challengeConfig.puzzleTarget;
+    seeded.friendMatchId = snapshot.matchId;
+    seeded.lockedMatchSeed = snapshot.seedLocked;
+    seeded.lockedMatchRating = snapshot.avgRatingLocked;
+    seeded.lockedMatchConfig = snapshot.challengeConfig;
+    seeded.fixedFlowPlan = flowPlan;
+    seeded.fixedPuzzlePlan = puzzlePlan;
+    seeded.fixedFlowIndex = 0;
+    seeded.fixedPuzzleIndex = 0;
+    seeded.bonusChallenge = bonusChallenge;
+    seeded.phase = flowPlan.length > 0 ? 'flow' : puzzlePlan.length > 0 ? 'puzzle' : 'boss';
+    seeded.currentFlow = flowPlan[0];
+    seeded.currentPuzzle = flowPlan.length > 0 ? undefined : puzzlePlan[0];
+    seeded.currentPuzzleChoices = [];
+
+    const streaks = updateDailyStreak(state.streaks);
+    save({ ...state, streaks });
+    setFriendMatch((current) => (current ? { ...current, submitted: false } : current));
+    setRun(seeded);
+    setSelectedMode('galaxy_mix');
+    setScreen('run');
+    setShowTweaksSheet(false);
+    setFriendMatchStartMs(snapshot.startAt ?? Date.now());
+    resetInputAndFeedback();
+  };
+
   const finishRun = (bossAttempted: boolean, runSnapshot: RunState = run, baseState: AppState = state) => {
     const sprint = runSnapshot.sprintScore;
     const baseBrain = runSnapshot.brainScore;
@@ -2129,7 +2294,50 @@ export default function App() {
     setFeedback(bossAttempted ? 'Bonus round played. Final score updated!' : 'Game complete. Great work!');
     setFeedbackTone('info');
     triggerPulse('info');
-    setScreen('summary');
+    const isFriendMatchRun = Boolean(runSnapshot.friendMatchId && baseState.user?.userId);
+    if (!isFriendMatchRun) {
+      setScreen('summary');
+      return;
+    }
+
+    const matchId = runSnapshot.friendMatchId!;
+    const playerId = baseState.user!.userId!;
+    const totalCount = runSnapshot.flowDone + runSnapshot.puzzleDone;
+    const correctCount = runSnapshot.flowCorrectThisRound + runSnapshot.puzzlesSolvedThisRound;
+    const elapsedMs = Math.max(0, Date.now() - (friendMatchStartMs ?? Date.now()));
+
+    setFriendMatch((current) => (current ? { ...current, submitted: true } : current));
+    submitMatchResult({
+      matchId,
+      playerId,
+      scoreStars: finalRunStars,
+      correctCount,
+      totalCount,
+      timeMs: elapsedMs
+    })
+      .then((response) => {
+        if (response.status === 'finished' && response.resultsIfFinished) {
+          setFriendMatch((current) =>
+            current
+              ? {
+                  ...current,
+                  status: 'finished',
+                  results: response.resultsIfFinished,
+                  submitted: true
+                }
+              : current
+          );
+          setScreen('summary');
+          return;
+        }
+        setFriendMatch((current) => (current ? { ...current, status: response.status, submitted: true } : current));
+        setScreen('match_lobby');
+      })
+      .catch(() => {
+        setFeedback('Result submitted locally. Waiting for friend results…');
+        setFeedbackTone('info');
+        setScreen('match_lobby');
+      });
   };
 
   const startRun = (
@@ -2194,6 +2402,7 @@ export default function App() {
 
     setPendingBonusFinish(null);
     setBonusResult(null);
+    setFriendMatchStartMs(null);
     setRun(seeded);
     setSelectedMode(mode);
     save({ ...state, streaks });
@@ -2203,10 +2412,14 @@ export default function App() {
   };
 
   const startChallengeRun = () => {
+    setFriendMatch(null);
+    setFriendMatchStartMs(null);
     startRun('galaxy_mix', { experience: 'challenge', tweakDifficulty: 'adaptive', tweakTimeMinutes: PRACTICE_DEFAULT_TIME });
   };
 
   const startPracticeRun = () => {
+    setFriendMatch(null);
+    setFriendMatchStartMs(null);
     const subject = activePracticeSubject;
     const mode: GameMode =
       subject.kind === 'puzzle'
@@ -2247,6 +2460,13 @@ export default function App() {
   };
 
   const setupPuzzlePick = () => {
+    if (run.friendMatchId && run.fixedPuzzlePlan?.length) {
+      const nextPuzzle = run.fixedPuzzlePlan[run.puzzleDone];
+      if (nextPuzzle) {
+        selectPuzzle(nextPuzzle);
+        return;
+      }
+    }
     const ratingOverride =
       run.experience === 'practice'
         ? applyDifficultyOverride(state.skill.rating, run.tweakDifficulty)
@@ -2281,6 +2501,7 @@ export default function App() {
     const item = run.currentFlow;
     const answers = [item.answer, ...(item.accept_answers ?? [])];
     const correct = isSmartAnswerMatch(input, answers);
+    const isLockedFriendMatch = Boolean(run.friendMatchId && run.fixedFlowPlan?.length);
 
     const isTrainingRun = isTrainingMode(run.gameMode);
     const nextStreak = correct ? Math.min(run.flowStreak + 1, 8) : 0;
@@ -2327,6 +2548,7 @@ export default function App() {
       recentPatternTags,
       flowStreak: nextStreak
     };
+    const nextFlowCorrect = run.flowCorrectThisRound + (correct ? 1 : 0);
 
     if (nextFlowDone >= run.flowTarget) {
       if (run.puzzleTarget === 0) {
@@ -2343,13 +2565,18 @@ export default function App() {
           phase: 'boss',
           bossStage: 'intro',
           runDifficultySamples: nextRunDifficultySamples,
-          bonusChallenge: createBonusChallenge(run.gameMode, 'flow', nextSelectionRating, nextRunDifficultySamples),
+          bonusChallenge:
+            run.friendMatchId && run.bonusChallenge
+              ? run.bonusChallenge
+              : createBonusChallenge(run.gameMode, 'flow', nextSelectionRating, nextRunDifficultySamples),
           currentHints: 0,
           currentFlow: undefined,
           starsThisRound: run.starsThisRound + gain,
+          flowCorrectThisRound: nextFlowCorrect,
           trainingRating: nextTrainingRating,
           trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
-          trainingPuzzlesSolved: run.trainingPuzzlesSolved
+          trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+          fixedFlowIndex: nextFlowDone
         });
         setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
         setFeedbackTone(correct ? 'success' : 'error');
@@ -2372,9 +2599,11 @@ export default function App() {
         flowDone: nextFlowDone,
         sprintScore: run.sprintScore + gain,
         usedFlowIds,
-        phase: 'puzzle_pick',
-        currentPuzzleChoices: getPuzzleChoices(nextRunSeed, nextSelectionRating, run.usedPuzzleIds),
-        currentPuzzle: undefined,
+        phase: isLockedFriendMatch ? 'puzzle' : 'puzzle_pick',
+        currentPuzzleChoices: isLockedFriendMatch
+          ? []
+          : getPuzzleChoices(nextRunSeed, nextSelectionRating, run.usedPuzzleIds),
+        currentPuzzle: isLockedFriendMatch ? run.fixedPuzzlePlan?.[0] : undefined,
         recentTemplates,
         recentShapes,
         recentPatternTags,
@@ -2382,9 +2611,12 @@ export default function App() {
         runDifficultySamples: nextRunDifficultySamples,
         currentHints: 0,
         starsThisRound: run.starsThisRound + gain,
+        flowCorrectThisRound: nextFlowCorrect,
         trainingRating: nextTrainingRating,
         trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
-        trainingPuzzlesSolved: run.trainingPuzzlesSolved
+        trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+        fixedFlowIndex: nextFlowDone,
+        fixedPuzzleIndex: 0
       });
       setFeedback(correct ? 'Awesome! Quick questions complete. Pick your first puzzle.' : `Nice try. ${item.solution_steps[0]}`);
       setFeedbackTone(correct ? 'success' : 'error');
@@ -2402,27 +2634,31 @@ export default function App() {
     }
 
     save(nextState);
-    const nextFlowPlan = getFlowSelectionPlan(nextRunSeed, nextSelectionRating);
-    const nextFlowDifficultyCap = mergeMaxDifficultyCap(
-      getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1),
-      nextFlowPlan.maxDifficultyScore
-    );
-    const nextItem = generateAdaptiveFlowItem(
-      nextFlowPlan.rating,
-      usedFlowIds,
-      item.difficulty,
-      recentTemplates,
-      recentShapes,
-      recentPatternTags,
-      nextStreak,
-      nextFlowDifficultyCap,
-      {
-        targetProfile: nextFlowPlan.targetProfile,
-        maxJumpFromPrev: nextFlowPlan.maxJumpFromPrev,
-        allowedTemplates: nextFlowPlan.allowedTemplates,
-        forceSingleDigitAddSub: nextFlowPlan.forceSingleDigitAddSub
-      }
-    );
+    const nextItem = isLockedFriendMatch
+      ? run.fixedFlowPlan?.[nextFlowDone]
+      : (() => {
+          const nextFlowPlan = getFlowSelectionPlan(nextRunSeed, nextSelectionRating);
+          const nextFlowDifficultyCap = mergeMaxDifficultyCap(
+            getNewPlayerFlowDifficultyCap(state.skill.attemptsCount + 1),
+            nextFlowPlan.maxDifficultyScore
+          );
+          return generateAdaptiveFlowItem(
+            nextFlowPlan.rating,
+            usedFlowIds,
+            item.difficulty,
+            recentTemplates,
+            recentShapes,
+            recentPatternTags,
+            nextStreak,
+            nextFlowDifficultyCap,
+            {
+              targetProfile: nextFlowPlan.targetProfile,
+              maxJumpFromPrev: nextFlowPlan.maxJumpFromPrev,
+              allowedTemplates: nextFlowPlan.allowedTemplates,
+              forceSingleDigitAddSub: nextFlowPlan.forceSingleDigitAddSub
+            }
+          );
+        })();
     setRun({
       ...run,
       flowDone: nextFlowDone,
@@ -2436,9 +2672,11 @@ export default function App() {
       runDifficultySamples: nextRunDifficultySamples,
       currentHints: 0,
       starsThisRound: run.starsThisRound + gain,
+      flowCorrectThisRound: nextFlowCorrect,
       trainingRating: nextTrainingRating,
       trainingQuestionsAnswered: nextTrainingQuestionsAnswered,
-      trainingPuzzlesSolved: run.trainingPuzzlesSolved
+      trainingPuzzlesSolved: run.trainingPuzzlesSolved,
+      fixedFlowIndex: nextFlowDone
     });
 
     setFeedback(correct ? `Great work! +${gain} score` : `Almost! Correct answer: ${item.answer}`);
@@ -2459,6 +2697,7 @@ export default function App() {
     if (!run.currentPuzzle || !input.trim()) return;
 
     const isTrainingRun = isTrainingMode(run.gameMode);
+    const isLockedFriendMatch = Boolean(run.friendMatchId && run.fixedPuzzlePlan?.length);
     const correct = isPuzzleAnswerCorrect(run.currentPuzzle, input);
     const tier = getTier(run.currentPuzzle.difficulty);
     const revealUsed = run.currentHints >= MAX_PUZZLE_HINTS;
@@ -2528,15 +2767,19 @@ export default function App() {
         phase: 'boss',
         bossStage: 'intro',
         runDifficultySamples: nextRunDifficultySamples,
-        bonusChallenge: createBonusChallenge(
-          run.gameMode,
-          'puzzle',
-          isTrainingRun ? getActiveTrainingRating(run, state.skill.rating) : updatedRating,
-          nextRunDifficultySamples
-        ),
+        bonusChallenge:
+          run.friendMatchId && run.bonusChallenge
+            ? run.bonusChallenge
+            : createBonusChallenge(
+                run.gameMode,
+                'puzzle',
+                isTrainingRun ? getActiveTrainingRating(run, state.skill.rating) : updatedRating,
+                nextRunDifficultySamples
+              ),
         currentHints: 0,
         currentPuzzle: undefined,
-        currentPuzzleChoices: []
+        currentPuzzleChoices: [],
+        fixedPuzzleIndex: puzzleDone
       });
       setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${run.currentPuzzle.core_answer}`);
       setFeedbackTone(correct ? 'success' : 'error');
@@ -2561,6 +2804,7 @@ export default function App() {
       usedPuzzleIds,
       trainingPuzzlesSolved: nextTrainingPuzzlesSolved
     };
+    const nextPuzzle = isLockedFriendMatch ? run.fixedPuzzlePlan?.[puzzleDone] : undefined;
     setRun({
       ...run,
       brainScore: run.brainScore + gain,
@@ -2571,10 +2815,11 @@ export default function App() {
       puzzlesTriedThisRound: run.puzzlesTriedThisRound + 1,
       trainingPuzzlesSolved: nextTrainingPuzzlesSolved,
       runDifficultySamples: nextRunDifficultySamples,
-      phase: 'puzzle_pick',
+      phase: isLockedFriendMatch ? 'puzzle' : 'puzzle_pick',
       currentHints: 0,
-      currentPuzzle: undefined,
-      currentPuzzleChoices: getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds)
+      currentPuzzle: isLockedFriendMatch ? nextPuzzle : undefined,
+      currentPuzzleChoices: isLockedFriendMatch ? [] : getPuzzleChoices(nextPuzzleRunSeed, updatedRating, usedPuzzleIds),
+      fixedPuzzleIndex: puzzleDone
     });
 
     setFeedback(correct ? `Nice solve! +${gain} score` : `Not yet. Correct answer: ${run.currentPuzzle.core_answer}`);
@@ -3023,6 +3268,170 @@ export default function App() {
     setShowClarifyDialog(false);
   }, [resultFlash, bonusResult]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !state.user?.userId) return;
+    const url = new URL(window.location.href);
+    const matchPath = url.pathname.match(/\/match\/([^/?#]+)/i);
+    if (!matchPath) return;
+
+    const matchId = decodeURIComponent(matchPath[1]);
+    if (!matchId) return;
+    if (matchJoinAttemptRef.current === `${matchId}:${state.user.userId}`) return;
+    matchJoinAttemptRef.current = `${matchId}:${state.user.userId}`;
+
+    const token = url.searchParams.get('token');
+    if (!token) {
+      setScreen('match_lobby');
+      setFriendMatch({
+        matchId,
+        joinToken: null,
+        role: 'guest',
+        status: 'waiting',
+        hostPlayerId: null,
+        guestPlayerId: state.user.userId,
+        startAt: null,
+        avgRatingLocked: null,
+        seedLocked: null,
+        challengeConfig: null,
+        results: null
+      });
+      return;
+    }
+
+    let cancelled = false;
+    joinMatch({
+      matchId,
+      joinToken: token,
+      guestPlayerId: state.user.userId
+    })
+      .then(() => {
+        if (cancelled) return;
+        setFriendMatch({
+          matchId,
+          joinToken: token,
+          role: 'guest',
+          status: 'ready',
+          hostPlayerId: null,
+          guestPlayerId: state.user?.userId ?? null,
+          startAt: null,
+          avgRatingLocked: null,
+          seedLocked: null,
+          challengeConfig: null,
+          results: null,
+          submitted: false
+        });
+        setScreen('match_lobby');
+        triggerResultFlash('info', 'Joined challenge', 'Waiting for host to start.');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        triggerResultFlash('error', 'Invite unavailable', 'This invite is no longer valid.');
+        setScreen('home');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.user?.userId]);
+
+  useEffect(() => {
+    if (!friendMatch?.matchId || !state.user?.userId) return;
+    const activeUserId = state.user.userId;
+    let cancelled = false;
+
+    const pollMatch = async () => {
+      try {
+        const snapshot = await fetchMatch(friendMatch.matchId);
+        if (cancelled) return;
+        setFriendMatch((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: snapshot.status,
+                hostPlayerId: snapshot.hostPlayerId,
+                guestPlayerId: snapshot.guestPlayerId,
+                startAt: snapshot.startAt,
+                avgRatingLocked: snapshot.avgRatingLocked,
+                seedLocked: snapshot.seedLocked,
+                challengeConfig: snapshot.challengeConfig,
+                results: snapshot.results
+              }
+            : prev
+        );
+
+        if (
+          friendMatch.role === 'host' &&
+          snapshot.status === 'ready' &&
+          !friendMatch.startRequested &&
+          friendMatch.matchId
+        ) {
+          setFriendMatch((prev) => (prev ? { ...prev, startRequested: true } : prev));
+          const started = await startMatch({ matchId: friendMatch.matchId, hostPlayerId: activeUserId });
+          if (cancelled) return;
+          setFriendMatch((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'started',
+                  startAt: started.startAt,
+                  avgRatingLocked: started.avgRatingLocked,
+                  seedLocked: started.seedLocked,
+                  challengeConfig: started.challengeConfig
+                }
+              : prev
+          );
+        }
+      } catch {
+        // Keep polling to recover from transient errors.
+      }
+    };
+
+    pollMatch();
+    const timerId = window.setInterval(pollMatch, FRIEND_MATCH_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, [friendMatch?.matchId, friendMatch?.role, friendMatch?.startRequested, state.user?.userId]);
+
+  useEffect(() => {
+    if (!friendMatch || friendMatch.status !== 'started') return;
+    if (!friendMatch.challengeConfig || friendMatch.seedLocked === null || friendMatch.avgRatingLocked === null) return;
+    if (!friendMatch.startAt) return;
+    if (run.friendMatchId === friendMatch.matchId) return;
+
+    const snapshot: MatchSnapshot = {
+      matchId: friendMatch.matchId,
+      status: friendMatch.status,
+      hostPlayerId: friendMatch.hostPlayerId,
+      guestPlayerId: friendMatch.guestPlayerId,
+      startAt: friendMatch.startAt,
+      avgRatingLocked: friendMatch.avgRatingLocked,
+      seedLocked: friendMatch.seedLocked,
+      challengeConfig: friendMatch.challengeConfig,
+      results: friendMatch.results
+    };
+
+    const waitMs = Math.max(friendMatch.startAt - Date.now(), 0);
+    const timerId = window.setTimeout(() => startFriendChallengeRun(snapshot), waitMs);
+    return () => window.clearTimeout(timerId);
+  }, [
+    friendMatch,
+    run.friendMatchId
+  ]);
+
+  useEffect(() => {
+    if (screen !== 'match_lobby' || friendMatch?.status !== 'started' || !friendMatch.startAt) return;
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(intervalId);
+  }, [screen, friendMatch?.status, friendMatch?.startAt]);
+
+  useEffect(() => {
+    if (!friendMatch?.submitted) return;
+    if (friendMatch.status !== 'finished' || !friendMatch.results) return;
+    setScreen('summary');
+  }, [friendMatch?.submitted, friendMatch?.status, friendMatch?.results]);
+
   const leaderboardSourceRows = useMemo(() => {
     const youUserId = state.user?.userId;
     const youUsername = state.user?.username;
@@ -3168,19 +3577,15 @@ export default function App() {
   };
 
   const createInviteLink = async () => {
-    const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-    const inviteUrl = (() => {
-      if (typeof window === 'undefined') return 'Challenge link ready';
-      const url = new URL(window.location.href);
-      url.searchParams.set('challenge', inviteCode);
-      return url.toString();
-    })();
-    setLatestInviteLink(inviteUrl);
+    if (!state.user?.userId) {
+      triggerResultFlash('error', 'Create profile first', 'We need your player profile before creating an invite.');
+      return;
+    }
 
-    const fallbackCopy = () => {
+    const fallbackCopy = (value: string) => {
       if (typeof document === 'undefined') return false;
       const area = document.createElement('textarea');
-      area.value = inviteUrl;
+      area.value = value;
       area.setAttribute('readonly', '');
       area.style.position = 'absolute';
       area.style.left = '-9999px';
@@ -3192,6 +3597,33 @@ export default function App() {
     };
 
     try {
+      const created = await createMatch({ hostPlayerId: state.user.userId });
+      const inviteUrl = created.joinUrl;
+      setLatestInviteLink(inviteUrl);
+      const token = (() => {
+        try {
+          return new URL(inviteUrl).searchParams.get('token');
+        } catch {
+          return null;
+        }
+      })();
+      setFriendMatch({
+        matchId: created.matchId,
+        joinToken: token,
+        role: 'host',
+        status: 'waiting',
+        hostPlayerId: state.user.userId ?? null,
+        guestPlayerId: null,
+        startAt: null,
+        avgRatingLocked: null,
+        seedLocked: null,
+        challengeConfig: null,
+        results: null,
+        startRequested: false,
+        submitted: false
+      });
+      setScreen('match_lobby');
+
       if (typeof navigator !== 'undefined' && navigator.share && isMobileViewport) {
         await navigator.share({
           title: 'Galaxy Genius Challenge',
@@ -3210,7 +3642,7 @@ export default function App() {
         setFeedbackTone('success');
         triggerPulse('success');
         triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
-      } else if (fallbackCopy()) {
+      } else if (fallbackCopy(inviteUrl)) {
         setFeedback('Invite link copied.');
         setFeedbackTone('success');
         triggerPulse('success');
@@ -3222,7 +3654,7 @@ export default function App() {
         triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the invite box.');
       }
     } catch {
-      if (fallbackCopy()) {
+      if (fallbackCopy(latestInviteLink ?? '')) {
         setFeedback('Invite link copied.');
         setFeedbackTone('success');
         triggerPulse('success');
@@ -3234,6 +3666,20 @@ export default function App() {
         triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the invite box.');
       }
     }
+  };
+
+  const leaveFriendMatchLobby = () => {
+    setFriendMatch(null);
+    setFriendMatchStartMs(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (/\/match\/[^/?#]+/i.test(url.pathname)) {
+        url.pathname = '/';
+        url.search = '';
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+    setScreen('home');
   };
 
   const renderScratchpad = (idSuffix: string) => {
@@ -3720,6 +4166,68 @@ export default function App() {
     </>
   );
 
+  const matchLobby = (
+    <>
+      <section className="section-header">
+        <h2 className="text-title">Challenge a Friend</h2>
+        <span className="tag">{friendMatch?.role === 'host' ? 'Host' : 'Guest'}</span>
+      </section>
+      <section className="card">
+        {!friendMatch && <p className="muted">Preparing match lobby…</p>}
+        {friendMatch && (
+          <>
+            <p className="muted">
+              Match ID: <strong>{friendMatch.matchId}</strong>
+            </p>
+            {friendMatch.status === 'waiting' && <p>Waiting for your friend to join…</p>}
+            {friendMatch.status === 'ready' && <p>Friend joined. Syncing challenge start…</p>}
+            {friendMatch.status === 'started' && (
+              <p>
+                Launching in <strong>{matchCountdownSeconds ?? 0}</strong>…
+              </p>
+            )}
+            {friendMatch.status === 'finished' && (
+              <p>
+                Match complete. {friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId}` : 'Results ready.'}
+              </p>
+            )}
+            {latestInviteLink && friendMatch.role === 'host' && (
+              <div className="invite-link-card" role="status" aria-live="polite">
+                <p className="invite-link-label">Invite link</p>
+                <div className="invite-link-row">
+                  <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
+                  <button
+                    className="btn btn-secondary invite-link-copy-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(latestInviteLink);
+                        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to join.');
+                      } catch {
+                        triggerResultFlash('info', 'Invite link ready', 'Copy the URL from the invite field.');
+                      }
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="btn-row">
+              {friendMatch.status === 'finished' && (
+                <button className="btn btn-primary" onClick={() => setScreen('summary')}>
+                  View Results
+                </button>
+              )}
+              <button className="btn btn-secondary" onClick={leaveFriendMatchLobby}>
+                Back Home
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </>
+  );
+
   const runView = (
     <>
       <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
@@ -3876,7 +4384,9 @@ export default function App() {
                 <span aria-hidden="true">🧠</span> Ask Coach
               </button>
             </div>
-            <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
+            {!run.friendMatchId && (
+              <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
+            )}
             {renderCoachPanel(
               currentPuzzleCoachPlan,
               currentPuzzleCoachVisual,
@@ -4092,6 +4602,23 @@ export default function App() {
             <span className="stat-label">Day streak</span>
           </div>
         </div>
+        {friendMatchResults && (
+          <div className="summary-match-results">
+            <p className="text-label">Friend Challenge Result</p>
+            <p className="muted">Winner: {friendMatchResults.winnerPlayerId === state.user?.userId ? 'You' : 'Friend'}</p>
+            <div className="summary-match-grid">
+              {friendMatchResults.players.map((entry) => (
+                <div key={`${entry.playerId}-${entry.submittedAt}`} className="summary-match-card">
+                  <strong>{entry.playerId === state.user?.userId ? 'You' : 'Friend'}</strong>
+                  <span>{entry.scoreStars} ⭐</span>
+                  <small>
+                    {entry.correctCount}/{entry.totalCount} • {Math.round(entry.accuracy * 100)}% • {Math.round(entry.timeMs / 1000)}s
+                  </small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="btn-row">
           <button
             className="btn btn-primary"
@@ -4477,6 +5004,7 @@ export default function App() {
 
         {screen === 'home' && home}
         {screen === 'practice' && practice}
+        {screen === 'match_lobby' && matchLobby}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
         {screen === 'scores' && scores}
