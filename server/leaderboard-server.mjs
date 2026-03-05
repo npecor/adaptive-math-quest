@@ -9,6 +9,8 @@ const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'leaderboard-data.json');
 const PORT = Number(process.env.LEADERBOARD_PORT || 8787);
 const CORS_ORIGIN = process.env.LEADERBOARD_CORS_ORIGIN || '*';
+const MATCH_COUNTDOWN_MS = 5000;
+const SOLO_CHALLENGE_CONFIG = { gameMode: 'galaxy_mix', flowTarget: 8, puzzleTarget: 3 };
 
 const DEFAULT_BOTS = [
   { username: 'Astro', avatarId: 'astro-comet', allTimeStars: 14200, bestRunStars: 1860, trophiesEarned: 38, extensionsSolved: 24 },
@@ -19,7 +21,8 @@ const DEFAULT_BOTS = [
 ];
 
 const defaultState = {
-  players: {}
+  players: {},
+  matches: {}
 };
 
 const normalizeUsernameKey = (value) =>
@@ -29,10 +32,19 @@ const normalizeUsernameKey = (value) =>
     .replace(/\s+/g, ' ');
 
 const cleanUsername = (value) => value.trim().replace(/\s+/g, ' ');
+const clampRating = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 900;
+  return Math.max(800, Math.min(1700, Math.round(numeric)));
+};
+const createMatchId = () => Math.random().toString(36).slice(2, 10).toUpperCase();
+const createJoinToken = () => Math.random().toString(36).slice(2, 14);
+const createSeed = () => Math.floor(Math.random() * 2_147_483_000) + 1;
 
 const ensureState = (rawState) => {
   const state = rawState && typeof rawState === 'object' ? rawState : { ...defaultState };
   if (!state.players || typeof state.players !== 'object') state.players = {};
+  if (!state.matches || typeof state.matches !== 'object') state.matches = {};
 
   for (const [userId, rawPlayer] of Object.entries(state.players)) {
     if (!rawPlayer || typeof rawPlayer !== 'object') continue;
@@ -119,6 +131,53 @@ const dedupeUsername = (requestedUsername, players, userId) => {
 
   const fallback = `${baseName}-${Date.now()}`;
   return { username: fallback, usernameKey: normalizeUsernameKey(fallback), deduped: true };
+};
+
+const summarizeSubmissions = (match) => {
+  if (!match?.host?.playerId || !match?.guest?.playerId) return null;
+  const hostSubmission = match.submissions?.[match.host.playerId];
+  const guestSubmission = match.submissions?.[match.guest.playerId];
+  if (!hostSubmission || !guestSubmission) return null;
+
+  const withTieBreakers = [hostSubmission, guestSubmission].map((submission) => {
+    const totalCount = Math.max(0, Number(submission.totalCount) || 0);
+    const correctCount = Math.max(0, Number(submission.correctCount) || 0);
+    const safeTime = Math.max(0, Number(submission.timeMs) || 0);
+    const accuracy = totalCount > 0 ? correctCount / totalCount : 0;
+    return {
+      ...submission,
+      totalCount,
+      correctCount,
+      timeMs: safeTime,
+      accuracy
+    };
+  });
+
+  withTieBreakers.sort((a, b) => {
+    if (b.scoreStars !== a.scoreStars) return b.scoreStars - a.scoreStars;
+    if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
+    return a.timeMs - b.timeMs;
+  });
+
+  const winner = withTieBreakers[0];
+  return {
+    winnerPlayerId: winner.playerId,
+    players: withTieBreakers.map((entry) => ({
+      playerId: entry.playerId,
+      scoreStars: entry.scoreStars,
+      correctCount: entry.correctCount,
+      totalCount: entry.totalCount,
+      timeMs: entry.timeMs,
+      accuracy: Number(entry.accuracy.toFixed(4)),
+      submittedAt: entry.submittedAt
+    })),
+    tiebreakUsed:
+      withTieBreakers[0].scoreStars === withTieBreakers[1].scoreStars
+        ? withTieBreakers[0].accuracy === withTieBreakers[1].accuracy
+          ? 'time'
+          : 'accuracy'
+        : 'score'
+  };
 };
 
 const toLeaderboardRows = (players, mode = 'all_time', limit = 50) =>
@@ -304,6 +363,168 @@ app.get('/api/leaderboard', async (req, res) => {
   const limitRaw = Number(req.query.limit ?? 50);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.floor(limitRaw))) : 50;
   return res.json({ rows: toLeaderboardRows(state.players, mode, limit) });
+});
+
+app.post('/api/match/create', async (req, res) => {
+  const { hostPlayerId } = req.body ?? {};
+  if (typeof hostPlayerId !== 'string' || !hostPlayerId.trim()) {
+    return res.status(400).json({ error: 'hostPlayerId is required' });
+  }
+
+  const state = await readState();
+  const player = state.players[hostPlayerId];
+  const hostRating = clampRating(player?.allTimeStars ?? player?.bestRunStars ?? 900);
+  const matchId = createMatchId();
+  const joinToken = createJoinToken();
+  const seedLocked = createSeed();
+  const now = new Date().toISOString();
+  const fallbackOrigin = `${req.protocol}://${req.get('host')}`;
+  const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim() ? req.headers.origin : fallbackOrigin;
+  const joinUrl = `${origin.replace(/\/+$/, '')}/match/${matchId}?token=${joinToken}`;
+
+  state.matches[matchId] = {
+    matchId,
+    joinToken,
+    status: 'waiting',
+    createdAt: now,
+    updatedAt: now,
+    host: { playerId: hostPlayerId, ratingLocked: hostRating },
+    guest: null,
+    avgRatingLocked: null,
+    seedLocked,
+    challengeConfig: null,
+    startAt: null,
+    submissions: {},
+    results: null
+  };
+
+  await writeState(state);
+  return res.json({ matchId, joinUrl });
+});
+
+app.post('/api/match/join', async (req, res) => {
+  const { matchId, joinToken, guestPlayerId } = req.body ?? {};
+  if (typeof matchId !== 'string' || !matchId.trim()) {
+    return res.status(400).json({ error: 'matchId is required' });
+  }
+  if (typeof joinToken !== 'string' || !joinToken.trim()) {
+    return res.status(400).json({ error: 'joinToken is required' });
+  }
+  if (typeof guestPlayerId !== 'string' || !guestPlayerId.trim()) {
+    return res.status(400).json({ error: 'guestPlayerId is required' });
+  }
+
+  const state = await readState();
+  const match = state.matches[matchId];
+  if (!match) return res.status(404).json({ error: 'match not found' });
+  if (match.joinToken !== joinToken) return res.status(403).json({ error: 'invalid join token' });
+  if (match.host.playerId === guestPlayerId) return res.status(400).json({ error: 'guest must be different from host' });
+  if (match.status === 'finished') return res.status(409).json({ error: 'match already finished' });
+
+  const guest = state.players[guestPlayerId];
+  const guestRating = clampRating(guest?.allTimeStars ?? guest?.bestRunStars ?? 900);
+  const hostRating = clampRating(match.host.ratingLocked);
+
+  match.guest = { playerId: guestPlayerId, ratingLocked: guestRating };
+  match.avgRatingLocked = Math.round((hostRating + guestRating) / 2);
+  match.status = 'ready';
+  match.updatedAt = new Date().toISOString();
+
+  await writeState(state);
+  return res.json({ status: 'ready' });
+});
+
+app.post('/api/match/start', async (req, res) => {
+  const { matchId, hostPlayerId } = req.body ?? {};
+  if (typeof matchId !== 'string' || !matchId.trim()) {
+    return res.status(400).json({ error: 'matchId is required' });
+  }
+  if (typeof hostPlayerId !== 'string' || !hostPlayerId.trim()) {
+    return res.status(400).json({ error: 'hostPlayerId is required' });
+  }
+
+  const state = await readState();
+  const match = state.matches[matchId];
+  if (!match) return res.status(404).json({ error: 'match not found' });
+  if (match.host.playerId !== hostPlayerId) return res.status(403).json({ error: 'only host can start the match' });
+  if (!match.guest?.playerId) return res.status(409).json({ error: 'match not ready' });
+
+  if (match.status !== 'started' && match.status !== 'finished') {
+    match.startAt = Date.now() + MATCH_COUNTDOWN_MS;
+    match.challengeConfig = { ...SOLO_CHALLENGE_CONFIG };
+    match.avgRatingLocked = clampRating(match.avgRatingLocked ?? match.host.ratingLocked);
+    match.status = 'started';
+    match.updatedAt = new Date().toISOString();
+    await writeState(state);
+  }
+
+  return res.json({
+    startAt: match.startAt,
+    avgRatingLocked: match.avgRatingLocked,
+    seedLocked: match.seedLocked,
+    challengeConfig: match.challengeConfig
+  });
+});
+
+app.get('/api/match/:matchId', async (req, res) => {
+  const { matchId } = req.params;
+  const state = await readState();
+  const match = state.matches[matchId];
+  if (!match) return res.status(404).json({ error: 'match not found' });
+
+  return res.json({
+    matchId: match.matchId,
+    status: match.status,
+    hostPlayerId: match.host?.playerId ?? null,
+    guestPlayerId: match.guest?.playerId ?? null,
+    startAt: match.startAt,
+    avgRatingLocked: match.avgRatingLocked,
+    seedLocked: match.status === 'started' || match.status === 'finished' ? match.seedLocked : null,
+    challengeConfig: match.status === 'started' || match.status === 'finished' ? match.challengeConfig : null,
+    results: match.status === 'finished' ? match.results : null
+  });
+});
+
+app.post('/api/match/submit', async (req, res) => {
+  const { matchId, playerId, scoreStars, correctCount, totalCount, timeMs } = req.body ?? {};
+  if (typeof matchId !== 'string' || !matchId.trim()) return res.status(400).json({ error: 'matchId is required' });
+  if (typeof playerId !== 'string' || !playerId.trim()) return res.status(400).json({ error: 'playerId is required' });
+
+  const score = Math.max(0, Math.floor(Number(scoreStars) || 0));
+  const correct = Math.max(0, Math.floor(Number(correctCount) || 0));
+  const total = Math.max(0, Math.floor(Number(totalCount) || 0));
+  const elapsed = Math.max(0, Math.floor(Number(timeMs) || 0));
+
+  const state = await readState();
+  const match = state.matches[matchId];
+  if (!match) return res.status(404).json({ error: 'match not found' });
+  if (match.status !== 'started' && match.status !== 'finished') {
+    return res.status(409).json({ error: 'match has not started' });
+  }
+  const isParticipant = match.host?.playerId === playerId || match.guest?.playerId === playerId;
+  if (!isParticipant) return res.status(403).json({ error: 'player not in this match' });
+
+  match.submissions[playerId] = {
+    playerId,
+    scoreStars: score,
+    correctCount: correct,
+    totalCount: total,
+    timeMs: elapsed,
+    submittedAt: new Date().toISOString()
+  };
+
+  const summary = summarizeSubmissions(match);
+  if (summary) {
+    match.results = summary;
+    match.status = 'finished';
+  }
+  match.updatedAt = new Date().toISOString();
+  await writeState(state);
+
+  return res.json({
+    status: match.status,
+    resultsIfFinished: match.status === 'finished' ? match.results : null
+  });
 });
 
 app.listen(PORT, () => {
