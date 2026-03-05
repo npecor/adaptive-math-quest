@@ -4131,6 +4131,11 @@ p {
   gap: 10px;
 }
 
+.practice-instead-link {
+  justify-self: start;
+  margin-top: 2px;
+}
+
 .challenge-home-card .btn {
   width: 100%;
 }
@@ -4190,7 +4195,7 @@ p {
 
 .practice-home-card {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .practice-subject-grid {
@@ -4205,9 +4210,9 @@ p {
   --subject-soft: rgba(56, 189, 248, 0.16);
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.58);
+  background: rgba(15, 23, 42, 0.5);
   color: var(--color-ink);
   text-align: left;
   padding: 12px;
@@ -4225,7 +4230,7 @@ p {
   inset: 0;
   background: radial-gradient(circle at 85% 16%, var(--subject-soft), transparent 50%);
   pointer-events: none;
-  opacity: 0.95;
+  opacity: 0.42;
 }
 
 .practice-subject-tile.mixed {
@@ -4241,7 +4246,7 @@ p {
 }
 
 .practice-subject-tile:hover {
-  border-color: var(--subject-accent);
+  border-color: rgba(148, 163, 184, 0.26);
 }
 
 .practice-subject-top {
@@ -4301,8 +4306,26 @@ p {
 }
 
 .practice-subject-subtitle {
-  font-size: 12px;
-  color: #cbd5e1;
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.7);
+}
+
+.practice-header-inline {
+  margin-bottom: -6px;
+}
+
+.practice-header-inline .muted {
+  font-size: 13px;
+}
+
+.practice-cta-inline {
+  padding-top: 2px;
+}
+
+.practice-cta-inline .btn {
+  width: 100%;
+  min-height: 46px;
+  box-shadow: 0 8px 16px rgba(14, 165, 233, 0.18);
 }
 
 .run-experience-row {
