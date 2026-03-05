@@ -1516,6 +1516,7 @@ export default function App() {
   const [isRegisteringPlayer, setIsRegisteringPlayer] = useState(false);
   const [showAttemptedPuzzles, setShowAttemptedPuzzles] = useState(false);
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
+  const [latestInviteLink, setLatestInviteLink] = useState<string | null>(null);
   const [pendingBonusFinish, setPendingBonusFinish] = useState<PendingBonusFinish | null>(null);
   const [bonusResult, setBonusResult] = useState<{ correct: boolean; answer: string } | null>(null);
   const [celebratingCharacterId, setCelebratingCharacterId] = useState<string | null>(null);
@@ -3165,10 +3166,28 @@ export default function App() {
 
   const createInviteLink = async () => {
     const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-    const inviteUrl =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}?challenge=${inviteCode}`
-        : 'Challenge link ready';
+    const inviteUrl = (() => {
+      if (typeof window === 'undefined') return 'Challenge link ready';
+      const url = new URL(window.location.href);
+      url.searchParams.set('challenge', inviteCode);
+      return url.toString();
+    })();
+    setLatestInviteLink(inviteUrl);
+
+    const fallbackCopy = () => {
+      if (typeof document === 'undefined') return false;
+      const area = document.createElement('textarea');
+      area.value = inviteUrl;
+      area.setAttribute('readonly', '');
+      area.style.position = 'absolute';
+      area.style.left = '-9999px';
+      document.body.appendChild(area);
+      area.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(area);
+      return copied;
+    };
+
     try {
       if (typeof navigator !== 'undefined' && navigator.share && isMobileViewport) {
         await navigator.share({
@@ -3188,19 +3207,29 @@ export default function App() {
         setFeedbackTone('success');
         triggerPulse('success');
         triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
+      } else if (fallbackCopy()) {
+        setFeedback('Invite link copied.');
+        setFeedbackTone('success');
+        triggerPulse('success');
+        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
       } else {
-        if (typeof window !== 'undefined') window.prompt('Copy your challenge invite link:', inviteUrl);
         setFeedback('Invite link ready.');
         setFeedbackTone('info');
         triggerPulse('info');
-        triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the prompt.');
+        triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the invite box.');
       }
     } catch {
-      if (typeof window !== 'undefined') window.prompt('Copy your challenge invite link:', inviteUrl);
-      setFeedback('Invite link ready.');
-      setFeedbackTone('info');
-      triggerPulse('info');
-      triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the prompt.');
+      if (fallbackCopy()) {
+        setFeedback('Invite link copied.');
+        setFeedbackTone('success');
+        triggerPulse('success');
+        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
+      } else {
+        setFeedback('Invite link ready.');
+        setFeedbackTone('info');
+        triggerPulse('info');
+        triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the invite box.');
+      }
     }
   };
 
@@ -3603,6 +3632,39 @@ export default function App() {
             <button className="btn btn-secondary" onClick={createInviteLink}>
               Create Invite Link
             </button>
+            {latestInviteLink && (
+              <div className="invite-link-card" role="status" aria-live="polite">
+                <p className="invite-link-label">Invite link ready</p>
+                <div className="invite-link-row">
+                  <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
+                  <button
+                    className="btn btn-secondary invite-link-copy-btn"
+                    onClick={async () => {
+                      try {
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(latestInviteLink);
+                        } else {
+                          const area = document.createElement('textarea');
+                          area.value = latestInviteLink;
+                          area.setAttribute('readonly', '');
+                          area.style.position = 'absolute';
+                          area.style.left = '-9999px';
+                          document.body.appendChild(area);
+                          area.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(area);
+                        }
+                        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
+                      } catch {
+                        triggerResultFlash('info', 'Invite link ready!', 'Copy the URL from the invite field.');
+                      }
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="section-header">

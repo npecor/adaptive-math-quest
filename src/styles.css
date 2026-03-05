@@ -4140,6 +4140,45 @@ p {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(56, 189, 248, 0.18));
 }
 
+.invite-link-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.invite-link-label {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(186, 230, 253, 0.9);
+}
+
+.invite-link-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.invite-link-input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.62);
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 12px;
+  padding: 9px 10px;
+}
+
+.invite-link-copy-btn {
+  width: auto;
+  min-width: 72px;
+  padding-inline: 12px;
+}
+
 .challenge-stats-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
