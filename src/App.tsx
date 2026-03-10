@@ -1630,10 +1630,7 @@ export default function App() {
   };
   const runSubjectLabel =
     practiceSubjects.find((subject) => subject.id === run.practiceSubjectId)?.title ?? 'Mixed Practice';
-  const practiceStartLabel =
-    activePracticeSubject.id === PRACTICE_DEFAULT_SUBJECT_ID
-      ? 'Start Mixed Practice'
-      : `Start ${activePracticeSubject.title} Practice`;
+  const runCategoryLabel = run.experience === 'practice' ? runSubjectLabel : modeConfig[run.gameMode].name;
   const runQuestionCountTotal = Math.max(runTargetTotal, 1);
   const runQuestionPosition =
     run.phase === 'flow'
@@ -2417,10 +2414,9 @@ export default function App() {
     startRun('galaxy_mix', { experience: 'challenge', tweakDifficulty: 'adaptive', tweakTimeMinutes: PRACTICE_DEFAULT_TIME });
   };
 
-  const startPracticeRun = () => {
+  const startPracticeRunForSubject = (subject: PracticeSubject) => {
     setFriendMatch(null);
     setFriendMatchStartMs(null);
-    const subject = activePracticeSubject;
     const mode: GameMode =
       subject.kind === 'puzzle'
         ? 'puzzle_orbit'
@@ -4132,7 +4128,10 @@ export default function App() {
               key={subject.id}
               type="button"
               className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
-              onClick={() => setSelectedPracticeSubjectId(subject.id)}
+              onClick={() => {
+                setSelectedPracticeSubjectId(subject.id);
+                startPracticeRunForSubject(subject);
+              }}
               style={
                 {
                   '--subject-accent': subject.accent,
@@ -4156,11 +4155,6 @@ export default function App() {
               <span className="practice-subject-subtitle">{subject.subtitle}</span>
             </button>
           ))}
-        </div>
-        <div className="practice-cta-inline">
-          <button className="btn btn-primary btn-primary-main" onClick={startPracticeRun}>
-            {practiceStartLabel}
-          </button>
         </div>
       </section>
     </>
@@ -4231,13 +4225,10 @@ export default function App() {
   const runView = (
     <>
       <section className={`card run-main-card ${resultPulse ? `pulse-${resultPulse}` : ''}`}>
-        <div className="run-experience-row">
-          <p className="text-label run-experience-label">{runExperienceLabel}</p>
-          {run.experience === 'practice' && <span className="tag">{runSubjectLabel}</span>}
-        </div>
         {run.phase === 'flow' && run.currentFlow && (
           <>
-            <div className="tier-row">
+            <div className="tier-row question-meta-row">
+              <span className="tag category-tag">{runCategoryLabel}</span>
               <span className="tag difficulty-tag">{getTier(run.currentFlow.difficulty, run.currentFlow.tier).icon} {getTier(run.currentFlow.difficulty, run.currentFlow.tier).label}</span>
             </div>
             <h3 className={`math-display ${flowPromptLines?.detail ? 'math-display-split' : ''}`}>
@@ -4323,7 +4314,8 @@ export default function App() {
 
         {run.phase === 'puzzle' && run.currentPuzzle && (
           <>
-            <div className="tier-row">
+            <div className="tier-row question-meta-row">
+              <span className="tag category-tag">{runCategoryLabel}</span>
               <span className="tag difficulty-tag">{getTier(run.currentPuzzle.difficulty).icon} {getTier(run.currentPuzzle.difficulty).label}</span>
             </div>
             <div className="puzzle-prompt-shell">

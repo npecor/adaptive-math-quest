@@ -1277,6 +1277,13 @@ p {
   font-weight: 800;
 }
 
+.category-tag {
+  background: rgba(129, 140, 248, 0.2);
+  color: #c4b5fd;
+  border-color: rgba(129, 140, 248, 0.46);
+  font-weight: 700;
+}
+
 .difficulty-tag-small {
   padding: 4px 9px;
   border-radius: 999px;
@@ -2133,7 +2140,8 @@ p {
 .tier-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2145,8 +2153,8 @@ p {
 .run-main-card .tier-row {
   position: static;
   margin: 0;
-  justify-content: flex-end;
-  margin-bottom: 10px;
+  justify-content: flex-start;
+  margin-bottom: 12px;
 }
 
 .points-pill {
@@ -4318,28 +4326,6 @@ p {
   font-size: 13px;
 }
 
-.practice-cta-inline {
-  padding-top: 2px;
-}
-
-.practice-cta-inline .btn {
-  width: 100%;
-  min-height: 46px;
-  box-shadow: 0 8px 16px rgba(14, 165, 233, 0.18);
-}
-
-.run-experience-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.run-experience-label {
-  margin: 0;
-}
-
 .run-secondary-actions {
   justify-content: center;
   gap: 10px;
@@ -4605,12 +4591,6 @@ p {
 
   .practice-subject-title {
     font-size: 16px;
-  }
-
-  .run-experience-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
   }
 
   .section-header,
