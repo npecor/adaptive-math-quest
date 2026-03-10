@@ -17,8 +17,8 @@ export type MatchRecord = {
   status: MatchStatus;
   createdAt: string;
   updatedAt: string;
-  host: { playerId: string; ratingLocked: number };
-  guest: { playerId: string; ratingLocked: number } | null;
+  host: { playerId: string; ratingLocked: number; username: string };
+  guest: { playerId: string; ratingLocked: number; username: string } | null;
   avgRatingLocked: number | null;
   seedLocked: number;
   challengeConfig: { gameMode: 'galaxy_mix'; flowTarget: number; puzzleTarget: number } | null;
@@ -41,9 +41,12 @@ export type MatchRecord = {
 
 const SOLO_CHALLENGE_CONFIG = { gameMode: 'galaxy_mix' as const, flowTarget: 8, puzzleTarget: 3 };
 const MATCH_COUNTDOWN_MS = 5000;
+const MATCH_STORAGE_BUCKET = process.env.SUPABASE_MATCHES_BUCKET || 'galaxy-genius-matches';
+const MATCH_STORAGE_PREFIX = 'match-state';
 
 const globalScope = globalThis as typeof globalThis & {
   __GG_MATCH_STORE__?: Map<string, MatchRecord>;
+  __GG_MATCH_BUCKET_READY__?: Promise<void> | null;
 };
 
 const getStore = () => {
@@ -51,6 +54,72 @@ const getStore = () => {
     globalScope.__GG_MATCH_STORE__ = new Map<string, MatchRecord>();
   }
   return globalScope.__GG_MATCH_STORE__;
+};
+
+const getMatchObjectPath = (matchId: string) => `${MATCH_STORAGE_PREFIX}/${matchId}.json`;
+
+const ensureMatchBucket = async () => {
+  if (!globalScope.__GG_MATCH_BUCKET_READY__) {
+    globalScope.__GG_MATCH_BUCKET_READY__ = (async () => {
+      const supabase = await getSupabase();
+      const { error } = await supabase.storage.createBucket(MATCH_STORAGE_BUCKET, {
+        public: false
+      });
+      if (!error) return;
+      const code = Number(error?.statusCode ?? error?.status ?? 0);
+      const message = String(error?.message ?? '').toLowerCase();
+      if (code === 409 || message.includes('already exists') || message.includes('duplicate')) return;
+      throw error;
+    })();
+  }
+  await globalScope.__GG_MATCH_BUCKET_READY__;
+};
+
+const readMatchFromStorage = async (matchId: string): Promise<MatchRecord | null> => {
+  try {
+    await ensureMatchBucket();
+    const supabase = await getSupabase();
+    const { data, error } = await supabase.storage.from(MATCH_STORAGE_BUCKET).download(getMatchObjectPath(matchId));
+    if (error) {
+      const code = Number(error?.statusCode ?? error?.status ?? 0);
+      const message = String(error?.message ?? '').toLowerCase();
+      if (code === 404 || message.includes('not found')) return null;
+      throw error;
+    }
+    if (!data) return null;
+    const raw = await data.text();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MatchRecord;
+    if (!parsed?.matchId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeMatchToStorage = async (match: MatchRecord) => {
+  await ensureMatchBucket();
+  const supabase = await getSupabase();
+  const payload = JSON.stringify(match);
+  const { error } = await supabase.storage.from(MATCH_STORAGE_BUCKET).upload(getMatchObjectPath(match.matchId), payload, {
+    upsert: true,
+    contentType: 'application/json'
+  });
+  if (error) throw error;
+};
+
+const getMatchById = async (matchId: string): Promise<MatchRecord | null> => {
+  const store = getStore();
+  const cached = store.get(matchId);
+  if (cached) return cached;
+  const stored = await readMatchFromStorage(matchId);
+  if (stored) store.set(matchId, stored);
+  return stored;
+};
+
+const saveMatch = async (match: MatchRecord) => {
+  getStore().set(match.matchId, match);
+  await writeMatchToStorage(match);
 };
 
 const clampRating = (value: unknown) => {
@@ -110,13 +179,19 @@ const summarizeSubmissions = (match: MatchRecord) => {
   };
 };
 
-const getLockedPlayerRating = async (playerId: string) => {
+const getLockedPlayerProfile = async (playerId: string): Promise<{ rating: number; username: string }> => {
   try {
     const supabase = await getSupabase();
     const player = await getPlayerById(supabase, playerId);
-    return clampRating(player?.all_time_stars ?? player?.best_run_stars ?? 900);
+    return {
+      rating: clampRating(player?.all_time_stars ?? player?.best_run_stars ?? 900),
+      username: typeof player?.username === 'string' && player.username.trim() ? player.username.trim() : 'Cadet'
+    };
   } catch {
-    return 900;
+    return {
+      rating: 900,
+      username: 'Cadet'
+    };
   }
 };
 
@@ -137,12 +212,11 @@ export const handleMatchCreate = async (req: any, res: any) => {
   const hostPlayerId = typeof body?.hostPlayerId === 'string' ? body.hostPlayerId.trim() : '';
   if (!hostPlayerId) return res.status(400).json({ error: 'hostPlayerId is required' });
 
-  const hostRating = await getLockedPlayerRating(hostPlayerId);
+  const host = await getLockedPlayerProfile(hostPlayerId);
   const matchId = createMatchId();
   const joinToken = createJoinToken();
   const seedLocked = createSeed();
   const now = new Date().toISOString();
-  const store = getStore();
 
   const originHeader = typeof req.headers?.origin === 'string' ? req.headers.origin : '';
   const hostHeader = typeof req.headers?.host === 'string' ? req.headers.host : '';
@@ -150,13 +224,13 @@ export const handleMatchCreate = async (req: any, res: any) => {
   const base = originHeader || (hostHeader ? `${protocol}://${hostHeader}` : '');
   const joinUrl = base ? `${base.replace(/\/+$/, '')}/match/${matchId}?token=${joinToken}` : `/match/${matchId}?token=${joinToken}`;
 
-  store.set(matchId, {
+  const nextMatch: MatchRecord = {
     matchId,
     joinToken,
     status: 'waiting',
     createdAt: now,
     updatedAt: now,
-    host: { playerId: hostPlayerId, ratingLocked: hostRating },
+    host: { playerId: hostPlayerId, ratingLocked: host.rating, username: host.username },
     guest: null,
     avgRatingLocked: null,
     seedLocked,
@@ -164,7 +238,8 @@ export const handleMatchCreate = async (req: any, res: any) => {
     startAt: null,
     submissions: {},
     results: null
-  });
+  };
+  await saveMatch(nextMatch);
 
   return res.status(200).json({ matchId, joinUrl });
 };
@@ -178,19 +253,23 @@ export const handleMatchJoin = async (req: any, res: any) => {
   if (!joinToken) return res.status(400).json({ error: 'joinToken is required' });
   if (!guestPlayerId) return res.status(400).json({ error: 'guestPlayerId is required' });
 
-  const store = getStore();
-  const match = store.get(matchId);
+  let match = await getMatchById(matchId);
+  if (!match) {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    match = await getMatchById(matchId);
+  }
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.joinToken !== joinToken) return res.status(403).json({ error: 'invalid join token' });
   if (match.host.playerId === guestPlayerId) return res.status(400).json({ error: 'guest must be different from host' });
   if (match.status === 'finished') return res.status(409).json({ error: 'match already finished' });
 
-  const guestRating = await getLockedPlayerRating(guestPlayerId);
+  const guest = await getLockedPlayerProfile(guestPlayerId);
   const hostRating = clampRating(match.host.ratingLocked);
-  match.guest = { playerId: guestPlayerId, ratingLocked: guestRating };
-  match.avgRatingLocked = Math.round((hostRating + guestRating) / 2);
+  match.guest = { playerId: guestPlayerId, ratingLocked: guest.rating, username: guest.username };
+  match.avgRatingLocked = Math.round((hostRating + guest.rating) / 2);
   match.status = 'ready';
   match.updatedAt = new Date().toISOString();
+  await saveMatch(match);
 
   return res.status(200).json({ status: 'ready' });
 };
@@ -202,8 +281,7 @@ export const handleMatchStart = async (req: any, res: any) => {
   if (!matchId) return res.status(400).json({ error: 'matchId is required' });
   if (!hostPlayerId) return res.status(400).json({ error: 'hostPlayerId is required' });
 
-  const store = getStore();
-  const match = store.get(matchId);
+  const match = await getMatchById(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.host.playerId !== hostPlayerId) return res.status(403).json({ error: 'only host can start the match' });
   if (!match.guest?.playerId) return res.status(409).json({ error: 'match not ready' });
@@ -214,6 +292,7 @@ export const handleMatchStart = async (req: any, res: any) => {
     match.avgRatingLocked = clampRating(match.avgRatingLocked ?? match.host.ratingLocked);
     match.status = 'started';
     match.updatedAt = new Date().toISOString();
+    await saveMatch(match);
   }
 
   return res.status(200).json({
@@ -228,14 +307,16 @@ export const handleMatchGet = async (req: any, res: any) => {
   const matchId = typeof req.query?.matchId === 'string' ? req.query.matchId : req.query?.matchId?.[0];
   if (!matchId || typeof matchId !== 'string') return res.status(400).json({ error: 'matchId is required' });
 
-  const match = getStore().get(matchId);
+  const match = await getMatchById(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
 
   return res.status(200).json({
     matchId: match.matchId,
     status: match.status,
     hostPlayerId: match.host?.playerId ?? null,
+    hostUsername: match.host?.username ?? null,
     guestPlayerId: match.guest?.playerId ?? null,
+    guestUsername: match.guest?.username ?? null,
     startAt: match.startAt,
     avgRatingLocked: match.avgRatingLocked,
     seedLocked: match.status === 'started' || match.status === 'finished' ? match.seedLocked : null,
@@ -256,8 +337,7 @@ export const handleMatchSubmit = async (req: any, res: any) => {
   const totalCount = Math.max(0, Math.floor(Number(body?.totalCount) || 0));
   const timeMs = Math.max(0, Math.floor(Number(body?.timeMs) || 0));
 
-  const store = getStore();
-  const match = store.get(matchId);
+  const match = await getMatchById(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.status !== 'started' && match.status !== 'finished') {
     return res.status(409).json({ error: 'match has not started' });
@@ -280,6 +360,7 @@ export const handleMatchSubmit = async (req: any, res: any) => {
     match.status = 'finished';
   }
   match.updatedAt = new Date().toISOString();
+  await saveMatch(match);
 
   return res.status(200).json({
     status: match.status,

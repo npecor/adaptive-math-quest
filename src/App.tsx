@@ -42,7 +42,7 @@ import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'match_lobby' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'match_lobby' | 'invite_invalid' | 'run' | 'summary' | 'scores' | 'museum';
 type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
@@ -133,7 +133,9 @@ type FriendMatchState = {
   role: 'host' | 'guest';
   status: MatchStatus;
   hostPlayerId: string | null;
+  hostUsername?: string | null;
   guestPlayerId: string | null;
+  guestUsername?: string | null;
   startAt: number | null;
   avgRatingLocked: number | null;
   seedLocked: number | null;
@@ -1530,6 +1532,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
     const bootState = loadState();
     if (typeof window !== 'undefined') {
+      const isInvitePath = /\/match\/[^/?#]+/i.test(window.location.pathname);
+      if (isInvitePath) return bootState.user ? 'match_lobby' : 'onboarding';
       const hasSeenLanding = window.localStorage.getItem(LANDING_SEEN_STORAGE_KEY) === '1';
       if (!hasSeenLanding) return 'landing';
     }
@@ -1589,15 +1593,16 @@ export default function App() {
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
   const [latestInviteLink, setLatestInviteLink] = useState<string | null>(null);
   const [friendMatch, setFriendMatch] = useState<FriendMatchState | null>(null);
+  const [pendingInviteMatchId, setPendingInviteMatchId] = useState<string | null>(null);
+  const [inviteErrorMessage, setInviteErrorMessage] = useState('This challenge link has expired or is no longer active.');
   const [friendMatchStartMs, setFriendMatchStartMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [pendingBonusFinish, setPendingBonusFinish] = useState<PendingBonusFinish | null>(null);
   const [bonusResult, setBonusResult] = useState<{ correct: boolean; answer: string } | null>(null);
   const [celebratingCharacterId, setCelebratingCharacterId] = useState<string | null>(null);
   const celebrateCharacterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [onboardingStage, setOnboardingStage] = useState<'name' | 'character'>(() => (loadState().user ? 'character' : 'name'));
   const scratchpadFieldId = useId();
-  const scratchpadPlaceholder = 'You can work through the problem here. This will not be used for scoring.';
+  const scratchpadPlaceholder = "Work it out here. This won't affect your score.";
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = Boolean(state.user);
   const onboardingCadetName = nameInput.trim() || 'Cadet';
@@ -1641,6 +1646,12 @@ export default function App() {
   const runExperienceLabel = `${run.experience === 'practice' ? 'Practice' : 'Challenge'} • Question ${runQuestionPosition} of ${runQuestionCountTotal}`;
   const matchCountdownSeconds = friendMatch?.startAt ? Math.max(0, Math.ceil((friendMatch.startAt - nowMs) / 1000)) : null;
   const friendMatchResults = friendMatch?.results && run.friendMatchId === friendMatch.matchId ? friendMatch.results : null;
+  const hostDisplayName = friendMatch?.hostUsername ?? (friendMatch?.hostPlayerId === state.user?.userId ? state.user?.username : null) ?? 'Host';
+  const guestDisplayName = friendMatch?.guestUsername ?? (friendMatch?.guestPlayerId === state.user?.userId ? state.user?.username : null) ?? 'Friend';
+  const opponentDisplayName =
+    friendMatch?.role === 'host'
+      ? friendMatch?.guestUsername ?? 'your friend'
+      : friendMatch?.hostUsername ?? 'your friend';
   const runPracticeSubject =
     practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
     practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
@@ -3167,11 +3178,6 @@ export default function App() {
     }
   };
 
-  const continueToCharacterStep = () => {
-    if (!nameInput.trim()) return;
-    setOnboardingStage('character');
-  };
-
   const pickOnboardingCharacter = (characterId: string) => {
     setSelectedCharacterId(characterId);
     if (celebrateCharacterTimeoutRef.current) {
@@ -3191,20 +3197,9 @@ export default function App() {
   };
 
   const onOnboardingPrimaryAction = () => {
-    if (isEditingProfile) {
-      completeOnboarding();
-      return;
-    }
-    if (!selectedCharacter) {
-      return;
-    }
+    if (!isEditingProfile && !selectedCharacter) return;
     completeOnboarding();
   };
-
-  useEffect(() => {
-    if (screen !== 'onboarding') return;
-    setOnboardingStage(state.user ? 'character' : 'name');
-  }, [screen, state.user?.userId]);
 
   useEffect(() => {
     if (screen !== 'museum') setExpandedMuseumPuzzleId(null);
@@ -3265,34 +3260,28 @@ export default function App() {
   }, [resultFlash, bonusResult]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !state.user?.userId) return;
+    if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     const matchPath = url.pathname.match(/\/match\/([^/?#]+)/i);
     if (!matchPath) return;
 
     const matchId = decodeURIComponent(matchPath[1]);
     if (!matchId) return;
-    if (matchJoinAttemptRef.current === `${matchId}:${state.user.userId}`) return;
-    matchJoinAttemptRef.current = `${matchId}:${state.user.userId}`;
 
     const token = url.searchParams.get('token');
     if (!token) {
-      setScreen('match_lobby');
-      setFriendMatch({
-        matchId,
-        joinToken: null,
-        role: 'guest',
-        status: 'waiting',
-        hostPlayerId: null,
-        guestPlayerId: state.user.userId,
-        startAt: null,
-        avgRatingLocked: null,
-        seedLocked: null,
-        challengeConfig: null,
-        results: null
-      });
+      setInviteErrorMessage('This challenge link is missing its join token.');
+      setScreen('invite_invalid');
       return;
     }
+
+    setPendingInviteMatchId(matchId);
+    if (!state.user?.userId) {
+      setScreen('onboarding');
+      return;
+    }
+    if (matchJoinAttemptRef.current === `${matchId}:${state.user.userId}`) return;
+    matchJoinAttemptRef.current = `${matchId}:${state.user.userId}`;
 
     let cancelled = false;
     joinMatch({
@@ -3308,7 +3297,9 @@ export default function App() {
           role: 'guest',
           status: 'ready',
           hostPlayerId: null,
+          hostUsername: null,
           guestPlayerId: state.user?.userId ?? null,
+          guestUsername: state.user?.username ?? null,
           startAt: null,
           avgRatingLocked: null,
           seedLocked: null,
@@ -3321,14 +3312,14 @@ export default function App() {
       })
       .catch(() => {
         if (cancelled) return;
-        triggerResultFlash('error', 'Invite unavailable', 'This invite is no longer valid.');
-        setScreen('home');
+        setInviteErrorMessage('This challenge link has expired or is no longer active.');
+        setScreen('invite_invalid');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [state.user?.userId]);
+  }, [state.user?.userId, state.user?.username]);
 
   useEffect(() => {
     if (!friendMatch?.matchId || !state.user?.userId) return;
@@ -3345,7 +3336,9 @@ export default function App() {
                 ...prev,
                 status: snapshot.status,
                 hostPlayerId: snapshot.hostPlayerId,
+                hostUsername: snapshot.hostUsername,
                 guestPlayerId: snapshot.guestPlayerId,
+                guestUsername: snapshot.guestUsername,
                 startAt: snapshot.startAt,
                 avgRatingLocked: snapshot.avgRatingLocked,
                 seedLocked: snapshot.seedLocked,
@@ -3400,7 +3393,9 @@ export default function App() {
       matchId: friendMatch.matchId,
       status: friendMatch.status,
       hostPlayerId: friendMatch.hostPlayerId,
+      hostUsername: friendMatch.hostUsername ?? null,
       guestPlayerId: friendMatch.guestPlayerId,
+      guestUsername: friendMatch.guestUsername ?? null,
       startAt: friendMatch.startAt,
       avgRatingLocked: friendMatch.avgRatingLocked,
       seedLocked: friendMatch.seedLocked,
@@ -3609,7 +3604,9 @@ export default function App() {
         role: 'host',
         status: 'waiting',
         hostPlayerId: state.user.userId ?? null,
+        hostUsername: state.user.username ?? null,
         guestPlayerId: null,
+        guestUsername: null,
         startAt: null,
         avgRatingLocked: null,
         seedLocked: null,
@@ -3667,6 +3664,7 @@ export default function App() {
   const leaveFriendMatchLobby = () => {
     setFriendMatch(null);
     setFriendMatchStartMs(null);
+    setPendingInviteMatchId(null);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (/\/match\/[^/?#]+/i.test(url.pathname)) {
@@ -3682,11 +3680,21 @@ export default function App() {
     const fieldId = `${scratchpadFieldId}-${idSuffix}`;
     const shouldShowInput = scratchpadExpanded;
     return (
-      <div className={`scratchpad-wrap ${!scratchpadExpanded ? 'collapsed' : ''}`}>
+      <div className={`scratchpad-wrap ${!scratchpadExpanded ? 'collapsed' : ''} ${showTutor ? 'muted-support' : ''}`}>
         <button
           type="button"
           className="scratchpad-toggle"
-          onClick={() => setScratchpadExpanded((open) => !open)}
+          onClick={() =>
+            setScratchpadExpanded((open) => {
+              const nextOpen = !open;
+              if (nextOpen) {
+                setShowTutor(false);
+                setShowTweaksSheet(false);
+                setShowClarifyDialog(false);
+              }
+              return nextOpen;
+            })
+          }
           aria-expanded={shouldShowInput}
           aria-controls={fieldId}
         >
@@ -3719,6 +3727,7 @@ export default function App() {
   const openCoach = (mode: 'quick' | 'steps', maxCount: number) => {
     setShowTweaksSheet(false);
     setShowClarifyDialog(false);
+    setScratchpadExpanded(false);
     setShowTutor(true);
     setCoachMode(mode);
     if (mode === 'steps') {
@@ -3730,6 +3739,7 @@ export default function App() {
   const openTweaksSheet = () => {
     setShowTutor(false);
     setShowClarifyDialog(false);
+    setScratchpadExpanded(false);
     setShowTweaksSheet(true);
   };
 
@@ -3933,86 +3943,67 @@ export default function App() {
           </>
         ) : (
           <>
-            {onboardingStage === 'name' ? (
-              <>
-                <h1 className="onboarding-title">Welcome, Space Cadet!</h1>
-                <p className="muted onboarding-intro">Blast through math missions and level up.</p>
-              </>
-            ) : (
-              <>
-                <h1 className="onboarding-title">Welcome aboard, {onboardingCadetName}!</h1>
-                <p className="muted onboarding-intro">Pick your space buddy to start your first mission.</p>
-              </>
-            )}
+            <h1 className="onboarding-title">
+              {pendingInviteMatchId ? 'A friend challenged you!' : 'Welcome aboard, Cadet!'}
+            </h1>
+            <p className="muted onboarding-intro">
+              {pendingInviteMatchId
+                ? 'Choose your cadet name and space buddy, then jump into the same mission.'
+                : 'Choose your cadet name and space buddy to start your first mission.'}
+            </p>
           </>
         )}
 
-        {(isEditingProfile || onboardingStage === 'name') && (
-          <div className="onboarding-name-block onboarding-phase-block">
-            {isEditingProfile && <p className="text-label onboarding-step-label">Cadet name</p>}
-            <input
-              className="math-input"
-              placeholder="Enter cadet name"
-              aria-label="Enter cadet name"
-              value={nameInput}
-              onChange={(event) => setNameInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return;
-                if (isEditingProfile) completeOnboarding();
-                else continueToCharacterStep();
-              }}
-            />
-            {!isEditingProfile && (
-              <>
-                <button className="btn btn-primary onboarding-continue-btn" disabled={!nameInput.trim()} onClick={continueToCharacterStep}>
-                  Beam Me Up
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        <div className="onboarding-name-block onboarding-phase-block">
+          <p className="text-label onboarding-step-label">Cadet name</p>
+          <input
+            className="math-input"
+            placeholder="Enter cadet name"
+            aria-label="Enter cadet name"
+            value={nameInput}
+            onChange={(event) => setNameInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              onOnboardingPrimaryAction();
+            }}
+          />
+        </div>
 
-        {(isEditingProfile || onboardingStage === 'character') && (
-          <>
-            <div className="character-section onboarding-phase-block onboarding-character-section">
-              <p className="text-label onboarding-step-label">{isEditingProfile ? 'Choose Character' : 'Choose your buddy'}</p>
-              <div className="character-grid">
-                {playerCharacters.map((character) => (
-                  <button
-                    key={character.id}
-                    className={`character-card jump-${characterVariantById[character.id] ?? 'astro-bot'} ${selectedCharacterId === character.id ? 'selected' : ''} ${celebratingCharacterId === character.id ? 'celebrate' : ''}`}
-                    onClick={() => pickOnboardingCharacter(character.id)}
-                  >
-                    {selectedCharacterId === character.id && <span className="character-selected-badge">✓</span>}
-                    <div className="character-card-head">
-                      <CharacterAvatar characterId={character.id} size="lg" />
-                    </div>
-                    <span className="character-name">{character.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {(isEditingProfile || onboardingStage === 'character') && (
-          <div className="onboarding-footer">
-            <div className="btn-row">
+        <div className="character-section onboarding-phase-block onboarding-character-section">
+          <p className="text-label onboarding-step-label">{isEditingProfile ? 'Choose character' : 'Choose your space buddy'}</p>
+          <div className="character-grid">
+            {playerCharacters.map((character) => (
               <button
-                className={`btn btn-primary ${!isEditingProfile && !selectedCharacter ? 'btn-soft-lock' : ''}`}
-                disabled={isRegisteringPlayer || (isEditingProfile && (!nameInput.trim() || !selectedCharacter))}
-                onClick={onOnboardingPrimaryAction}
+                key={character.id}
+                className={`character-card jump-${characterVariantById[character.id] ?? 'astro-bot'} ${selectedCharacterId === character.id ? 'selected' : ''} ${celebratingCharacterId === character.id ? 'celebrate' : ''}`}
+                onClick={() => pickOnboardingCharacter(character.id)}
               >
-                {isRegisteringPlayer ? 'Saving...' : isEditingProfile ? 'Save Player' : selectedCharacter ? 'Start Mission' : 'Choose a buddy to launch'}
+                {selectedCharacterId === character.id && <span className="character-selected-badge">✓</span>}
+                <div className="character-card-head">
+                  <CharacterAvatar characterId={character.id} size="lg" />
+                </div>
+                <span className="character-name">{character.name}</span>
               </button>
-              {isEditingProfile && (
-                <button className="btn btn-secondary" onClick={() => setScreen('home')}>
-                  Cancel
-                </button>
-              )}
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+
+        <div className="onboarding-footer">
+          <div className="btn-row">
+            <button
+              className={`btn btn-primary ${!nameInput.trim() || !selectedCharacter ? 'btn-soft-lock' : ''}`}
+              disabled={isRegisteringPlayer || !nameInput.trim() || !selectedCharacter}
+              onClick={onOnboardingPrimaryAction}
+            >
+              {isRegisteringPlayer ? 'Saving...' : isEditingProfile ? 'Save Cadet' : pendingInviteMatchId ? "Join Friend Challenge" : "Let's Launch"}
+            </button>
+            {isEditingProfile && (
+              <button className="btn btn-secondary" onClick={() => setScreen('home')}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -4040,7 +4031,7 @@ export default function App() {
 
       <section className="card challenge-home-card challenge-home-card-primary">
         <h3 className="text-title">Solo Challenge</h3>
-        <p className="muted">Your character is ready. Each game adjusts to your level.</p>
+        <p className="muted">A fresh mission tuned to your level.</p>
         <button className="btn btn-primary" onClick={startChallengeRun}>
           Start Challenge
         </button>
@@ -4051,43 +4042,10 @@ export default function App() {
 
       <section className="card challenge-home-card">
         <h3 className="text-title">Challenge a Friend</h3>
-        <p className="muted">Send a link and see who gets the higher score.</p>
+        <p className="muted">Invite a friend to race through the same mission.</p>
         <button className="btn btn-secondary" onClick={createInviteLink}>
           Create Invite Link
         </button>
-        {latestInviteLink && (
-          <div className="invite-link-card" role="status" aria-live="polite">
-            <p className="invite-link-label">Invite link ready</p>
-            <div className="invite-link-row">
-              <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
-              <button
-                className="btn btn-secondary invite-link-copy-btn"
-                onClick={async () => {
-                  try {
-                    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                      await navigator.clipboard.writeText(latestInviteLink);
-                    } else {
-                      const area = document.createElement('textarea');
-                      area.value = latestInviteLink;
-                      area.setAttribute('readonly', '');
-                      area.style.position = 'absolute';
-                      area.style.left = '-9999px';
-                      document.body.appendChild(area);
-                      area.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(area);
-                    }
-                    triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to start.');
-                  } catch {
-                    triggerResultFlash('info', 'Invite link ready!', 'Copy the URL from the invite field.');
-                  }
-                }}
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
       </section>
 
       <section className="section-header">
@@ -4163,31 +4121,43 @@ export default function App() {
   const matchLobby = (
     <>
       <section className="section-header">
-        <h2 className="text-title">Challenge a Friend</h2>
-        <span className="tag">{friendMatch?.role === 'host' ? 'Host' : 'Guest'}</span>
+        <h2 className="text-title">Friend Challenge</h2>
+        <span className="tag">{friendMatch?.role === 'host' ? 'Host lobby' : 'Join lobby'}</span>
       </section>
-      <section className="card">
+      <section className="card match-lobby-card">
         {!friendMatch && <p className="muted">Preparing match lobby…</p>}
         {friendMatch && (
           <>
+            <p className="muted">Same mission. Same questions. Highest score wins.</p>
+            <div className="match-lobby-versus">
+              <div className="match-lobby-player">
+                <span className="match-lobby-player-label">Host</span>
+                <strong>{hostDisplayName}</strong>
+              </div>
+              <div className="match-lobby-versus-mark">vs</div>
+              <div className="match-lobby-player">
+                <span className="match-lobby-player-label">Guest</span>
+                <strong>{friendMatch.guestPlayerId ? guestDisplayName : 'Joining soon…'}</strong>
+              </div>
+            </div>
             <p className="muted">
               Match ID: <strong>{friendMatch.matchId}</strong>
             </p>
-            {friendMatch.status === 'waiting' && <p>Waiting for your friend to join…</p>}
-            {friendMatch.status === 'ready' && <p>Friend joined. Syncing challenge start…</p>}
+            {friendMatch.status === 'waiting' && <p>Waiting for your friend to join the mission…</p>}
+            {friendMatch.status === 'ready' && <p>{opponentDisplayName} joined. Mission countdown is starting.</p>}
             {friendMatch.status === 'started' && (
               <p>
-                Launching in <strong>{matchCountdownSeconds ?? 0}</strong>…
+                {hostDisplayName} vs {guestDisplayName} starts in <strong>{matchCountdownSeconds ?? 0}</strong>…
               </p>
             )}
             {friendMatch.status === 'finished' && (
               <p>
-                Match complete. {friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId}` : 'Results ready.'}
+                Match complete. {friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId === state.user?.userId ? 'You' : opponentDisplayName}` : 'Results ready.'}
               </p>
             )}
             {latestInviteLink && friendMatch.role === 'host' && (
               <div className="invite-link-card" role="status" aria-live="polite">
-                <p className="invite-link-label">Invite link</p>
+                <p className="invite-link-label">Invite link ready</p>
                 <div className="invite-link-row">
                   <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
                   <button
@@ -4218,6 +4188,25 @@ export default function App() {
             </div>
           </>
         )}
+      </section>
+    </>
+  );
+
+  const invalidInvite = (
+    <>
+      <section className="section-header">
+        <h2 className="text-title">Invite unavailable</h2>
+      </section>
+      <section className="card invalid-invite-card">
+        <p className="muted">{inviteErrorMessage}</p>
+        <div className="btn-row">
+          <button className="btn btn-primary" onClick={createInviteLink}>
+            Create New Challenge
+          </button>
+          <button className="btn btn-secondary" onClick={leaveFriendMatchLobby}>
+            Back Home
+          </button>
+        </div>
       </section>
     </>
   );
@@ -4572,8 +4561,8 @@ export default function App() {
   const summary = (
     <>
       <section className="section-header">
-        <h2 className="text-title">Great Job!</h2>
-        <span className="tag">Game Complete</span>
+        <h2 className="text-title">{friendMatchResults ? 'Friend Challenge Results' : 'Great Job!'}</h2>
+        <span className="tag">{friendMatchResults ? 'Head-to-head complete' : 'Game Complete'}</span>
       </section>
       <section className="card">
         <div className="stats-grid">
@@ -4596,8 +4585,18 @@ export default function App() {
         </div>
         {friendMatchResults && (
           <div className="summary-match-results">
-            <p className="text-label">Friend Challenge Result</p>
-            <p className="muted">Winner: {friendMatchResults.winnerPlayerId === state.user?.userId ? 'You' : 'Friend'}</p>
+            <p className="text-label">
+              {friendMatchResults.winnerPlayerId === state.user?.userId
+                ? 'You win!'
+                : friendMatchResults.players[0]?.scoreStars === friendMatchResults.players[1]?.scoreStars
+                  ? "It's a tie!"
+                  : `${opponentDisplayName} wins!`}
+            </p>
+            <p className="muted">
+              {friendMatchResults.players
+                .map((entry) => `${entry.playerId === state.user?.userId ? 'You' : opponentDisplayName}: ${entry.scoreStars}`)
+                .join(' • ')}
+            </p>
             <div className="summary-match-grid">
               {friendMatchResults.players.map((entry) => (
                 <div key={`${entry.playerId}-${entry.submittedAt}`} className="summary-match-card">
@@ -4933,13 +4932,22 @@ export default function App() {
           className={`result-flash ${resultFlash.tone}`}
           role="status"
           aria-live="polite"
-          onClick={() => setResultFlash((active) => (active?.token === resultFlash.token ? null : active))}
           onAnimationEnd={(event) => {
             if (event.target !== event.currentTarget) return;
             setResultFlash((active) => (active?.token === resultFlash.token ? null : active));
           }}
         >
-          <div className="result-flash-card" onClick={(event) => event.stopPropagation()}>
+          <div className="result-flash-card">
+            <div className="result-flash-character">
+              <CharacterAvatar characterId={state.user?.avatarId} size="sm" />
+            </div>
+            <div className="result-flash-copy">
+              <p className="result-flash-title-row">
+                <span className="result-flash-icon" aria-hidden="true">{resultFlash.icon}</span>
+                <span className="result-flash-title">{resultFlash.title}</span>
+              </p>
+              <p className="result-flash-detail">{resultFlash.detail}</p>
+            </div>
             <button
               type="button"
               className="result-flash-close"
@@ -4948,12 +4956,6 @@ export default function App() {
             >
               ✕
             </button>
-            <div className="result-flash-character">
-              <CharacterAvatar characterId={state.user?.avatarId} size="lg" />
-            </div>
-            <p className="result-flash-icon">{resultFlash.icon}</p>
-            <p className="result-flash-title">{resultFlash.title}</p>
-            <p className="result-flash-detail">{resultFlash.detail}</p>
           </div>
         </div>
       )}
@@ -4982,6 +4984,7 @@ export default function App() {
           <section className="run-progress-inline" aria-label="Orbit progress">
             <div className="flow-progress-head compact">
               <p className="text-label">{runExperienceLabel}</p>
+              {run.friendMatchId && <span className="compact-tag">{homeCadetName} vs {opponentDisplayName}</span>}
             </div>
             <div className="flow-meter-wrap compact">
               <div className="flow-meter"><div className="flow-fill" style={{ width: `${Math.max(flowProgress, 6)}%` }} /></div>
@@ -4997,6 +5000,7 @@ export default function App() {
         {screen === 'home' && home}
         {screen === 'practice' && practice}
         {screen === 'match_lobby' && matchLobby}
+        {screen === 'invite_invalid' && invalidInvite}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
         {screen === 'scores' && scores}

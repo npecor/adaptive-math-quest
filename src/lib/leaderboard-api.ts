@@ -39,7 +39,9 @@ export interface MatchSnapshot {
   matchId: string;
   status: MatchStatus;
   hostPlayerId: string | null;
+  hostUsername: string | null;
   guestPlayerId: string | null;
+  guestUsername: string | null;
   startAt: number | null;
   avgRatingLocked: number | null;
   seedLocked: number | null;
