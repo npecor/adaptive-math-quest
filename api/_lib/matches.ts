@@ -131,6 +131,18 @@ const clampRating = (value: unknown) => {
 const createMatchId = () => Math.random().toString(36).slice(2, 10).toUpperCase();
 const createJoinToken = () => Math.random().toString(36).slice(2, 14);
 const createSeed = () => Math.floor(Math.random() * 2_147_483_000) + 1;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getMatchByIdWithRetries = async (matchId: string, attempts = 6, delayMs = 250): Promise<MatchRecord | null> => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const match = await getMatchById(matchId);
+    if (match) return match;
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  return null;
+};
 
 const summarizeSubmissions = (match: MatchRecord) => {
   if (!match.host?.playerId || !match.guest?.playerId) return null;
@@ -253,11 +265,7 @@ export const handleMatchJoin = async (req: any, res: any) => {
   if (!joinToken) return res.status(400).json({ error: 'joinToken is required' });
   if (!guestPlayerId) return res.status(400).json({ error: 'guestPlayerId is required' });
 
-  let match = await getMatchById(matchId);
-  if (!match) {
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    match = await getMatchById(matchId);
-  }
+  let match = await getMatchByIdWithRetries(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.joinToken !== joinToken) return res.status(403).json({ error: 'invalid join token' });
   if (match.host.playerId === guestPlayerId) return res.status(400).json({ error: 'guest must be different from host' });
@@ -281,7 +289,7 @@ export const handleMatchStart = async (req: any, res: any) => {
   if (!matchId) return res.status(400).json({ error: 'matchId is required' });
   if (!hostPlayerId) return res.status(400).json({ error: 'hostPlayerId is required' });
 
-  const match = await getMatchById(matchId);
+  const match = await getMatchByIdWithRetries(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.host.playerId !== hostPlayerId) return res.status(403).json({ error: 'only host can start the match' });
   if (!match.guest?.playerId) return res.status(409).json({ error: 'match not ready' });
@@ -307,7 +315,7 @@ export const handleMatchGet = async (req: any, res: any) => {
   const matchId = typeof req.query?.matchId === 'string' ? req.query.matchId : req.query?.matchId?.[0];
   if (!matchId || typeof matchId !== 'string') return res.status(400).json({ error: 'matchId is required' });
 
-  const match = await getMatchById(matchId);
+  const match = await getMatchByIdWithRetries(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
 
   return res.status(200).json({
@@ -337,7 +345,7 @@ export const handleMatchSubmit = async (req: any, res: any) => {
   const totalCount = Math.max(0, Math.floor(Number(body?.totalCount) || 0));
   const timeMs = Math.max(0, Math.floor(Number(body?.timeMs) || 0));
 
-  const match = await getMatchById(matchId);
+  const match = await getMatchByIdWithRetries(matchId);
   if (!match) return res.status(404).json({ error: 'match not found' });
   if (match.status !== 'started' && match.status !== 'finished') {
     return res.status(409).json({ error: 'match has not started' });

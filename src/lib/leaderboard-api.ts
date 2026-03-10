@@ -129,6 +129,7 @@ const withBaseUrl = (path: string) => {
 };
 
 const LEADERBOARD_REQUEST_TIMEOUT_MS = 12000;
+const sleep = (ms: number) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 const jsonRequest = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const controller = new AbortController();
@@ -189,11 +190,25 @@ export const createMatch = async (payload: MatchCreateRequest): Promise<MatchCre
     body: JSON.stringify(payload)
   });
 
-export const joinMatch = async (payload: MatchJoinRequest): Promise<MatchJoinResponse> =>
-  jsonRequest<MatchJoinResponse>(withBaseUrl('/api/match/join'), {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+export const joinMatch = async (payload: MatchJoinRequest): Promise<MatchJoinResponse> => {
+  const attempts = 5;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await jsonRequest<MatchJoinResponse>(withBaseUrl('/api/match/join'), {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(250);
+        continue;
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Unable to join match');
+};
 
 export const startMatch = async (payload: MatchStartRequest): Promise<MatchStartResponse> =>
   jsonRequest<MatchStartResponse>(withBaseUrl('/api/match/start'), {
