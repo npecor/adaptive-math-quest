@@ -37,12 +37,13 @@ import {
   sortLeaderboardRows,
   upsertSolvedPuzzleIds
 } from './lib/progress';
+import { buildAppRouteHref, parseAppRoute, routeNeedsUser, type AppRoute } from './lib/router';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'landing' | 'onboarding' | 'home' | 'practice' | 'match_lobby' | 'invite_invalid' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'profile' | 'home' | 'practice' | 'invite_entry' | 'match_lobby' | 'match_countdown' | 'invite_invalid' | 'run' | 'summary' | 'scores' | 'museum';
 type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
@@ -1529,16 +1530,10 @@ const BrandMark = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState());
   const [brandVariant] = useState<BrandVariant>('simplified');
-  const [screen, setScreen] = useState<Screen>(() => {
-    const bootState = loadState();
-    if (typeof window !== 'undefined') {
-      const isInvitePath = /\/match\/[^/?#]+/i.test(window.location.pathname);
-      if (isInvitePath) return bootState.user ? 'match_lobby' : 'onboarding';
-      const hasSeenLanding = window.localStorage.getItem(LANDING_SEEN_STORAGE_KEY) === '1';
-      if (!hasSeenLanding) return 'landing';
-    }
-    return bootState.user ? 'home' : 'onboarding';
-  });
+  const [route, setRoute] = useState<AppRoute>(() =>
+    typeof window !== 'undefined' ? parseAppRoute(window.location.href) : { kind: 'root' }
+  );
+  const [screen, setScreen] = useState<Screen>('landing');
   const [run, setRun] = useState<RunState>(newRun('galaxy_mix'));
   const [selectedMode, setSelectedMode] = useState<GameMode>('galaxy_mix');
   const [selectedPracticeSubjectId, setSelectedPracticeSubjectId] = useState(PRACTICE_DEFAULT_SUBJECT_ID);
@@ -1594,6 +1589,7 @@ export default function App() {
   const [latestInviteLink, setLatestInviteLink] = useState<string | null>(null);
   const [friendMatch, setFriendMatch] = useState<FriendMatchState | null>(null);
   const [pendingInviteMatchId, setPendingInviteMatchId] = useState<string | null>(null);
+  const [invitePreviewHostName, setInvitePreviewHostName] = useState<string | null>(null);
   const [inviteErrorMessage, setInviteErrorMessage] = useState('This challenge link has expired or is no longer active.');
   const [friendMatchStartMs, setFriendMatchStartMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -1604,7 +1600,7 @@ export default function App() {
   const scratchpadFieldId = useId();
   const scratchpadPlaceholder = "Work it out here. This won't affect your score.";
   const selectedCharacter = getCharacterById(selectedCharacterId);
-  const isEditingProfile = Boolean(state.user);
+  const isEditingProfile = screen === 'profile';
   const onboardingCadetName = nameInput.trim() || 'Cadet';
   const homeCadetName = state.user?.username ?? onboardingCadetName;
   const homeCharacterId = selectedCharacter?.id ?? state.user?.avatarId ?? defaultCharacterId;
@@ -1652,6 +1648,24 @@ export default function App() {
     friendMatch?.role === 'host'
       ? friendMatch?.guestUsername ?? 'your friend'
       : friendMatch?.hostUsername ?? 'your friend';
+  const friendChallengeResultTitle =
+    friendMatchResults?.winnerPlayerId === state.user?.userId
+      ? 'You win!'
+      : friendMatchResults && friendMatchResults.players[0]?.scoreStars === friendMatchResults.players[1]?.scoreStars
+        ? "It's a tie!"
+        : `${opponentDisplayName} wins!`;
+  const currentRouteHref = buildAppRouteHref(route);
+  const navigateToRoute = (nextRoute: AppRoute, options?: { replace?: boolean }) => {
+    const href = buildAppRouteHref(nextRoute);
+    if (typeof window !== 'undefined') {
+      const method = options?.replace ? 'replaceState' : 'pushState';
+      window.history[method]({}, '', href);
+    }
+    setRoute(nextRoute);
+  };
+  const openOnboardingWithNext = (nextHref: string, options?: { replace?: boolean }) => {
+    navigateToRoute({ kind: 'onboarding', next: nextHref }, options);
+  };
   const runPracticeSubject =
     practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
     practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
@@ -2273,7 +2287,7 @@ export default function App() {
     setFriendMatch((current) => (current ? { ...current, submitted: false } : current));
     setRun(seeded);
     setSelectedMode('galaxy_mix');
-    setScreen('run');
+    navigateToRoute({ kind: 'friend_challenge', matchId: snapshot.matchId }, { replace: true });
     setShowTweaksSheet(false);
     setFriendMatchStartMs(snapshot.startAt ?? Date.now());
     resetInputAndFeedback();
@@ -2304,7 +2318,11 @@ export default function App() {
     triggerPulse('info');
     const isFriendMatchRun = Boolean(runSnapshot.friendMatchId && baseState.user?.userId);
     if (!isFriendMatchRun) {
-      setScreen('summary');
+      if (runSnapshot.experience === 'practice') {
+        navigateToRoute({ kind: 'practice', stage: 'results', subjectId: runSnapshot.practiceSubjectId });
+      } else {
+        navigateToRoute({ kind: 'solo_results' });
+      }
       return;
     }
 
@@ -2335,16 +2353,16 @@ export default function App() {
                 }
               : current
           );
-          setScreen('summary');
+          navigateToRoute({ kind: 'friend_results', matchId });
           return;
         }
         setFriendMatch((current) => (current ? { ...current, status: response.status, submitted: true } : current));
-        setScreen('match_lobby');
+        navigateToRoute({ kind: 'friend_challenge', matchId });
       })
       .catch(() => {
         setFeedback('Result submitted locally. Waiting for friend results…');
         setFeedbackTone('info');
-        setScreen('match_lobby');
+        navigateToRoute({ kind: 'friend_challenge', matchId });
       });
   };
 
@@ -2414,7 +2432,11 @@ export default function App() {
     setRun(seeded);
     setSelectedMode(mode);
     save({ ...state, streaks });
-    setScreen('run');
+    if (experience === 'practice') {
+      navigateToRoute({ kind: 'practice', stage: 'session', subjectId: practiceSubject.id });
+    } else {
+      navigateToRoute({ kind: 'solo_challenge' });
+    }
     setShowTweaksSheet(false);
     resetInputAndFeedback();
   };
@@ -3151,7 +3173,15 @@ export default function App() {
       };
       save(nextState);
       setNameInput(nextUsername);
-      setScreen('home');
+      if (isEditingProfile) {
+        navigateToRoute({ kind: 'profile' }, { replace: true });
+        return;
+      }
+      if (route.kind === 'onboarding' && route.next) {
+        navigateToRoute(parseAppRoute(`http://localhost${route.next}`), { replace: true });
+        return;
+      }
+      navigateToRoute({ kind: 'home' }, { replace: true });
     };
 
     if (!canJoinGlobalLeaderboard) {
@@ -3261,65 +3291,227 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    const matchPath = url.pathname.match(/\/match\/([^/?#]+)/i);
-    if (!matchPath) return;
+    const handlePopState = () => setRoute(parseAppRoute(window.location.href));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
-    const matchId = decodeURIComponent(matchPath[1]);
-    if (!matchId) return;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-    const token = url.searchParams.get('token');
-    if (!token) {
-      setInviteErrorMessage('This challenge link is missing its join token.');
-      setScreen('invite_invalid');
+    if (route.kind === 'root') {
+      const hasSeenLanding = window.localStorage.getItem(LANDING_SEEN_STORAGE_KEY) === '1';
+      if (!hasSeenLanding) {
+        setScreen('landing');
+        return;
+      }
+      navigateToRoute(state.user ? { kind: 'home' } : { kind: 'onboarding', next: null }, { replace: true });
       return;
     }
 
-    setPendingInviteMatchId(matchId);
-    if (!state.user?.userId) {
-      setScreen('onboarding');
+    if (route.kind === 'invite_entry' && !state.user) {
+      openOnboardingWithNext(buildAppRouteHref(route), { replace: true });
       return;
     }
-    if (matchJoinAttemptRef.current === `${matchId}:${state.user.userId}`) return;
-    matchJoinAttemptRef.current = `${matchId}:${state.user.userId}`;
 
-    let cancelled = false;
-    joinMatch({
-      matchId,
-      joinToken: token,
-      guestPlayerId: state.user.userId
-    })
-      .then(() => {
-        if (cancelled) return;
-        setFriendMatch({
-          matchId,
-          joinToken: token,
-          role: 'guest',
-          status: 'ready',
-          hostPlayerId: null,
-          hostUsername: null,
-          guestPlayerId: state.user?.userId ?? null,
-          guestUsername: state.user?.username ?? null,
-          startAt: null,
-          avgRatingLocked: null,
-          seedLocked: null,
-          challengeConfig: null,
-          results: null,
-          submitted: false
+    if (routeNeedsUser(route) && !state.user) {
+      openOnboardingWithNext(currentRouteHref, { replace: true });
+      return;
+    }
+
+    if (route.kind === 'onboarding' && state.user && !route.next) {
+      navigateToRoute({ kind: 'home' }, { replace: true });
+      return;
+    }
+
+    switch (route.kind) {
+      case 'home':
+        setScreen('home');
+        break;
+      case 'practice':
+        setScreen(route.stage === 'library' ? 'practice' : route.stage === 'results' ? 'summary' : 'run');
+        if (route.subjectId) setSelectedPracticeSubjectId(route.subjectId);
+        break;
+      case 'rankings':
+        setScreen('scores');
+        break;
+      case 'profile':
+        if (state.user) {
+          setNameInput(state.user.username);
+          setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
+        }
+        setScreen('profile');
+        break;
+      case 'onboarding':
+        setScreen('onboarding');
+        break;
+      case 'solo_challenge':
+        setScreen('run');
+        break;
+      case 'solo_results':
+        setScreen('summary');
+        break;
+      case 'invite_entry':
+        setScreen('invite_entry');
+        break;
+      case 'friend_challenge':
+        if (run.friendMatchId === route.matchId) {
+          setScreen('run');
+        } else if (friendMatch?.matchId === route.matchId && friendMatch.status === 'started') {
+          setScreen('match_countdown');
+        } else {
+          setScreen('match_lobby');
+        }
+        break;
+      case 'friend_results':
+        setScreen('summary');
+        break;
+      case 'invite_invalid':
+        setScreen('invite_invalid');
+        break;
+      case 'museum':
+        setScreen('museum');
+        break;
+      default:
+        break;
+    }
+  }, [route, state.user, currentRouteHref, friendMatch?.matchId, friendMatch?.status, run.friendMatchId]);
+
+  useEffect(() => {
+    if (!state.user) return;
+
+    if (route.kind === 'solo_challenge') {
+      const hasActiveSoloRun = run.experience === 'challenge' && !run.friendMatchId;
+      if (!hasActiveSoloRun) {
+        startRun('galaxy_mix', {
+          experience: 'challenge',
+          tweakDifficulty: 'adaptive',
+          tweakTimeMinutes: PRACTICE_DEFAULT_TIME
         });
-        setScreen('match_lobby');
-        triggerResultFlash('info', 'Joined challenge', 'Waiting for host to start.');
+      }
+      return;
+    }
+
+    if (route.kind === 'practice') {
+      const routeSubject =
+        practiceSubjects.find((subject) => subject.id === route.subjectId) ??
+        practiceSubjects.find((subject) => subject.id === selectedPracticeSubjectId) ??
+        practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+        practiceSubjects[0];
+
+      if (routeSubject.id !== selectedPracticeSubjectId) {
+        setSelectedPracticeSubjectId(routeSubject.id);
+      }
+
+      if (route.stage === 'session') {
+        const hasActivePracticeRun =
+          run.experience === 'practice' &&
+          !run.friendMatchId &&
+          run.practiceSubjectId === routeSubject.id;
+        if (!hasActivePracticeRun) {
+          const mode: GameMode =
+            routeSubject.kind === 'puzzle'
+              ? 'puzzle_orbit'
+              : routeSubject.kind === 'mixed'
+                ? 'galaxy_mix'
+                : 'rocket_rush';
+          startRun(mode, {
+            experience: 'practice',
+            practiceSubject: routeSubject,
+            tweakDifficulty: PRACTICE_DEFAULT_DIFFICULTY,
+            tweakTimeMinutes: PRACTICE_DEFAULT_TIME
+          });
+        }
+        return;
+      }
+
+      if (route.stage === 'results') {
+        const hasPracticeSummary = run.experience === 'practice' && !run.friendMatchId;
+        if (!hasPracticeSummary) {
+          navigateToRoute({ kind: 'practice', stage: 'library', subjectId: routeSubject.id }, { replace: true });
+        }
+        return;
+      }
+    }
+
+    if (route.kind === 'solo_results') {
+      const hasSoloSummary = run.experience === 'challenge' && !run.friendMatchId;
+      if (!hasSoloSummary) {
+        navigateToRoute({ kind: 'home' }, { replace: true });
+      }
+    }
+  }, [route, state.user, run.experience, run.friendMatchId, run.practiceSubjectId, selectedPracticeSubjectId]);
+
+  useEffect(() => {
+    if (route.kind !== 'invite_entry') return;
+    setPendingInviteMatchId(route.matchId);
+    if (!route.token) {
+      setInviteErrorMessage('This challenge link is missing its join token.');
+      navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+      return;
+    }
+    let cancelled = false;
+    fetchMatch(route.matchId)
+      .then((snapshot) => {
+        if (cancelled) return;
+        setInvitePreviewHostName(snapshot.hostUsername ?? null);
       })
       .catch(() => {
         if (cancelled) return;
         setInviteErrorMessage('This challenge link has expired or is no longer active.');
-        setScreen('invite_invalid');
+        navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
       });
-
     return () => {
       cancelled = true;
     };
-  }, [state.user?.userId, state.user?.username]);
+  }, [route]);
+
+  useEffect(() => {
+    if ((route.kind !== 'friend_challenge' && route.kind !== 'friend_results') || !state.user?.userId) return;
+    const matchId = route.matchId;
+    let cancelled = false;
+    fetchMatch(matchId)
+      .then((snapshot) => {
+        if (cancelled) return;
+        const role =
+          snapshot.hostPlayerId === state.user?.userId
+            ? 'host'
+            : snapshot.guestPlayerId === state.user?.userId
+              ? 'guest'
+              : null;
+        if (!role) {
+          setInviteErrorMessage('This friend challenge is not available for your current player.');
+          navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+          return;
+        }
+        setFriendMatch((prev) => ({
+          matchId,
+          joinToken: prev?.matchId === matchId ? prev.joinToken : null,
+          role,
+          status: snapshot.status,
+          hostPlayerId: snapshot.hostPlayerId,
+          hostUsername: snapshot.hostUsername,
+          guestPlayerId: snapshot.guestPlayerId,
+          guestUsername: snapshot.guestUsername,
+          startAt: snapshot.startAt,
+          avgRatingLocked: snapshot.avgRatingLocked,
+          seedLocked: snapshot.seedLocked,
+          challengeConfig: snapshot.challengeConfig,
+          results: snapshot.results,
+          startRequested: prev?.matchId === matchId ? prev.startRequested : false,
+          submitted: prev?.matchId === matchId ? prev.submitted : false
+        }));
+        setInvitePreviewHostName(snapshot.hostUsername ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setInviteErrorMessage('This challenge link has expired or is no longer active.');
+        navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route, state.user?.userId]);
 
   useEffect(() => {
     if (!friendMatch?.matchId || !state.user?.userId) return;
@@ -3404,15 +3596,19 @@ export default function App() {
     };
 
     const waitMs = Math.max(friendMatch.startAt - Date.now(), 0);
+    if (screen !== 'run') {
+      setScreen('match_countdown');
+    }
     const timerId = window.setTimeout(() => startFriendChallengeRun(snapshot), waitMs);
     return () => window.clearTimeout(timerId);
   }, [
     friendMatch,
-    run.friendMatchId
+    run.friendMatchId,
+    screen
   ]);
 
   useEffect(() => {
-    if (screen !== 'match_lobby' || friendMatch?.status !== 'started' || !friendMatch.startAt) return;
+    if ((screen !== 'match_lobby' && screen !== 'match_countdown') || friendMatch?.status !== 'started' || !friendMatch.startAt) return;
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(intervalId);
   }, [screen, friendMatch?.status, friendMatch?.startAt]);
@@ -3420,7 +3616,7 @@ export default function App() {
   useEffect(() => {
     if (!friendMatch?.submitted) return;
     if (friendMatch.status !== 'finished' || !friendMatch.results) return;
-    setScreen('summary');
+    navigateToRoute({ kind: 'friend_results', matchId: friendMatch.matchId }, { replace: true });
   }, [friendMatch?.submitted, friendMatch?.status, friendMatch?.results]);
 
   const leaderboardSourceRows = useMemo(() => {
@@ -3556,15 +3752,15 @@ export default function App() {
     if (!state.user) return;
     setNameInput(state.user.username);
     setSelectedCharacterId(getCharacterById(state.user.avatarId)?.id ?? defaultCharacterId);
-    setScreen('onboarding');
+    navigateToRoute({ kind: 'profile' });
   };
 
   const openHomeTab = () => {
-    setScreen('home');
+    navigateToRoute({ kind: 'home' });
   };
 
   const openPracticeTab = () => {
-    setScreen('practice');
+    navigateToRoute({ kind: 'practice', stage: 'library', subjectId: selectedPracticeSubjectId });
   };
 
   const createInviteLink = async () => {
@@ -3615,7 +3811,8 @@ export default function App() {
         startRequested: false,
         submitted: false
       });
-      setScreen('match_lobby');
+      setPendingInviteMatchId(created.matchId);
+      navigateToRoute({ kind: 'friend_challenge', matchId: created.matchId });
 
       if (typeof navigator !== 'undefined' && navigator.share && isMobileViewport) {
         await navigator.share({
@@ -3661,19 +3858,49 @@ export default function App() {
     }
   };
 
+  const joinFriendInvite = async (matchId: string, token: string) => {
+    if (!state.user?.userId) {
+      openOnboardingWithNext(buildAppRouteHref({ kind: 'invite_entry', matchId, token }));
+      return;
+    }
+    if (matchJoinAttemptRef.current === `${matchId}:${state.user.userId}`) return;
+    matchJoinAttemptRef.current = `${matchId}:${state.user.userId}`;
+    try {
+      await joinMatch({
+        matchId,
+        joinToken: token,
+        guestPlayerId: state.user.userId
+      });
+      setFriendMatch({
+        matchId,
+        joinToken: token,
+        role: 'guest',
+        status: 'ready',
+        hostPlayerId: null,
+        hostUsername: invitePreviewHostName,
+        guestPlayerId: state.user.userId,
+        guestUsername: state.user.username,
+        startAt: null,
+        avgRatingLocked: null,
+        seedLocked: null,
+        challengeConfig: null,
+        results: null,
+        submitted: false
+      });
+      navigateToRoute({ kind: 'friend_challenge', matchId });
+      triggerResultFlash('info', 'Joined challenge', 'Waiting for host to start.');
+    } catch {
+      setInviteErrorMessage('This challenge link has expired or is no longer active.');
+      navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+    }
+  };
+
   const leaveFriendMatchLobby = () => {
     setFriendMatch(null);
     setFriendMatchStartMs(null);
     setPendingInviteMatchId(null);
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      if (/\/match\/[^/?#]+/i.test(url.pathname)) {
-        url.pathname = '/';
-        url.search = '';
-        window.history.replaceState({}, '', url.toString());
-      }
-    }
-    setScreen('home');
+    setInvitePreviewHostName(null);
+    navigateToRoute({ kind: 'home' }, { replace: true });
   };
 
   const renderScratchpad = (idSuffix: string) => {
@@ -3865,7 +4092,7 @@ export default function App() {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(LANDING_SEEN_STORAGE_KEY, '1');
     }
-    setScreen(state.user ? 'home' : 'onboarding');
+    navigateToRoute(state.user ? { kind: 'home' } : { kind: 'onboarding', next: null }, { replace: true });
   };
 
   const renderWinnerCrown = (rank: number, className = '') => {
@@ -3944,11 +4171,11 @@ export default function App() {
         ) : (
           <>
             <h1 className="onboarding-title">
-              {pendingInviteMatchId ? 'A friend challenged you!' : 'Welcome aboard, Cadet!'}
+              {pendingInviteMatchId ? `${invitePreviewHostName ?? 'A friend'} challenged you!` : 'Welcome aboard, Cadet!'}
             </h1>
             <p className="muted onboarding-intro">
               {pendingInviteMatchId
-                ? 'Choose your cadet name and space buddy, then jump into the same mission.'
+                ? `Choose your cadet name and space buddy, then jump into the same mission${invitePreviewHostName ? ` with ${invitePreviewHostName}` : ''}.`
                 : 'Choose your cadet name and space buddy to start your first mission.'}
             </p>
           </>
@@ -3998,7 +4225,7 @@ export default function App() {
               {isRegisteringPlayer ? 'Saving...' : isEditingProfile ? 'Save Cadet' : pendingInviteMatchId ? "Join Friend Challenge" : "Let's Launch"}
             </button>
             {isEditingProfile && (
-              <button className="btn btn-secondary" onClick={() => setScreen('home')}>
+              <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'home' })}>
                 Cancel
               </button>
             )}
@@ -4035,7 +4262,7 @@ export default function App() {
         <button className="btn btn-primary" onClick={startChallengeRun}>
           Start Challenge
         </button>
-        <button className="text-cta practice-instead-link" onClick={() => setScreen('practice')}>
+        <button className="text-cta practice-instead-link" onClick={() => navigateToRoute({ kind: 'practice', stage: 'library', subjectId: selectedPracticeSubjectId })}>
           Practice instead →
         </button>
       </section>
@@ -4118,6 +4345,45 @@ export default function App() {
     </>
   );
 
+  const inviteEntry = (
+    <>
+      <section className="section-header">
+        <h2 className="text-title">Friend Challenge</h2>
+        <span className="tag">Invite</span>
+      </section>
+      <section className="card match-lobby-card">
+        <p className="match-status-title">{invitePreviewHostName ?? 'A friend'} challenged you!</p>
+        <p className="muted">You’ll both play the same mission and compare scores. Highest score wins.</p>
+        <div className="match-lobby-versus">
+          <div className="match-lobby-player">
+            <span className="match-lobby-player-label">Host</span>
+            <strong>{invitePreviewHostName ?? 'Friend'}</strong>
+          </div>
+          <div className="match-lobby-versus-mark">vs</div>
+          <div className="match-lobby-player">
+            <span className="match-lobby-player-label">You</span>
+            <strong>{state.user?.username ?? 'Cadet'}</strong>
+          </div>
+        </div>
+        <div className="btn-row">
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              route.kind === 'invite_entry' && route.token
+                ? joinFriendInvite(route.matchId, route.token)
+                : navigateToRoute({ kind: 'invite_invalid' }, { replace: true })
+            }
+          >
+            Join Challenge
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'home' })}>
+            Back Home
+          </button>
+        </div>
+      </section>
+    </>
+  );
+
   const matchLobby = (
     <>
       <section className="section-header">
@@ -4143,17 +4409,29 @@ export default function App() {
             <p className="muted">
               Match ID: <strong>{friendMatch.matchId}</strong>
             </p>
-            {friendMatch.status === 'waiting' && <p>Waiting for your friend to join the mission…</p>}
-            {friendMatch.status === 'ready' && <p>{opponentDisplayName} joined. Mission countdown is starting.</p>}
+            {friendMatch.status === 'waiting' && (
+              <div className="match-status-block">
+                <p className="match-status-title">Waiting for your friend…</p>
+                <p className="muted">Share the invite link. Your co-pilot will appear here as soon as they join.</p>
+              </div>
+            )}
+            {friendMatch.status === 'ready' && (
+              <div className="match-status-block success">
+                <p className="match-status-title">{opponentDisplayName} joined!</p>
+                <p className="muted">Head-to-head mission ready. Countdown begins automatically.</p>
+              </div>
+            )}
             {friendMatch.status === 'started' && (
-              <p>
-                {hostDisplayName} vs {guestDisplayName} starts in <strong>{matchCountdownSeconds ?? 0}</strong>…
-              </p>
+              <div className="match-status-block started">
+                <p className="match-status-title">{hostDisplayName} vs {guestDisplayName}</p>
+                <p className="muted">Mission starts in <strong>{matchCountdownSeconds ?? 0}</strong>…</p>
+              </div>
             )}
             {friendMatch.status === 'finished' && (
-              <p>
-                Match complete. {friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId === state.user?.userId ? 'You' : opponentDisplayName}` : 'Results ready.'}
-              </p>
+              <div className="match-status-block">
+                <p className="match-status-title">Match complete</p>
+                <p className="muted">{friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId === state.user?.userId ? 'You' : opponentDisplayName}` : 'Results ready.'}</p>
+              </div>
             )}
             {latestInviteLink && friendMatch.role === 'host' && (
               <div className="invite-link-card" role="status" aria-live="polite">
@@ -4178,7 +4456,7 @@ export default function App() {
             )}
             <div className="btn-row">
               {friendMatch.status === 'finished' && (
-                <button className="btn btn-primary" onClick={() => setScreen('summary')}>
+                <button className="btn btn-primary" onClick={() => friendMatch?.matchId && navigateToRoute({ kind: 'friend_results', matchId: friendMatch.matchId })}>
                   View Results
                 </button>
               )}
@@ -4188,6 +4466,22 @@ export default function App() {
             </div>
           </>
         )}
+      </section>
+    </>
+  );
+
+  const matchCountdown = (
+    <>
+      <section className="section-header">
+        <h2 className="text-title">Friend Challenge</h2>
+        <span className="tag">Countdown</span>
+      </section>
+      <section className="card match-countdown-card">
+        <p className="match-countdown-kicker">Head-to-head mission</p>
+        <h3 className="match-countdown-title">{hostDisplayName} vs {guestDisplayName}</h3>
+        <p className="muted">Same mission. Same questions. Highest score wins.</p>
+        <div className="match-countdown-number">{matchCountdownSeconds ?? 0}</div>
+        <p className="match-countdown-blast">Blast off soon…</p>
       </section>
     </>
   );
@@ -4585,13 +4879,7 @@ export default function App() {
         </div>
         {friendMatchResults && (
           <div className="summary-match-results">
-            <p className="text-label">
-              {friendMatchResults.winnerPlayerId === state.user?.userId
-                ? 'You win!'
-                : friendMatchResults.players[0]?.scoreStars === friendMatchResults.players[1]?.scoreStars
-                  ? "It's a tie!"
-                  : `${opponentDisplayName} wins!`}
-            </p>
+            <p className="summary-match-title">{friendChallengeResultTitle}</p>
             <p className="muted">
               {friendMatchResults.players
                 .map((entry) => `${entry.playerId === state.user?.userId ? 'You' : opponentDisplayName}: ${entry.scoreStars}`)
@@ -4600,8 +4888,8 @@ export default function App() {
             <div className="summary-match-grid">
               {friendMatchResults.players.map((entry) => (
                 <div key={`${entry.playerId}-${entry.submittedAt}`} className="summary-match-card">
-                  <strong>{entry.playerId === state.user?.userId ? 'You' : 'Friend'}</strong>
-                  <span>{entry.scoreStars} ⭐</span>
+                  <strong>{entry.playerId === state.user?.userId ? 'You' : opponentDisplayName}</strong>
+                  <span className="summary-match-score">{entry.scoreStars} ⭐</span>
                   <small>
                     {entry.correctCount}/{entry.totalCount} • {Math.round(entry.accuracy * 100)}% • {Math.round(entry.timeMs / 1000)}s
                   </small>
@@ -4611,23 +4899,32 @@ export default function App() {
           </div>
         )}
         <div className="btn-row">
-          <button
-            className="btn btn-primary"
-            onClick={() =>
-              startRun(run.gameMode, {
-                experience: run.experience,
-                practiceSubject:
-                  practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
-                  practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
-                  practiceSubjects[0],
-                tweakDifficulty: run.tweakDifficulty,
-                tweakTimeMinutes: run.tweakTimeMinutes
-              })
-            }
-          >
-            Play Again
-          </button>
-          <button className="btn btn-secondary" onClick={() => setScreen('scores')}>💫 Stars</button>
+          {friendMatchResults ? (
+            <>
+              <button className="btn btn-primary" onClick={createInviteLink}>Rematch</button>
+              <button className="btn btn-secondary" onClick={startChallengeRun}>Solo Challenge</button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() =>
+                  startRun(run.gameMode, {
+                    experience: run.experience,
+                    practiceSubject:
+                      practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
+                      practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+                      practiceSubjects[0],
+                    tweakDifficulty: run.tweakDifficulty,
+                    tweakTimeMinutes: run.tweakTimeMinutes
+                  })
+                }
+              >
+                Play Again
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'rankings' })}>💫 Stars</button>
+            </>
+          )}
         </div>
       </section>
     </>
@@ -4920,7 +5217,11 @@ export default function App() {
     return landing;
   }
 
-  if (!state.user || screen === 'onboarding') {
+  if (screen === 'onboarding') {
+    return onboarding;
+  }
+
+  if (!state.user) {
     return onboarding;
   }
 
@@ -4965,7 +5266,7 @@ export default function App() {
           <button
             type="button"
             className="app-brand-inline app-brand-button"
-            onClick={() => setScreen('home')}
+            onClick={() => navigateToRoute({ kind: 'home' })}
             aria-label="Go to Home"
             title="Go to Home"
           >
@@ -4997,9 +5298,12 @@ export default function App() {
           </section>
         )}
 
+        {screen === 'profile' && onboarding}
         {screen === 'home' && home}
         {screen === 'practice' && practice}
+        {screen === 'invite_entry' && inviteEntry}
         {screen === 'match_lobby' && matchLobby}
+        {screen === 'match_countdown' && matchCountdown}
         {screen === 'invite_invalid' && invalidInvite}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
@@ -5009,7 +5313,7 @@ export default function App() {
 
       <nav className={`bottom-nav ${hideBottomNav ? 'is-hidden' : ''}`}>
         <button
-          className={`nav-item ${screen === 'home' ? 'active' : ''}`}
+          className={`nav-item ${route.kind === 'home' ? 'active' : ''}`}
           onClick={openHomeTab}
           aria-label="Home"
         >
@@ -5017,7 +5321,7 @@ export default function App() {
           <span className="nav-label">Home</span>
         </button>
         <button
-          className={`nav-item ${screen === 'practice' || (screen === 'run' && run.experience === 'practice') ? 'active' : ''}`}
+          className={`nav-item ${route.kind === 'practice' ? 'active' : ''}`}
           onClick={openPracticeTab}
           aria-label="Practice"
         >
@@ -5025,15 +5329,15 @@ export default function App() {
           <span className="nav-label">Practice</span>
         </button>
         <button
-          className={`nav-item ${screen === 'scores' ? 'active' : ''}`}
-          onClick={() => setScreen('scores')}
+          className={`nav-item ${route.kind === 'rankings' ? 'active' : ''}`}
+          onClick={() => navigateToRoute({ kind: 'rankings' })}
           aria-label="Rankings"
         >
           <span className="nav-icon">🏆</span>
           <span className="nav-label">Rankings</span>
         </button>
         <button
-          className="nav-item"
+          className={`nav-item ${route.kind === 'profile' ? 'active' : ''}`}
           onClick={openCaptainEditor}
           aria-label="Profile"
         >

@@ -222,7 +222,7 @@ export const handleMatchCreate = async (req: any, res: any) => {
   const hostHeader = typeof req.headers?.host === 'string' ? req.headers.host : '';
   const protocol = typeof req.headers?.['x-forwarded-proto'] === 'string' ? req.headers['x-forwarded-proto'] : 'https';
   const base = originHeader || (hostHeader ? `${protocol}://${hostHeader}` : '');
-  const joinUrl = base ? `${base.replace(/\/+$/, '')}/match/${matchId}?token=${joinToken}` : `/match/${matchId}?token=${joinToken}`;
+  const joinUrl = base ? `${base.replace(/\/+$/, '')}/invite/${matchId}?token=${joinToken}` : `/invite/${matchId}?token=${joinToken}`;
 
   const nextMatch: MatchRecord = {
     matchId,

@@ -380,7 +380,7 @@ app.post('/api/match/create', async (req, res) => {
   const now = new Date().toISOString();
   const fallbackOrigin = `${req.protocol}://${req.get('host')}`;
   const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim() ? req.headers.origin : fallbackOrigin;
-  const joinUrl = `${origin.replace(/\/+$/, '')}/match/${matchId}?token=${joinToken}`;
+  const joinUrl = `${origin.replace(/\/+$/, '')}/invite/${matchId}?token=${joinToken}`;
 
   state.matches[matchId] = {
     matchId,
