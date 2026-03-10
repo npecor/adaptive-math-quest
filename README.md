@@ -1,53 +1,58 @@
-# World Hunt (MVP)
+# Adaptive Math Quest (MVP)
 
-Mobile-first hosted private scavenger hunt app.
+React + TypeScript web app built with Vite.
 
-## MVP implemented
-- Lightweight session model (no auth): callsign + device session token.
-- Host creates hunt, shares invite link/code, starts/ends hunt.
-- Players join as individuals with callsigns.
-- Photo or short clip submissions (camera roll + in-app capture entry point).
-- Feed-first default experience with reactions + nominations.
-- Host curation: Host Pick, Pin, Award, Add to Recap, Remove submission.
-- Polling-based live updates (12s interval while live).
-- Shareable recap route: `/hunt/:huntId/recap`.
+## Features
+- Onboarding with required username, pseudonymous handle suggestions, and avatar selection.
+- 12-item runs: 8 adaptive Flow items, 3 mini-puzzles (pick 1 of 2), and optional boss puzzle.
+- Elo-like hidden rating updates and adaptive item selection.
+- Hint ladder with reveal behavior and point adjustments.
+- Sprint + Brain + Total scoring.
+- Daily streak and puzzle streak tracking.
+- Local high scores and Puzzle Museum.
+- Backend leaderboard API with username dedupe + score syncing.
 
-## Tech stack
-- Frontend: React + TypeScript + Vite
-- API server: Node + Express + JSON file persistence
-- Media: base64 upload API writing files to `server/uploads`
+## Seed content
+- `content/flow.seed.json`
+- `content/puzzles.seed.json`
 
 ## Run locally
 ```bash
 npm install
 npm run dev:full
+npm test
+npm run build
 ```
 
-- Web app: `http://localhost:5173`
-- API server: `http://localhost:8787`
+## Dev scripts
+- `npm run dev:full` starts both API (`:8787`) and Vite web dev server.
+- `npm run dev:api` starts only the leaderboard API.
+- `npm run dev` starts only Vite (expects API already running for leaderboard features).
 
-`dev:full` runs:
-- `npm run dev:api` (Express API)
-- `npm run dev -- --host` (Vite web)
+## Global Leaderboard (Supabase + Vercel API)
 
-## Key endpoints
-- `POST /api/hunts`
-- `POST /api/hunts/:huntId/join`
-- `POST /api/hunts/:huntId/start`
-- `POST /api/hunts/:huntId/end`
-- `GET /api/hunts/:huntId/feed`
-- `POST /api/upload`
-- `POST /api/submissions`
-- `PATCH /api/submissions/:id/curate`
-- `POST /api/submissions/:id/react`
-- `POST /api/submissions/:id/nominate`
-- `GET /api/hunts/:huntId/recap`
+The app now supports serverless API routes backed by Supabase:
+- `/api/health`
+- `/api/players/register`
+- `/api/scores/upsert`
+- `/api/leaderboard`
 
-## Data files
-- Hunt state JSON: `server/weekend-world-hunt-data.json`
-- Uploaded media: `server/uploads/*`
+### 1) Create DB table in Supabase
+Run SQL from:
+- `supabase/leaderboard_schema.sql`
 
-## Notes
-- Comments are intentionally off in MVP.
-- Host and feed views rely on polling, not websockets.
-- Clip max is enforced client-side + server-side (default 7 seconds).
+### 2) Set Vercel environment variables
+For the deployed frontend project, add:
+- `SUPABASE_URL` = your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` = your Supabase service role key
+- `LEADERBOARD_CORS_ORIGIN` = your frontend domain (for example `https://adaptive-math-quest-qy6c.vercel.app`)
+
+Optional (if API is hosted on a separate domain):
+- `VITE_LEADERBOARD_BASE_URL` = full API base URL
+
+If API and frontend are in the same Vercel project, leave `VITE_LEADERBOARD_BASE_URL` empty so the app uses relative `/api/*`.
+
+### 3) Redeploy
+After env vars are set, redeploy. The leaderboard status should show:
+- `🌐 Online leaderboard`
+instead of local-only fallback.

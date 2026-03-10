@@ -13,40 +13,6 @@ export interface LeaderboardRow {
 
 export type LeaderboardMode = 'all_time' | 'best_run' | 'trophies';
 
-export type MatchStatus = 'waiting' | 'ready' | 'started' | 'finished';
-
-export interface MatchConfig {
-  gameMode: 'galaxy_mix';
-  flowTarget: number;
-  puzzleTarget: number;
-}
-
-export interface MatchResults {
-  winnerPlayerId: string;
-  players: Array<{
-    playerId: string;
-    scoreStars: number;
-    correctCount: number;
-    totalCount: number;
-    timeMs: number;
-    accuracy: number;
-    submittedAt: string;
-  }>;
-  tiebreakUsed: 'score' | 'accuracy' | 'time';
-}
-
-export interface MatchSnapshot {
-  matchId: string;
-  status: MatchStatus;
-  hostPlayerId: string | null;
-  guestPlayerId: string | null;
-  startAt: number | null;
-  avgRatingLocked: number | null;
-  seedLocked: number | null;
-  challengeConfig: MatchConfig | null;
-  results: MatchResults | null;
-}
-
 interface RegisterPlayerRequest {
   username: string;
   avatarId: string;
@@ -70,51 +36,6 @@ interface UpsertScoreRequest {
   bestRunStars: number;
   trophiesEarned: number;
   extensionsSolved: number;
-}
-
-interface MatchCreateRequest {
-  hostPlayerId: string;
-}
-
-interface MatchCreateResponse {
-  matchId: string;
-  joinUrl: string;
-}
-
-interface MatchJoinRequest {
-  matchId: string;
-  joinToken: string;
-  guestPlayerId: string;
-}
-
-interface MatchJoinResponse {
-  status: 'ready';
-}
-
-interface MatchStartRequest {
-  matchId: string;
-  hostPlayerId: string;
-}
-
-interface MatchStartResponse {
-  startAt: number;
-  avgRatingLocked: number;
-  seedLocked: number;
-  challengeConfig: MatchConfig;
-}
-
-interface MatchSubmitRequest {
-  matchId: string;
-  playerId: string;
-  scoreStars: number;
-  correctCount: number;
-  totalCount: number;
-  timeMs: number;
-}
-
-interface MatchSubmitResponse {
-  status: MatchStatus;
-  resultsIfFinished: MatchResults | null;
 }
 
 const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -180,30 +101,3 @@ export const fetchLeaderboardHealth = async (): Promise<boolean> => {
   const data = await jsonRequest<{ ok: boolean }>(withBaseUrl('/api/health'));
   return Boolean(data.ok);
 };
-
-export const createMatch = async (payload: MatchCreateRequest): Promise<MatchCreateResponse> =>
-  jsonRequest<MatchCreateResponse>(withBaseUrl('/api/match/create'), {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-
-export const joinMatch = async (payload: MatchJoinRequest): Promise<MatchJoinResponse> =>
-  jsonRequest<MatchJoinResponse>(withBaseUrl('/api/match/join'), {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-
-export const startMatch = async (payload: MatchStartRequest): Promise<MatchStartResponse> =>
-  jsonRequest<MatchStartResponse>(withBaseUrl('/api/match/start'), {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-
-export const fetchMatch = async (matchId: string): Promise<MatchSnapshot> =>
-  jsonRequest<MatchSnapshot>(withBaseUrl(`/api/match/${encodeURIComponent(matchId)}`));
-
-export const submitMatchResult = async (payload: MatchSubmitRequest): Promise<MatchSubmitResponse> =>
-  jsonRequest<MatchSubmitResponse>(withBaseUrl('/api/match/submit'), {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });

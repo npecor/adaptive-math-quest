@@ -44,15 +44,6 @@ describe('flow multiple-choice generation', () => {
 
     expect(found).toBeGreaterThan(0);
   });
-
-  it('strictly enforces template allowlists when provided', () => {
-    for (let i = 0; i < 200; i += 1) {
-      const item = generateAdaptiveFlowItem(980, new Set<string>(), undefined, [], [], [], 0, undefined, {
-        allowedTemplates: ['fraction_compare']
-      });
-      expect(item.template).toBe('fraction_compare');
-    }
-  });
 });
 
 describe('flow coaching hints', () => {

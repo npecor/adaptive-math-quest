@@ -925,36 +925,6 @@ const pickTemplate = (difficulty: number): Template => {
   return pick(eligible);
 };
 
-const buildCandidateFromTemplate = (
-  template: Template,
-  targetDifficulty: number,
-  options: { forceSingleDigitAddSub?: boolean } = {}
-): FlowItem => {
-  const boundedDifficulty = clamp(
-    Math.round(targetDifficulty + randInt(-35, 35)),
-    template.minDifficulty,
-    template.maxDifficulty
-  );
-  const built =
-    template.key === 'add_sub'
-      ? createAddSub(boundedDifficulty, { singleDigitOnly: options.forceSingleDigitAddSub })
-      : template.build(boundedDifficulty);
-  const rawCandidate: FlowItem = {
-    id: `${template.key}-${built.signature}`,
-    type: 'flow',
-    difficulty: boundedDifficulty,
-    ...built
-  };
-  const annotated = analyzeFlowItem(rawCandidate);
-  return {
-    ...rawCandidate,
-    difficulty: annotated.difficultyScore,
-    tier: annotated.difficultyLabel,
-    tags: [...new Set([...(rawCandidate.tags ?? []), ...annotated.tags])],
-    difficultyBreakdown: annotated.breakdown
-  };
-};
-
 const passesConstraints = (item: FlowItem, rating: number): boolean => {
   if (rating < 975) {
     if (item.template === 'add_sub' && Number(item.answer) < 0) return false;
@@ -1169,9 +1139,6 @@ export const generateAdaptiveFlowItem = (
 
   const target = chooseTargetDifficulty(rating, correctStreak, targetProfile);
   const allowTrivialForHighRating = targetProfile === 'training_flow';
-  const constrainedTemplates = (resolvedAllowedTemplates ?? [])
-    .map((key) => templates.find((template) => template.key === key))
-    .filter((template): template is Template => Boolean(template));
   const candidates = Array.from({ length: FLOW_SELECTION_SETTINGS.candidateCount }, () =>
     buildCandidate(target, rating, {
       allowTrivialForHighRating,
@@ -1206,27 +1173,6 @@ export const generateAdaptiveFlowItem = (
           : pool;
 
   if (!scoringPool.length) {
-    if (constrainedTemplates.length) {
-      for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 50; attempt += 1) {
-        const baselineTarget = prevDifficulty ?? target;
-        const constrainedTemplate = pick(constrainedTemplates);
-        const retry = buildCandidateFromTemplate(constrainedTemplate, baselineTarget, {
-          forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
-        });
-        if (!assertIntegerSafe(retry)) continue;
-        if (typeof resolvedMaxDifficultyScore === 'number' && retry.difficulty > resolvedMaxDifficultyScore) continue;
-        if (
-          typeof options.maxJumpFromPrev === 'number' &&
-          prevDifficulty !== undefined &&
-          Math.abs(retry.difficulty - prevDifficulty) > options.maxJumpFromPrev
-        ) {
-          continue;
-        }
-        if (usedSignatures.has(retry.id) && attempt < FLOW_SELECTION_SETTINGS.candidateCount * 45) continue;
-        return retry;
-      }
-    }
-
     for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 40; attempt += 1) {
       const baselineTarget = prevDifficulty ?? target;
       const constraintRating = prevDifficulty !== undefined ? Math.min(rating, prevDifficulty) : rating;
@@ -1315,25 +1261,6 @@ export const generateAdaptiveFlowItem = (
       }
       if (usedSignatures.has(retry.id) && attempt < FLOW_SELECTION_SETTINGS.candidateCount * 18) continue;
       return retry;
-    }
-
-    if (violatesTemplate && constrainedTemplates.length) {
-      for (let attempt = 0; attempt < FLOW_SELECTION_SETTINGS.candidateCount * 30; attempt += 1) {
-        const constrainedTemplate = pick(constrainedTemplates);
-        const retry = buildCandidateFromTemplate(constrainedTemplate, prevDifficulty ?? target, {
-          forceSingleDigitAddSub: resolvedForceSingleDigitAddSub
-        });
-        if (!assertIntegerSafe(retry)) continue;
-        if (typeof resolvedMaxDifficultyScore === 'number' && retry.difficulty > resolvedMaxDifficultyScore) continue;
-        if (
-          typeof options.maxJumpFromPrev === 'number' &&
-          prevDifficulty !== undefined &&
-          Math.abs(retry.difficulty - prevDifficulty) > options.maxJumpFromPrev
-        ) {
-          continue;
-        }
-        return retry;
-      }
     }
   }
 
