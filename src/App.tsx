@@ -3481,6 +3481,7 @@ export default function App() {
     if ((route.kind !== 'friend_challenge' && route.kind !== 'friend_results') || !state.user?.userId) return;
     const matchId = route.matchId;
     let cancelled = false;
+    const localMatchForRoute = friendMatch?.matchId === matchId ? friendMatch : null;
 
     const resolveFriendMatch = async () => {
       const maxAttempts = 6;
@@ -3493,7 +3494,7 @@ export default function App() {
               ? 'host'
               : snapshot.guestPlayerId === state.user?.userId
                 ? 'guest'
-                : null;
+                : localMatchForRoute?.role ?? null;
 
           if (!role) {
             if (attempt < maxAttempts - 1) {
@@ -3507,25 +3508,39 @@ export default function App() {
 
           setFriendMatch((prev) => ({
             matchId,
-            joinToken: prev?.matchId === matchId ? prev.joinToken : null,
+            joinToken:
+              prev?.matchId === matchId
+                ? prev.joinToken
+                : localMatchForRoute?.joinToken ?? null,
             role,
-            status: snapshot.status,
-            hostPlayerId: snapshot.hostPlayerId,
-            hostUsername: snapshot.hostUsername,
-            guestPlayerId: snapshot.guestPlayerId,
-            guestUsername: snapshot.guestUsername,
-            startAt: snapshot.startAt,
-            avgRatingLocked: snapshot.avgRatingLocked,
-            seedLocked: snapshot.seedLocked,
-            challengeConfig: snapshot.challengeConfig,
-            results: snapshot.results,
-            startRequested: prev?.matchId === matchId ? prev.startRequested : false,
-            submitted: prev?.matchId === matchId ? prev.submitted : false
+            status: snapshot.status ?? localMatchForRoute?.status ?? 'waiting',
+            hostPlayerId: snapshot.hostPlayerId ?? localMatchForRoute?.hostPlayerId ?? null,
+            hostUsername: snapshot.hostUsername ?? localMatchForRoute?.hostUsername ?? null,
+            guestPlayerId: snapshot.guestPlayerId ?? localMatchForRoute?.guestPlayerId ?? null,
+            guestUsername: snapshot.guestUsername ?? localMatchForRoute?.guestUsername ?? null,
+            startAt: snapshot.startAt ?? localMatchForRoute?.startAt ?? null,
+            avgRatingLocked: snapshot.avgRatingLocked ?? localMatchForRoute?.avgRatingLocked ?? null,
+            seedLocked: snapshot.seedLocked ?? localMatchForRoute?.seedLocked ?? null,
+            challengeConfig: snapshot.challengeConfig ?? localMatchForRoute?.challengeConfig ?? null,
+            results: snapshot.results ?? localMatchForRoute?.results ?? null,
+            startRequested:
+              prev?.matchId === matchId
+                ? prev.startRequested
+                : localMatchForRoute?.startRequested ?? false,
+            submitted:
+              prev?.matchId === matchId
+                ? prev.submitted
+                : localMatchForRoute?.submitted ?? false
           }));
-          setInvitePreviewHostName(snapshot.hostUsername ?? null);
+          setInvitePreviewHostName(snapshot.hostUsername ?? localMatchForRoute?.hostUsername ?? null);
           return;
         } catch {
           if (cancelled) return;
+          if (localMatchForRoute?.role) {
+            setFriendMatch((prev) => (prev?.matchId === matchId ? prev : localMatchForRoute));
+            setInvitePreviewHostName(localMatchForRoute.hostUsername ?? null);
+            return;
+          }
           if (attempt < maxAttempts - 1) {
             await new Promise((resolve) => setTimeout(resolve, 250));
             continue;
@@ -3541,7 +3556,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [route, state.user?.userId]);
+  }, [route, state.user?.userId, friendMatch]);
 
   useEffect(() => {
     if (!friendMatch?.matchId || !state.user?.userId) return;
