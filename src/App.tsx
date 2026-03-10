@@ -3481,44 +3481,63 @@ export default function App() {
     if ((route.kind !== 'friend_challenge' && route.kind !== 'friend_results') || !state.user?.userId) return;
     const matchId = route.matchId;
     let cancelled = false;
-    fetchMatch(matchId)
-      .then((snapshot) => {
-        if (cancelled) return;
-        const role =
-          snapshot.hostPlayerId === state.user?.userId
-            ? 'host'
-            : snapshot.guestPlayerId === state.user?.userId
-              ? 'guest'
-              : null;
-        if (!role) {
-          setInviteErrorMessage('This friend challenge is not available for your current player.');
+
+    const resolveFriendMatch = async () => {
+      const maxAttempts = 6;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        try {
+          const snapshot = await fetchMatch(matchId);
+          if (cancelled) return;
+          const role =
+            snapshot.hostPlayerId === state.user?.userId
+              ? 'host'
+              : snapshot.guestPlayerId === state.user?.userId
+                ? 'guest'
+                : null;
+
+          if (!role) {
+            if (attempt < maxAttempts - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              continue;
+            }
+            setInviteErrorMessage('This friend challenge is not available for your current player.');
+            navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+            return;
+          }
+
+          setFriendMatch((prev) => ({
+            matchId,
+            joinToken: prev?.matchId === matchId ? prev.joinToken : null,
+            role,
+            status: snapshot.status,
+            hostPlayerId: snapshot.hostPlayerId,
+            hostUsername: snapshot.hostUsername,
+            guestPlayerId: snapshot.guestPlayerId,
+            guestUsername: snapshot.guestUsername,
+            startAt: snapshot.startAt,
+            avgRatingLocked: snapshot.avgRatingLocked,
+            seedLocked: snapshot.seedLocked,
+            challengeConfig: snapshot.challengeConfig,
+            results: snapshot.results,
+            startRequested: prev?.matchId === matchId ? prev.startRequested : false,
+            submitted: prev?.matchId === matchId ? prev.submitted : false
+          }));
+          setInvitePreviewHostName(snapshot.hostUsername ?? null);
+          return;
+        } catch {
+          if (cancelled) return;
+          if (attempt < maxAttempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            continue;
+          }
+          setInviteErrorMessage('This challenge link has expired or is no longer active.');
           navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
           return;
         }
-        setFriendMatch((prev) => ({
-          matchId,
-          joinToken: prev?.matchId === matchId ? prev.joinToken : null,
-          role,
-          status: snapshot.status,
-          hostPlayerId: snapshot.hostPlayerId,
-          hostUsername: snapshot.hostUsername,
-          guestPlayerId: snapshot.guestPlayerId,
-          guestUsername: snapshot.guestUsername,
-          startAt: snapshot.startAt,
-          avgRatingLocked: snapshot.avgRatingLocked,
-          seedLocked: snapshot.seedLocked,
-          challengeConfig: snapshot.challengeConfig,
-          results: snapshot.results,
-          startRequested: prev?.matchId === matchId ? prev.startRequested : false,
-          submitted: prev?.matchId === matchId ? prev.submitted : false
-        }));
-        setInvitePreviewHostName(snapshot.hostUsername ?? null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setInviteErrorMessage('This challenge link has expired or is no longer active.');
-        navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
-      });
+      }
+    };
+
+    resolveFriendMatch();
     return () => {
       cancelled = true;
     };
