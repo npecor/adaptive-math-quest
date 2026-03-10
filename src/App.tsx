@@ -38,12 +38,21 @@ import {
   upsertSolvedPuzzleIds
 } from './lib/progress';
 import { buildAppRouteHref, parseAppRoute, routeNeedsUser, type AppRoute } from './lib/router';
+import {
+  FriendResultsScreen,
+  HomeScreen,
+  InvalidInviteScreen,
+  InviteEntryScreen,
+  MatchCountdownScreen,
+  MatchLobbyScreen,
+  PracticeScreen
+} from './screens/MainScreens';
 import { loadState, saveState } from './lib/storage';
 import { updateDailyStreak, updatePuzzleStreak } from './lib/streaks';
 import type { AppState, FlowItem, PuzzleItem } from './lib/types';
 import './styles.css';
 
-type Screen = 'landing' | 'onboarding' | 'profile' | 'home' | 'practice' | 'invite_entry' | 'match_lobby' | 'match_countdown' | 'invite_invalid' | 'run' | 'summary' | 'scores' | 'museum';
+type Screen = 'landing' | 'onboarding' | 'profile' | 'home' | 'practice' | 'invite_entry' | 'match_lobby' | 'match_countdown' | 'invite_invalid' | 'run' | 'summary' | 'friend_results' | 'scores' | 'museum';
 type BrandVariant = 'classic' | 'simplified';
 type FeedbackTone = 'success' | 'error' | 'info';
 type CoachVisualRow = { label: string; value: number; detail: string; color: string };
@@ -1588,6 +1597,7 @@ export default function App() {
   const [expandedMuseumPuzzleId, setExpandedMuseumPuzzleId] = useState<string | null>(null);
   const [latestInviteLink, setLatestInviteLink] = useState<string | null>(null);
   const [friendMatch, setFriendMatch] = useState<FriendMatchState | null>(null);
+  const previousFriendMatchStatusRef = useRef<MatchStatus | null>(null);
   const [pendingInviteMatchId, setPendingInviteMatchId] = useState<string | null>(null);
   const [invitePreviewHostName, setInvitePreviewHostName] = useState<string | null>(null);
   const [inviteErrorMessage, setInviteErrorMessage] = useState('This challenge link has expired or is no longer active.');
@@ -1598,7 +1608,7 @@ export default function App() {
   const [celebratingCharacterId, setCelebratingCharacterId] = useState<string | null>(null);
   const celebrateCharacterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scratchpadFieldId = useId();
-  const scratchpadPlaceholder = "Work it out here. This won't affect your score.";
+  const scratchpadPlaceholder = 'Work it out here.';
   const selectedCharacter = getCharacterById(selectedCharacterId);
   const isEditingProfile = screen === 'profile';
   const onboardingCadetName = nameInput.trim() || 'Cadet';
@@ -1639,7 +1649,7 @@ export default function App() {
       : run.phase === 'puzzle' || run.phase === 'puzzle_pick'
         ? Math.min(run.flowTarget + run.puzzleDone + 1, runQuestionCountTotal)
         : runQuestionCountTotal;
-  const runExperienceLabel = `${run.experience === 'practice' ? 'Practice' : 'Challenge'} • Question ${runQuestionPosition} of ${runQuestionCountTotal}`;
+  const runExperienceLabel = `${run.friendMatchId ? 'Friend Challenge' : run.experience === 'practice' ? 'Practice' : 'Challenge'} • Question ${runQuestionPosition} of ${runQuestionCountTotal}`;
   const matchCountdownSeconds = friendMatch?.startAt ? Math.max(0, Math.ceil((friendMatch.startAt - nowMs) / 1000)) : null;
   const friendMatchResults = friendMatch?.results && run.friendMatchId === friendMatch.matchId ? friendMatch.results : null;
   const hostDisplayName = friendMatch?.hostUsername ?? (friendMatch?.hostPlayerId === state.user?.userId ? state.user?.username : null) ?? 'Host';
@@ -1828,7 +1838,7 @@ export default function App() {
   const autoResizeScratchpad = (target: HTMLTextAreaElement | null) => {
     if (!target) return;
     target.style.height = '0px';
-    target.style.height = `${Math.max(target.scrollHeight, 96)}px`;
+    target.style.height = `${Math.max(target.scrollHeight, 72)}px`;
   };
 
   const onScratchpadChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -3174,7 +3184,8 @@ export default function App() {
       save(nextState);
       setNameInput(nextUsername);
       if (isEditingProfile) {
-        navigateToRoute({ kind: 'profile' }, { replace: true });
+        triggerResultFlash('success', 'Cadet updated', 'Your profile changes were saved.');
+        navigateToRoute({ kind: 'home' }, { replace: true });
         return;
       }
       if (route.kind === 'onboarding' && route.next) {
@@ -3364,7 +3375,7 @@ export default function App() {
         }
         break;
       case 'friend_results':
-        setScreen('summary');
+        setScreen('friend_results');
         break;
       case 'invite_invalid':
         setScreen('invite_invalid');
@@ -3445,6 +3456,7 @@ export default function App() {
   useEffect(() => {
     if (route.kind !== 'invite_entry') return;
     setPendingInviteMatchId(route.matchId);
+    setInvitePreviewHostName(null);
     if (!route.token) {
       setInviteErrorMessage('This challenge link is missing its join token.');
       navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
@@ -3458,8 +3470,7 @@ export default function App() {
       })
       .catch(() => {
         if (cancelled) return;
-        setInviteErrorMessage('This challenge link has expired or is no longer active.');
-        navigateToRoute({ kind: 'invite_invalid' }, { replace: true });
+        setInvitePreviewHostName(null);
       });
     return () => {
       cancelled = true;
@@ -3574,6 +3585,19 @@ export default function App() {
       window.clearInterval(timerId);
     };
   }, [friendMatch?.matchId, friendMatch?.role, friendMatch?.startRequested, state.user?.userId]);
+
+  useEffect(() => {
+    const previousStatus = previousFriendMatchStatusRef.current;
+    if (
+      friendMatch &&
+      friendMatch.role === 'host' &&
+      friendMatch.status === 'ready' &&
+      previousStatus !== 'ready'
+    ) {
+      triggerResultFlash('success', `${opponentDisplayName} joined!`, 'Head-to-head mission ready.');
+    }
+    previousFriendMatchStatusRef.current = friendMatch?.status ?? null;
+  }, [friendMatch?.status, friendMatch?.role, opponentDisplayName]);
 
   useEffect(() => {
     if (!friendMatch || friendMatch.status !== 'started') return;
@@ -3855,6 +3879,16 @@ export default function App() {
         triggerPulse('info');
         triggerResultFlash('info', 'Invite link ready!', 'Copy the link from the invite box.');
       }
+    }
+  };
+
+  const copyLatestInviteLink = async () => {
+    if (!latestInviteLink) return;
+    try {
+      await navigator.clipboard.writeText(latestInviteLink);
+      triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to join.');
+    } catch {
+      triggerResultFlash('info', 'Invite link ready', 'Copy the URL from the invite field.');
     }
   };
 
@@ -4236,273 +4270,85 @@ export default function App() {
   );
 
   const home = (
-    <>
-      <button
-        className="card home-hero home-hero-button challenge-home-hero"
-        onClick={openCaptainEditor}
-        aria-label="Edit profile"
-        type="button"
-      >
-        <div className="home-hero-head">
-          <div className="home-hero-main">
-            <div className="selected-player-avatar home-hero-avatar">
-              <CharacterAvatar characterId={homeCharacterId} size="lg" />
-            </div>
-            <div className="home-hero-copy">
-              <h3 className="home-hero-title">Ready for launch, {homeCadetName}?</h3>
-            </div>
-          </div>
-          <span className="home-hero-edit-affordance" aria-hidden="true">›</span>
-        </div>
-      </button>
-
-      <section className="card challenge-home-card challenge-home-card-primary">
-        <h3 className="text-title">Solo Challenge</h3>
-        <p className="muted">A fresh mission tuned to your level.</p>
-        <button className="btn btn-primary" onClick={startChallengeRun}>
-          Start Challenge
-        </button>
-        <button className="text-cta practice-instead-link" onClick={() => navigateToRoute({ kind: 'practice', stage: 'library', subjectId: selectedPracticeSubjectId })}>
-          Practice instead →
-        </button>
-      </section>
-
-      <section className="card challenge-home-card">
-        <h3 className="text-title">Challenge a Friend</h3>
-        <p className="muted">Invite a friend to race through the same mission.</p>
-        <button className="btn btn-secondary" onClick={createInviteLink}>
-          Create Invite Link
-        </button>
-      </section>
-
-      <section className="section-header">
-        <h3 className="text-title">{homeCadetName}'s Stats</h3>
-      </section>
-
-      <section className="card home-stats-card">
-        <div className="stats-grid stats-grid-embedded challenge-stats-grid">
-          <div className="stat-card">
-            <span className="stat-value">{challengeStats.bestRun}</span>
-            <span className="stat-label">Best Run</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{challengeStats.accuracy}%</span>
-            <span className="stat-label">Accuracy</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value accent">{challengeStats.streak}</span>
-            <span className="stat-label">Streak</span>
-          </div>
-        </div>
-      </section>
-
-    </>
+    <HomeScreen
+      cadetName={homeCadetName}
+      avatar={<CharacterAvatar characterId={homeCharacterId} size="lg" />}
+      stats={challengeStats}
+      activeInvite={
+        friendMatch && friendMatch.role === 'host' && friendMatch.status !== 'finished'
+          ? {
+              status: friendMatch.status,
+              latestInviteLink,
+              opponentDisplayName
+            }
+          : null
+      }
+      onEditProfile={openCaptainEditor}
+      onStartChallenge={startChallengeRun}
+      onOpenPractice={() => navigateToRoute({ kind: 'practice', stage: 'library', subjectId: selectedPracticeSubjectId })}
+      onCreateInvite={createInviteLink}
+      onOpenInviteLobby={() => friendMatch?.matchId && navigateToRoute({ kind: 'friend_challenge', matchId: friendMatch.matchId })}
+      onCopyInvite={copyLatestInviteLink}
+    />
   );
 
   const practice = (
-    <>
-      <section className="section-header practice-header-inline">
-        <h3 className="text-title">Practice</h3>
-        <p className="muted">Pick one focus or start with Mixed Practice.</p>
-      </section>
-
-      <section className="card practice-home-card">
-        <div className="practice-subject-grid">
-          {practiceSubjects.map((subject) => (
-            <button
-              key={subject.id}
-              type="button"
-              className={`practice-subject-tile ${selectedPracticeSubjectId === subject.id ? 'selected' : ''} ${subject.id === PRACTICE_DEFAULT_SUBJECT_ID ? 'mixed' : ''}`}
-              onClick={() => {
-                setSelectedPracticeSubjectId(subject.id);
-                startPracticeRunForSubject(subject);
-              }}
-              style={
-                {
-                  '--subject-accent': subject.accent,
-                  '--subject-glow': subject.glow,
-                  '--subject-soft': subject.soft
-                } as CSSProperties
-              }
-            >
-              <span className="practice-subject-top">
-                <span className="practice-subject-icon-wrap">
-                  <span className="practice-subject-icon" aria-hidden="true">{subject.icon}</span>
-                </span>
-                {selectedPracticeSubjectId === subject.id && (
-                  <span className="practice-subject-check" aria-hidden="true">✓</span>
-                )}
-              </span>
-              {subject.id === PRACTICE_DEFAULT_SUBJECT_ID && (
-                <span className="practice-subject-mixed-label">Mixed Set</span>
-              )}
-              <span className="practice-subject-title">{subject.title}</span>
-              <span className="practice-subject-subtitle">{subject.subtitle}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-    </>
+    <PracticeScreen
+      selectedSubjectId={selectedPracticeSubjectId}
+      subjects={practiceSubjects}
+      onSelectSubject={(subjectId) => {
+        const subject =
+          practiceSubjects.find((entry) => entry.id === subjectId) ??
+          practiceSubjects.find((entry) => entry.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+          practiceSubjects[0];
+        setSelectedPracticeSubjectId(subject.id);
+        startPracticeRunForSubject(subject);
+      }}
+    />
   );
 
   const inviteEntry = (
-    <>
-      <section className="section-header">
-        <h2 className="text-title">Friend Challenge</h2>
-        <span className="tag">Invite</span>
-      </section>
-      <section className="card match-lobby-card">
-        <p className="match-status-title">{invitePreviewHostName ?? 'A friend'} challenged you!</p>
-        <p className="muted">You’ll both play the same mission and compare scores. Highest score wins.</p>
-        <div className="match-lobby-versus">
-          <div className="match-lobby-player">
-            <span className="match-lobby-player-label">Host</span>
-            <strong>{invitePreviewHostName ?? 'Friend'}</strong>
-          </div>
-          <div className="match-lobby-versus-mark">vs</div>
-          <div className="match-lobby-player">
-            <span className="match-lobby-player-label">You</span>
-            <strong>{state.user?.username ?? 'Cadet'}</strong>
-          </div>
-        </div>
-        <div className="btn-row">
-          <button
-            className="btn btn-primary"
-            onClick={() =>
-              route.kind === 'invite_entry' && route.token
-                ? joinFriendInvite(route.matchId, route.token)
-                : navigateToRoute({ kind: 'invite_invalid' }, { replace: true })
-            }
-          >
-            Join Challenge
-          </button>
-          <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'home' })}>
-            Back Home
-          </button>
-        </div>
-      </section>
-    </>
+    <InviteEntryScreen
+      hostName={invitePreviewHostName}
+      username={state.user?.username}
+      onJoin={() =>
+        route.kind === 'invite_entry' && route.token
+          ? joinFriendInvite(route.matchId, route.token)
+          : navigateToRoute({ kind: 'invite_invalid' }, { replace: true })
+      }
+      onBackHome={() => navigateToRoute({ kind: 'home' })}
+    />
   );
 
   const matchLobby = (
-    <>
-      <section className="section-header">
-        <h2 className="text-title">Friend Challenge</h2>
-        <span className="tag">{friendMatch?.role === 'host' ? 'Host lobby' : 'Join lobby'}</span>
-      </section>
-      <section className="card match-lobby-card">
-        {!friendMatch && <p className="muted">Preparing match lobby…</p>}
-        {friendMatch && (
-          <>
-            <p className="muted">Same mission. Same questions. Highest score wins.</p>
-            <div className="match-lobby-versus">
-              <div className="match-lobby-player">
-                <span className="match-lobby-player-label">Host</span>
-                <strong>{hostDisplayName}</strong>
-              </div>
-              <div className="match-lobby-versus-mark">vs</div>
-              <div className="match-lobby-player">
-                <span className="match-lobby-player-label">Guest</span>
-                <strong>{friendMatch.guestPlayerId ? guestDisplayName : 'Joining soon…'}</strong>
-              </div>
-            </div>
-            <p className="muted">
-              Match ID: <strong>{friendMatch.matchId}</strong>
-            </p>
-            {friendMatch.status === 'waiting' && (
-              <div className="match-status-block">
-                <p className="match-status-title">Waiting for your friend…</p>
-                <p className="muted">Share the invite link. Your co-pilot will appear here as soon as they join.</p>
-              </div>
-            )}
-            {friendMatch.status === 'ready' && (
-              <div className="match-status-block success">
-                <p className="match-status-title">{opponentDisplayName} joined!</p>
-                <p className="muted">Head-to-head mission ready. Countdown begins automatically.</p>
-              </div>
-            )}
-            {friendMatch.status === 'started' && (
-              <div className="match-status-block started">
-                <p className="match-status-title">{hostDisplayName} vs {guestDisplayName}</p>
-                <p className="muted">Mission starts in <strong>{matchCountdownSeconds ?? 0}</strong>…</p>
-              </div>
-            )}
-            {friendMatch.status === 'finished' && (
-              <div className="match-status-block">
-                <p className="match-status-title">Match complete</p>
-                <p className="muted">{friendMatch.results ? `Winner: ${friendMatch.results.winnerPlayerId === state.user?.userId ? 'You' : opponentDisplayName}` : 'Results ready.'}</p>
-              </div>
-            )}
-            {latestInviteLink && friendMatch.role === 'host' && (
-              <div className="invite-link-card" role="status" aria-live="polite">
-                <p className="invite-link-label">Invite link ready</p>
-                <div className="invite-link-row">
-                  <input className="invite-link-input" value={latestInviteLink} readOnly aria-label="Challenge invite link" />
-                  <button
-                    className="btn btn-secondary invite-link-copy-btn"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(latestInviteLink);
-                        triggerResultFlash('success', 'Invite link copied!', 'Send it to your friend to join.');
-                      } catch {
-                        triggerResultFlash('info', 'Invite link ready', 'Copy the URL from the invite field.');
-                      }
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="btn-row">
-              {friendMatch.status === 'finished' && (
-                <button className="btn btn-primary" onClick={() => friendMatch?.matchId && navigateToRoute({ kind: 'friend_results', matchId: friendMatch.matchId })}>
-                  View Results
-                </button>
-              )}
-              <button className="btn btn-secondary" onClick={leaveFriendMatchLobby}>
-                Back Home
-              </button>
-            </div>
-          </>
-        )}
-      </section>
-    </>
+    <MatchLobbyScreen
+      friendMatch={friendMatch}
+      hostDisplayName={hostDisplayName}
+      guestDisplayName={guestDisplayName}
+      opponentDisplayName={opponentDisplayName}
+      latestInviteLink={latestInviteLink}
+      matchCountdownSeconds={matchCountdownSeconds}
+      currentUserId={state.user?.userId}
+      onCopyInvite={copyLatestInviteLink}
+      onViewResults={() => friendMatch?.matchId && navigateToRoute({ kind: 'friend_results', matchId: friendMatch.matchId })}
+      onBackHome={leaveFriendMatchLobby}
+    />
   );
 
   const matchCountdown = (
-    <>
-      <section className="section-header">
-        <h2 className="text-title">Friend Challenge</h2>
-        <span className="tag">Countdown</span>
-      </section>
-      <section className="card match-countdown-card">
-        <p className="match-countdown-kicker">Head-to-head mission</p>
-        <h3 className="match-countdown-title">{hostDisplayName} vs {guestDisplayName}</h3>
-        <p className="muted">Same mission. Same questions. Highest score wins.</p>
-        <div className="match-countdown-number">{matchCountdownSeconds ?? 0}</div>
-        <p className="match-countdown-blast">Blast off soon…</p>
-      </section>
-    </>
+    <MatchCountdownScreen
+      hostDisplayName={hostDisplayName}
+      guestDisplayName={guestDisplayName}
+      matchCountdownSeconds={matchCountdownSeconds}
+    />
   );
 
   const invalidInvite = (
-    <>
-      <section className="section-header">
-        <h2 className="text-title">Invite unavailable</h2>
-      </section>
-      <section className="card invalid-invite-card">
-        <p className="muted">{inviteErrorMessage}</p>
-        <div className="btn-row">
-          <button className="btn btn-primary" onClick={createInviteLink}>
-            Create New Challenge
-          </button>
-          <button className="btn btn-secondary" onClick={leaveFriendMatchLobby}>
-            Back Home
-          </button>
-        </div>
-      </section>
-    </>
+    <InvalidInviteScreen
+      message={inviteErrorMessage}
+      onCreateNew={createInviteLink}
+      onBackHome={leaveFriendMatchLobby}
+    />
   );
 
   const runView = (
@@ -4550,22 +4396,24 @@ export default function App() {
                 Blast Off!
               </button>
             </div>
-            <div className="helper-actions run-secondary-actions">
-              {run.experience === 'practice' && (
-                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={openTweaksSheet}>
-                  <span aria-hidden="true">⚙️</span> Tweaks
+            {!showTutor && !showTweaksSheet && (
+              <div className="helper-actions run-secondary-actions">
+                {run.experience === 'practice' && (
+                  <button className="btn btn-secondary utility-btn utility-btn-small" onClick={openTweaksSheet}>
+                    <span aria-hidden="true">⚙️</span> Tweaks
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary utility-btn"
+                  onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
+                >
+                  <span aria-hidden="true">🧠</span> Ask Coach
                 </button>
-              )}
-              <button
-                className="btn btn-secondary utility-btn"
-                onClick={() => openCoach('quick', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
-              >
-                <span aria-hidden="true">🧠</span> Ask Coach
-              </button>
-            </div>
+              </div>
+            )}
             {renderCoachPanel(currentFlowCoachPlan, currentFlowCoachVisual, 'Coach', currentFlowCoachPlan ? Math.max(1, currentFlowCoachPlan.steps.length) : 1)}
 
-            {renderScratchpad('flow')}
+            {!showTutor && !showTweaksSheet && renderScratchpad('flow')}
           </>
         )}
 
@@ -4644,21 +4492,23 @@ export default function App() {
                 Blast Off!
               </button>
             </div>
-            <div className="helper-actions puzzle-helper-actions run-secondary-actions">
-              {run.experience === 'practice' && (
-                <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
-                  <span aria-hidden="true">⚙️</span> Tweaks
+            {!showTutor && !showTweaksSheet && (
+              <div className="helper-actions puzzle-helper-actions run-secondary-actions">
+                {run.experience === 'practice' && (
+                  <button className="btn btn-secondary utility-btn utility-btn-small" onClick={() => setShowTweaksSheet(true)}>
+                    <span aria-hidden="true">⚙️</span> Tweaks
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary utility-btn"
+                  onClick={() =>
+                    openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
+                  }
+                >
+                  <span aria-hidden="true">🧠</span> Ask Coach
                 </button>
-              )}
-              <button
-                className="btn btn-secondary utility-btn"
-                onClick={() =>
-                  openCoach('quick', currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS)
-                }
-              >
-                <span aria-hidden="true">🧠</span> Ask Coach
-              </button>
-            </div>
+              </div>
+            )}
             {!run.friendMatchId && (
               <button className="text-cta puzzle-tertiary-link" onClick={setupPuzzlePick}>Pick a different puzzle</button>
             )}
@@ -4669,7 +4519,7 @@ export default function App() {
               currentPuzzleCoachPlan ? Math.max(MAX_PUZZLE_HINTS, currentPuzzleCoachPlan.steps.length) : MAX_PUZZLE_HINTS
             )}
 
-            {renderScratchpad('puzzle')}
+            {!showTutor && !showTweaksSheet && renderScratchpad('puzzle')}
           </>
         )}
 
@@ -4733,19 +4583,21 @@ export default function App() {
                     Skip Bonus
                   </button>
                 </div>
-                <div className="helper-actions puzzle-helper-actions">
-                  <button
-                    className="btn btn-secondary utility-btn"
-                    onClick={() =>
-                      openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
-                    }
-                  >
-                    <span aria-hidden="true">🧠</span> Ask Coach
-                  </button>
-                </div>
+                {!showTutor && (
+                  <div className="helper-actions puzzle-helper-actions">
+                    <button
+                      className="btn btn-secondary utility-btn"
+                      onClick={() =>
+                        openCoach('quick', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))
+                      }
+                    >
+                      <span aria-hidden="true">🧠</span> Ask Coach
+                    </button>
+                  </div>
+                )}
                 {renderCoachPanel(currentBonusCoachPlan, null, 'Mini Boss Coach', Math.max(MAX_PUZZLE_HINTS, currentBonusCoachPlan.steps.length))}
 
-                {renderScratchpad('boss')}
+                {!showTutor && renderScratchpad('boss')}
               </>
             ) : (
               <div className="bonus-result-modal" role="dialog" aria-modal="true" aria-label="Bonus complete">
@@ -4855,8 +4707,8 @@ export default function App() {
   const summary = (
     <>
       <section className="section-header">
-        <h2 className="text-title">{friendMatchResults ? 'Friend Challenge Results' : 'Great Job!'}</h2>
-        <span className="tag">{friendMatchResults ? 'Head-to-head complete' : 'Game Complete'}</span>
+        <h2 className="text-title">Great Job!</h2>
+        <span className="tag">Game Complete</span>
       </section>
       <section className="card">
         <div className="stats-grid">
@@ -4877,57 +4729,44 @@ export default function App() {
             <span className="stat-label">Day streak</span>
           </div>
         </div>
-        {friendMatchResults && (
-          <div className="summary-match-results">
-            <p className="summary-match-title">{friendChallengeResultTitle}</p>
-            <p className="muted">
-              {friendMatchResults.players
-                .map((entry) => `${entry.playerId === state.user?.userId ? 'You' : opponentDisplayName}: ${entry.scoreStars}`)
-                .join(' • ')}
-            </p>
-            <div className="summary-match-grid">
-              {friendMatchResults.players.map((entry) => (
-                <div key={`${entry.playerId}-${entry.submittedAt}`} className="summary-match-card">
-                  <strong>{entry.playerId === state.user?.userId ? 'You' : opponentDisplayName}</strong>
-                  <span className="summary-match-score">{entry.scoreStars} ⭐</span>
-                  <small>
-                    {entry.correctCount}/{entry.totalCount} • {Math.round(entry.accuracy * 100)}% • {Math.round(entry.timeMs / 1000)}s
-                  </small>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="btn-row">
-          {friendMatchResults ? (
-            <>
-              <button className="btn btn-primary" onClick={createInviteLink}>Rematch</button>
-              <button className="btn btn-secondary" onClick={startChallengeRun}>Solo Challenge</button>
-            </>
-          ) : (
-            <>
-              <button
-                className="btn btn-primary"
-                onClick={() =>
-                  startRun(run.gameMode, {
-                    experience: run.experience,
-                    practiceSubject:
-                      practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
-                      practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
-                      practiceSubjects[0],
-                    tweakDifficulty: run.tweakDifficulty,
-                    tweakTimeMinutes: run.tweakTimeMinutes
-                  })
-                }
-              >
-                Play Again
-              </button>
-              <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'rankings' })}>💫 Stars</button>
-            </>
-          )}
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              startRun(run.gameMode, {
+                experience: run.experience,
+                practiceSubject:
+                  practiceSubjects.find((subject) => subject.id === run.practiceSubjectId) ??
+                  practiceSubjects.find((subject) => subject.id === PRACTICE_DEFAULT_SUBJECT_ID) ??
+                  practiceSubjects[0],
+                tweakDifficulty: run.tweakDifficulty,
+                tweakTimeMinutes: run.tweakTimeMinutes
+              })
+            }
+          >
+            Play Again
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigateToRoute({ kind: 'rankings' })}>💫 Stars</button>
         </div>
       </section>
     </>
+  );
+
+  const friendResults = friendMatchResults ? (
+    <FriendResultsScreen
+      title={friendChallengeResultTitle}
+      opponentDisplayName={opponentDisplayName}
+      players={friendMatchResults.players}
+      currentUserId={state.user?.userId}
+      onRematch={createInviteLink}
+      onSoloChallenge={startChallengeRun}
+    />
+  ) : (
+    <InvalidInviteScreen
+      message="These match results are no longer available."
+      onCreateNew={createInviteLink}
+      onBackHome={() => navigateToRoute({ kind: 'home' })}
+    />
   );
 
   const scores = (
@@ -5307,6 +5146,7 @@ export default function App() {
         {screen === 'invite_invalid' && invalidInvite}
         {screen === 'run' && runView}
         {screen === 'summary' && summary}
+        {screen === 'friend_results' && friendResults}
         {screen === 'scores' && scores}
         {screen === 'museum' && museum}
       </div>
